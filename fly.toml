@@ -1,0 +1,35 @@
+# Set primary_region to your nearest region before deploying:
+#   fly regions list
+#   fly deploy --region <code>
+app = "holodle"
+primary_region = "iad"
+
+[build]
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3001"
+  DB_PATH = "/data/holodle.db"
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/api/health"
+
+[[mounts]]
+  source = "holodle_data"
+  destination = "/data"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 256

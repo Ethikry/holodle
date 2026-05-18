@@ -1,0 +1,22 @@
+{
+  "name": "holodle",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Holodle — Discord Activity port of the daily Hololive talent guessing game",
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,magenta \"pnpm --filter @holodle/server dev\" \"pnpm --filter @holodle/client dev\"",
+    "build": "pnpm --filter @holodle/shared build && pnpm --filter @holodle/client build && pnpm --filter @holodle/server build",
+    "start": "pnpm --filter @holodle/server start",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.12.0",
+  "devDependencies": {
+    "concurrently": "^9.0.1",
+    "typescript": "^5.6.3"
+  }
+}

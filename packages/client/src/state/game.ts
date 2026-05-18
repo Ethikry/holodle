@@ -1,0 +1,119 @@
+import { create } from "zustand";
+import type {
+  DailyState,
+  GameStatus,
+  GuessDiff,
+  PlayerSnapshot,
+  TalentSummary,
+  UserStats,
+} from "@holodle/shared";
+import { MAX_GUESSES } from "@holodle/shared";
+
+interface GameState {
+  // Identity / session
+  accessToken: string | null;
+  instanceId: string | null;
+  selfUserId: string | null;
+
+  // Catalog
+  talents: TalentSummary[];
+
+  // Daily puzzle
+  puzzleId: string | null;
+  history: GuessDiff[];
+  status: GameStatus;
+  answer: TalentSummary | null; // revealed only on win/loss
+  maxGuesses: number;
+
+  // Stats
+  stats: UserStats;
+
+  // Multiplayer presence
+  players: Map<string, PlayerSnapshot>;
+
+  // UI
+  helpOpen: boolean;
+  loading: boolean;
+  error: string | null;
+}
+
+interface GameActions {
+  setSession: (s: { accessToken: string; instanceId: string; selfUserId: string }) => void;
+  setTalents: (t: TalentSummary[]) => void;
+  setDaily: (d: DailyState) => void;
+  appendGuess: (diff: GuessDiff, status: GameStatus, answer?: TalentSummary) => void;
+  setStats: (s: UserStats) => void;
+  upsertPlayer: (p: PlayerSnapshot) => void;
+  setSnapshot: (players: PlayerSnapshot[]) => void;
+  updateProgress: (p: { userId: string; guessesUsed: number; status: GameStatus }) => void;
+  removePlayer: (userId: string) => void;
+  setHelpOpen: (open: boolean) => void;
+  setLoading: (loading: boolean) => void;
+  setError: (err: string | null) => void;
+}
+
+export const useGame = create<GameState & GameActions>((set) => ({
+  accessToken: null,
+  instanceId: null,
+  selfUserId: null,
+
+  talents: [],
+  puzzleId: null,
+  history: [],
+  status: "playing",
+  answer: null,
+  maxGuesses: MAX_GUESSES,
+
+  stats: { streak: 0, best: 0, played: 0, winRate: 0 },
+  players: new Map(),
+
+  helpOpen: false,
+  loading: false,
+  error: null,
+
+  setSession: ({ accessToken, instanceId, selfUserId }) =>
+    set({ accessToken, instanceId, selfUserId }),
+  setTalents: (talents) => set({ talents }),
+  setDaily: (d) =>
+    set({
+      puzzleId: d.puzzleId,
+      history: d.history,
+      status: d.status,
+      maxGuesses: d.maxGuesses,
+      // answer is not in DailyState — only revealed by /api/guess on settle.
+    }),
+  appendGuess: (diff, status, answer) =>
+    set((s) => ({
+      history: [...s.history, diff],
+      status,
+      answer: answer ?? s.answer,
+    })),
+  setStats: (stats) => set({ stats }),
+  upsertPlayer: (p) =>
+    set((s) => {
+      const next = new Map(s.players);
+      next.set(p.userId, p);
+      return { players: next };
+    }),
+  setSnapshot: (players) =>
+    set({
+      players: new Map(players.map((p) => [p.userId, p])),
+    }),
+  updateProgress: ({ userId, guessesUsed, status }) =>
+    set((s) => {
+      const existing = s.players.get(userId);
+      if (!existing) return s;
+      const next = new Map(s.players);
+      next.set(userId, { ...existing, guessesUsed, status });
+      return { players: next };
+    }),
+  removePlayer: (userId) =>
+    set((s) => {
+      const next = new Map(s.players);
+      next.delete(userId);
+      return { players: next };
+    }),
+  setHelpOpen: (helpOpen) => set({ helpOpen }),
+  setLoading: (loading) => set({ loading }),
+  setError: (error) => set({ error }),
+}));

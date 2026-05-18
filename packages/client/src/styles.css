@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-holo-bg text-holo-ink font-display antialiased;
+    /* Respect the iOS notch / Android camera cutout when embedded as an activity. */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+@layer components {
+  .pill {
+    @apply inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold;
+  }
+  .pill-equal {
+    @apply pill bg-holo-okBg text-holo-ok;
+  }
+  .pill-near {
+    @apply pill bg-holo-warnBg text-holo-warn;
+  }
+  .pill-wrong {
+    @apply pill bg-holo-badBg text-holo-bad;
+  }
+  .card {
+    @apply rounded-2xl bg-holo-card shadow-card;
+  }
+}

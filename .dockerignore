@@ -1,0 +1,15 @@
+**/node_modules
+**/dist
+**/.turbo
+**/.vite
+**/*.tsbuildinfo
+.env
+.env.*
+*.db
+*.db-*
+.git
+.gitignore
+README.md
+docs/
+docker-compose.yml
+.dockerignore

@@ -1,0 +1,35 @@
+[
+  {
+    "id": "alpha",
+    "name": "Alpha",
+    "avatarUrl": "/avatars/alpha.png",
+    "branch": "JP",
+    "debutYear": 2020,
+    "archetype": "Human",
+    "heightCm": 152,
+    "birthMonth": "June",
+    "active": true
+  },
+  {
+    "id": "bravo",
+    "name": "Bravo",
+    "avatarUrl": "/avatars/bravo.png",
+    "branch": "ID",
+    "debutYear": 2021,
+    "archetype": "Zombie",
+    "heightCm": 168,
+    "birthMonth": "December",
+    "active": true
+  },
+  {
+    "id": "charlie",
+    "name": "Charlie",
+    "avatarUrl": "/avatars/charlie.png",
+    "branch": "EN",
+    "debutYear": 2022,
+    "archetype": "Phoenix",
+    "heightCm": 145,
+    "birthMonth": "January",
+    "active": true
+  }
+]

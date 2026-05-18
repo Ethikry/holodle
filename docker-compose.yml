@@ -1,0 +1,18 @@
+services:
+  holodle:
+    build: .
+    image: holodle:local
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DB_PATH: /data/holodle.db
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://discord.com}
+    volumes:
+      - holodle_data:/data
+
+volumes:
+  holodle_data:
