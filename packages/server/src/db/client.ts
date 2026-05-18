@@ -1,12 +1,7 @@
 import Database from "better-sqlite3";
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { GameStatus, GuessDiff, UserStats } from "@holodle/shared";
 import { env } from "../env.js";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const SCHEMA_PATH = resolve(__dirname, "./schema.sql");
+import { SCHEMA_SQL } from "./schema.js";
 
 let db: Database.Database | null = null;
 
@@ -15,8 +10,7 @@ export function getDb(): Database.Database {
   db = new Database(env.DB_PATH);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
-  const schema = readFileSync(SCHEMA_PATH, "utf8");
-  db.exec(schema);
+  db.exec(SCHEMA_SQL);
   return db;
 }
 

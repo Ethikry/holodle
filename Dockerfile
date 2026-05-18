@@ -46,7 +46,6 @@ RUN pnpm install --prod --frozen-lockfile --filter @holodle/server... || pnpm in
 
 COPY --from=builder /app/packages/shared/src packages/shared/src
 COPY --from=builder /app/packages/server/dist packages/server/dist
-COPY --from=builder /app/packages/server/src/db/schema.sql packages/server/dist/db/schema.sql
 COPY --from=builder /app/packages/client/dist packages/client/dist
 COPY --from=builder /app/talent_data.json ./talent_data.json
 

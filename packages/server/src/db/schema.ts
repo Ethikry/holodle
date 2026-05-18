@@ -1,14 +1,15 @@
--- Per-user state for a single UTC day's puzzle.
+// SQLite schema, inlined as a string so it travels with the compiled JS
+// without a separate file-copy step in tsc/Docker/Fly.
+export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS user_day (
   user_id      TEXT NOT NULL,
   day_index    INTEGER NOT NULL,
-  guesses_json TEXT NOT NULL DEFAULT '[]',  -- JSON array of GuessDiff
-  status       TEXT NOT NULL DEFAULT 'playing',  -- playing | won | lost
+  guesses_json TEXT NOT NULL DEFAULT '[]',
+  status       TEXT NOT NULL DEFAULT 'playing',
   updated_at   INTEGER NOT NULL DEFAULT (strftime('%s','now')),
   PRIMARY KEY (user_id, day_index)
 );
 
--- Aggregated stats per user. Updated when a day settles (won/lost).
 CREATE TABLE IF NOT EXISTS user_stats (
   user_id        TEXT PRIMARY KEY,
   streak         INTEGER NOT NULL DEFAULT 0,
@@ -19,3 +20,4 @@ CREATE TABLE IF NOT EXISTS user_stats (
 );
 
 CREATE INDEX IF NOT EXISTS idx_user_day_day ON user_day(day_index);
+`;

@@ -99,4 +99,42 @@ describe("POST /api/guess", () => {
     });
     expect(r.statusCode).toBe(401);
   });
+
+  it("updates /api/stats after a win (streak=1, played=1, winRate=1)", async () => {
+    const answer = pickDaily(getRegistry().activePool)!;
+    const auth = { Authorization: "Bearer dev:statscheck" };
+
+    // Pre-win: stats are zero.
+    const before = await app.inject({ method: "GET", url: "/api/stats", headers: auth });
+    expect(before.json()).toEqual({ streak: 0, best: 0, played: 0, winRate: 0 });
+
+    const r = await app.inject({
+      method: "POST",
+      url: "/api/guess",
+      headers: auth,
+      payload: { talentId: answer.id },
+    });
+    expect(r.json().status).toBe("won");
+    expect(r.json().answer?.id).toBe(answer.id);
+
+    const after = await app.inject({ method: "GET", url: "/api/stats", headers: auth });
+    expect(after.json()).toEqual({ streak: 1, best: 1, played: 1, winRate: 1 });
+  });
+
+  it("/api/daily returns the in-progress history for a user", async () => {
+    const auth = { Authorization: "Bearer dev:resumer" };
+    const wrong = getRegistry()
+      .all.map((t) => t.id)
+      .find((id) => id !== pickDaily(getRegistry().activePool)!.id)!;
+
+    await app.inject({ method: "POST", url: "/api/guess", headers: auth, payload: { talentId: wrong } });
+    const daily = await app.inject({ method: "GET", url: "/api/daily", headers: auth });
+    expect(daily.statusCode).toBe(200);
+    const body = daily.json();
+    expect(body.guessesUsed).toBe(1);
+    expect(body.history).toHaveLength(1);
+    expect(body.status).toBe("playing");
+    expect(body.maxGuesses).toBe(6);
+    expect(typeof body.puzzleId).toBe("string");
+  });
 });
