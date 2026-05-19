@@ -13,6 +13,7 @@ import { GuessGrid } from "./components/GuessGrid.js";
 import { TalentAutocomplete } from "./components/TalentAutocomplete.js";
 import { PlayerList } from "./components/PlayerList.js";
 import { HelpModal } from "./components/HelpModal.js";
+import { LoadingScreen } from "./components/LoadingScreen.js";
 
 export function App(): JSX.Element {
   const {
@@ -151,6 +152,15 @@ export function App(): JSX.Element {
   );
 
   const emptyCatalog = !loading && talents.length === 0;
+
+  // While the bootstrap effect is still running, show the LoadingScreen
+  // instead of a half-populated UI. We hold the loading state until talents,
+  // session, daily, and stats have all resolved (or errored). An error that
+  // flips loading=false will fall through to the normal layout below, which
+  // surfaces the red error banner.
+  if (loading) {
+    return <LoadingScreen />;
+  }
 
   return (
     <main className="mx-auto flex min-h-full max-w-3xl flex-col">

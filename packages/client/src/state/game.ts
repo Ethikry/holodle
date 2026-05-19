@@ -75,7 +75,10 @@ export const useGame = create<GameState & GameActions>((set) => ({
   players: new Map(),
 
   helpOpen: false,
-  loading: false,
+  // Start as `true` so the first paint shows the LoadingScreen rather than
+  // a half-populated UI. The App.tsx bootstrap effect flips this to false
+  // once talents + session + daily + stats + socket are all wired up.
+  loading: true,
   error: null,
 
   setSession: ({ accessToken, instanceId, channelId, selfUserId }) =>
