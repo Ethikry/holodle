@@ -13,11 +13,33 @@ function authHeaders(accessToken: string): HeadersInit {
 }
 
 async function ok<T>(resp: Response): Promise<T> {
+  const url = new URL(resp.url, window.location.href).pathname;
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
-    throw new Error(`${resp.status} ${resp.statusText}: ${text}`);
+    // Even on non-2xx, an HTML body usually means the request never reached
+    // the Fastify backend at all (Vite proxy 502, cloudflared 521, etc.).
+    if (text.trimStart().startsWith("<")) {
+      throw new Error(
+        `${url} returned an HTML error page (status ${resp.status}). Is the Fastify server on :3001 running?`,
+      );
+    }
+    throw new Error(`${resp.status} ${resp.statusText} from ${url}: ${text}`);
   }
-  return (await resp.json()) as T;
+  const text = await resp.text();
+  // 2xx with HTML body: Vite proxy upstream failure, or stale tunnel URL still
+  // serving cloudflared's error page with a 200. Either way, name the cause.
+  if (text.trimStart().startsWith("<")) {
+    throw new Error(
+      `${url} returned HTML instead of JSON. Is the Fastify server on :3001 running?`,
+    );
+  }
+  try {
+    return JSON.parse(text) as T;
+  } catch (err) {
+    throw new Error(
+      `Invalid JSON from ${url}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
 
 export async function fetchTalents(): Promise<TalentSummary[]> {

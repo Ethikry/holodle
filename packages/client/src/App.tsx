@@ -38,22 +38,23 @@ export function App(): JSX.Element {
 
   // Bootstrap: load the public talent catalog first (no auth required), then
   // try to establish a Discord session. The catalog load is independent so a
-  // failing OAuth handshake never blanks the autocomplete.
+  // failing OAuth handshake never blanks the autocomplete. Errors from each
+  // step accumulate so a single visible banner doesn't hide upstream causes.
   useEffect(() => {
     let cancelled = false;
     let socketCleanup: (() => void) | null = null;
 
     void (async () => {
       setLoading(true);
+      const errs: string[] = [];
+      const describe = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
       // 1. Public catalog (no auth).
       try {
         const talentList = await fetchTalents();
         if (!cancelled) setTalents(talentList);
       } catch (err) {
-        if (!cancelled) {
-          setError(`Could not load talents: ${err instanceof Error ? err.message : String(err)}`);
-        }
+        errs.push(`Could not load talents: ${describe(err)}`);
       }
 
       // 2. Session.
@@ -62,7 +63,8 @@ export function App(): JSX.Element {
         : ({ ok: true as const, session: getDevSession() });
       if (cancelled) return;
       if (!result.ok) {
-        setError(result.reason);
+        errs.push(result.reason);
+        if (errs.length > 0) setError(errs.join("\n"));
         setLoading(false);
         return;
       }
@@ -83,9 +85,7 @@ export function App(): JSX.Element {
         setDaily(daily);
         setStats(stats);
       } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : String(err));
-        }
+        errs.push(describe(err));
       }
 
       // 4. Socket presence.
@@ -96,7 +96,11 @@ export function App(): JSX.Element {
         onLeave: ({ userId }) => removePlayer(userId),
       });
       socketCleanup = () => socket.disconnect();
-      if (!cancelled) setLoading(false);
+
+      if (!cancelled) {
+        if (errs.length > 0) setError(errs.join("\n"));
+        setLoading(false);
+      }
     })();
 
     return () => {
@@ -155,7 +159,7 @@ export function App(): JSX.Element {
       <GuessGrid />
       <PlayerList />
       {error && (
-        <div className="mx-4 my-4 rounded-xl border border-holo-bad/40 bg-holo-badBg/40 p-3 text-sm text-holo-bad">
+        <div className="mx-4 my-4 whitespace-pre-line rounded-xl border border-holo-bad/40 bg-holo-badBg/40 p-3 text-sm text-holo-bad">
           {error}
         </div>
       )}
