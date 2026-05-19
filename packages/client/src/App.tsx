@@ -36,53 +36,72 @@ export function App(): JSX.Element {
     setLoading,
   } = useGame();
 
-  // Bootstrap: get Discord session (or dev session if not embedded), then
-  // load talents + daily state + stats in parallel, then connect socket.
+  // Bootstrap: load the public talent catalog first (no auth required), then
+  // try to establish a Discord session. The catalog load is independent so a
+  // failing OAuth handshake never blanks the autocomplete.
   useEffect(() => {
     let cancelled = false;
+    let socketCleanup: (() => void) | null = null;
+
     void (async () => {
       setLoading(true);
-      try {
-        const session = isEmbeddedInDiscord() ? await getDiscordSession() : getDevSession();
-        if (!session) {
-          setError("Could not initialize Discord session. Open this app inside a Discord activity.");
-          setLoading(false);
-          return;
-        }
-        if (cancelled) return;
-        setSession({
-          accessToken: session.accessToken,
-          instanceId: session.instanceId,
-          selfUserId: session.user.id,
-        });
 
-        const [talentList, daily, stats] = await Promise.all([
-          fetchTalents(),
+      // 1. Public catalog (no auth).
+      try {
+        const talentList = await fetchTalents();
+        if (!cancelled) setTalents(talentList);
+      } catch (err) {
+        if (!cancelled) {
+          setError(`Could not load talents: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+
+      // 2. Session.
+      const result = isEmbeddedInDiscord()
+        ? await getDiscordSession()
+        : ({ ok: true as const, session: getDevSession() });
+      if (cancelled) return;
+      if (!result.ok) {
+        setError(result.reason);
+        setLoading(false);
+        return;
+      }
+      const session = result.session;
+      setSession({
+        accessToken: session.accessToken,
+        instanceId: session.instanceId,
+        selfUserId: session.user.id,
+      });
+
+      // 3. Per-user daily state + stats.
+      try {
+        const [daily, stats] = await Promise.all([
           fetchDaily(session.accessToken),
           fetchStats(session.accessToken),
         ]);
         if (cancelled) return;
-        setTalents(talentList);
         setDaily(daily);
         setStats(stats);
-
-        const socket = connectSocket(session.accessToken, session.instanceId, {
-          onSnapshot: setSnapshot,
-          onJoin: upsertPlayer,
-          onProgress: updateProgress,
-          onLeave: ({ userId }) => removePlayer(userId),
-        });
-        return () => {
-          socket.disconnect();
-        };
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
       }
+
+      // 4. Socket presence.
+      const socket = connectSocket(session.accessToken, session.instanceId, {
+        onSnapshot: setSnapshot,
+        onJoin: upsertPlayer,
+        onProgress: updateProgress,
+        onLeave: ({ userId }) => removePlayer(userId),
+      });
+      socketCleanup = () => socket.disconnect();
+      if (!cancelled) setLoading(false);
     })();
+
     return () => {
       cancelled = true;
+      socketCleanup?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

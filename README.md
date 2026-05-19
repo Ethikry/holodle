@@ -39,6 +39,24 @@ With an empty `talent_data.json`, the server logs `0 talents loaded` and stays
 up. Endpoints respond, but `GET /api/daily` returns 503 until at least one
 active talent is added.
 
+> **`.env` lives at the repo root only.** Both the Fastify server (via
+> `process.loadEnvFile`) and Vite (via `envDir`) read from
+> `holodle/.env`. Do **not** create a separate `packages/client/.env` — the
+> client picks up `VITE_DISCORD_CLIENT_ID` from the same file. After editing
+> the file, restart `pnpm dev` so Vite re-reads it.
+
+## Debugging the activity in Discord
+
+When the activity is running inside Discord, you can open Chromium devtools
+inside the iframe:
+
+- **Desktop Discord:** open the user settings menu → **Advanced** → enable
+  *Developer Mode*, then right-click the activity iframe → **Inspect** (or
+  press `Ctrl+Shift+I` while the activity is focused).
+- The client surfaces specific failure reasons in a red banner — if you see
+  one, the matching JS error / network failure will be in the devtools
+  Console / Network tabs.
+
 ## `talent_data.json` schema
 
 Top-level: an array of talent records. Server validates with Zod at boot and
