@@ -99,14 +99,19 @@ Avatar PNGs live at `packages/client/public/avatars/<id>.png`.
 2. **OAuth2** tab — copy the **Client ID** and reset the **Client Secret**.
    Put both into `.env` (the secret is server-only; never expose it to the
    client bundle).
-3. **Activities** tab — set **Activity URL Mappings**:
-   - Root mapping `/` → your dev tunnel host (e.g.
-     `your-subdomain.trycloudflare.com`).
-   - `/api` → the same host. The Fastify server is fronted by the Vite dev
-     proxy on `/api/*` in dev, and by Fastify directly in production.
+3. **Activities → URL Mappings** — add **one** row only:
+   - prefix `/` → target `your-subdomain.trycloudflare.com` (no scheme).
+
+   Do **not** add a separate `/api` mapping. Discord URL Mappings strip the
+   prefix before forwarding, so a `/api` row rewrites `/api/talents` to
+   `<tunnel>/talents` — the API requests then miss the server's `/api/*`
+   routes entirely and fall through to the SPA fallback (HTML for JSON =
+   `Unexpected token '<'` in the client). A single `/` mapping preserves
+   the full path end-to-end.
 4. **Activities → URL Mappings** also requires entries for any external
-   hosts you load (Discord blocks unmapped fetches). Add `discord.com`
-   (already implicit) and any CDN you reference.
+   hosts your client fetches from (Discord blocks unmapped origins). Add
+   `cdn.discordapp.com` if you load Discord avatars; add any other CDN you
+   reference.
 5. **Bot** tab is not used — Holodle is a user-facing Activity, not a bot.
 
 ## Running a local dev tunnel
