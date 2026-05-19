@@ -32,7 +32,7 @@ export async function guessRoutes(app: FastifyInstance): Promise<void> {
       reply.code(400);
       return { error: "Invalid body", details: parsed.error.flatten() };
     }
-    const { talentId, instanceId } = parsed.data;
+    const { talentId, instanceId, channelId } = parsed.data;
     const tz = safeTz(parsed.data.tz);
 
     const reg = getRegistry();
@@ -68,6 +68,15 @@ export async function guessRoutes(app: FastifyInstance): Promise<void> {
     const exhausted = row.guesses.length >= MAX_GUESSES;
     if (won) row.status = "won";
     else if (exhausted) row.status = "lost";
+
+    // Stash channel + tz so the disconnect handler and recap scheduler can
+    // find this row later. Stamp settled_at on terminal status so the recap
+    // window query has a value to match against.
+    if (channelId) row.channelId = channelId;
+    row.tz = tz;
+    if (row.status !== "playing" && row.settledAt === null) {
+      row.settledAt = Math.floor(now / 1000);
+    }
 
     saveUserDay(row);
     if (row.status !== "playing") {

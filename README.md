@@ -86,7 +86,8 @@ fails loudly on any malformed entry.
 | `branch`     | `"JP" \| "ID" \| "EN" \| "DEV_IS" \| "Stars"` | Hololive branch. |
 | `debutYear`  | integer (e.g. 2022)                           | Year of debut. |
 | `archetype`  | string                                        | Free-form (Human, Zombie, Phoenix, Shinigami, …). |
-| `heightCm`   | integer cm                                    | Server derives Small/Med/Tall bucket. |
+| `generation` | string                                        | Free-form (`"Gen 0"`, `"GAMERS"`, `"Promise"`, `"Regloss"`, …). Used as the "Gen" column in the guess grid. |
+| `heightCm`   | integer cm                                    | Server derives the bucket: `≤150` Smol, `151–160` Med, `>160` Tall. |
 | `birthMonth` | string, English month name                    | "January", "February", …, "December". |
 | `active`     | boolean                                       | `false` keeps the talent in autocomplete but excludes from the daily pool. |
 
@@ -112,7 +113,20 @@ Avatar PNGs live at `packages/client/public/avatars/<id>.png`.
    hosts your client fetches from (Discord blocks unmapped origins). Add
    `cdn.discordapp.com` if you load Discord avatars; add any other CDN you
    reference.
-5. **Bot** tab is not used — Holodle is a user-facing Activity, not a bot.
+5. **Bot** tab — required for the per-player and end-of-day recap embeds.
+   - **Add Bot** if one doesn't exist, then **Reset Token** and copy the
+     bot token into `.env` as `DISCORD_BOT_TOKEN`. The bot token is
+     server-only; never expose it to the client bundle.
+   - Under **Privileged Gateway Intents**, none are required for posting
+     messages — the bot only uses the REST API, never the gateway.
+   - **OAuth2 → URL Generator**: tick `bot` under scopes and
+     `Send Messages` under bot permissions. Open the generated URL and
+     install the bot in the same guild your Activity runs in. The bot
+     must have permission to send messages in the channel the Activity
+     is launched from, or the embeds will silently fail (the failure is
+     logged on the server but doesn't break gameplay).
+   - If `DISCORD_BOT_TOKEN` is unset, the server logs a warning at boot
+     and both embed types no-op cleanly.
 
 ## Running a local dev tunnel
 
@@ -168,16 +182,56 @@ is persisted to `/data/holodle.db` via the Fly volume mount.
 ## Gameplay & comparison rules
 
 See [`packages/server/src/game/compare.ts`](packages/server/src/game/compare.ts).
+Every cell is strictly green-equal or red-wrong — no orange "near" states.
 Per-attribute summary:
 
-- **Branch / Archetype / Name** — exact match → green; otherwise red.
-- **Debut Year** — exact → green; `|delta| == 1` → orange (near); otherwise
-  red with `↑` (target is higher) or `↓` (target is lower).
-- **Height** — bucketed (`<150` Small, `150–160` Med, `>160` Tall). Exact
-  bucket → green; adjacent bucket → orange; non-adjacent → red.
-- **Birth Month** — exact → green; ±1 month with Dec↔Jan wrap → orange;
-  otherwise red.
+- **Gen / Branch / Archetype** — exact match → green; otherwise red.
+- **Debut Year** — exact → green; otherwise red with `↑` (target year is
+  higher than your guess) or `↓` (target is lower).
+- **Height** — bucketed (`≤150` Smol, `151–160` Med, `>160` Tall). Exact
+  bucket → green; otherwise red.
+- **Birth Month** — exact → green; otherwise red.
 
 The **answer never reaches the client.** The client renders only the diff
 the server returns; Socket.IO broadcasts contain `{userId, guessesUsed,
 status}` only — never the guessed talent.
+
+## Time, timezones, and daily rollover
+
+Each player's puzzle rolls over at **their own local midnight**. The
+client sends its IANA timezone (from
+`Intl.DateTimeFormat().resolvedOptions().timeZone`) on every authenticated
+request; the server computes a per-user `dayIndex` against that locale.
+Two players in different timezones can be on different puzzles at the
+same wall-clock moment — that's intentional.
+
+The end-of-day **recap embed** fires once per day at midnight in
+**America/Chicago** (CST/CDT, DST-aware). For each channel that had
+players settle a game during the previous 24 hours, the bot posts a
+single embed grouping mentions by score. Idempotency is enforced by the
+`daily_recaps` SQLite table — the recap can be triggered twice for the
+same window without double-posting.
+
+While developing, you can trigger the recap on demand instead of waiting
+for midnight:
+
+```bash
+curl -X POST http://localhost:3001/api/dev/post-recap \
+  -H "Authorization: Bearer dev:anyone"
+```
+
+The `/api/dev/*` namespace is registered only when `NODE_ENV !== production`.
+
+## Embed posting (per-player exit + daily recap)
+
+- **Per-player exit embed** posts when a player closes the Activity iframe
+  (Socket.IO disconnect), debounced 30 s so a refresh or brief network
+  blip doesn't double-post. The embed shows the player's avatar, mention,
+  final state (won / lost / partial), and a colored-square grid of their
+  guesses. Idempotency: a flag on `user_day.exit_embed_posted` prevents a
+  second post for the same player/day.
+- **Recap embed** fires at CST midnight per the section above.
+
+Both routes use the same `postChannelMessage` helper which logs and
+returns null on Discord-side failures — gameplay never breaks if the
+bot can't post.

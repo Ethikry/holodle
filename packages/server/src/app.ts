@@ -13,6 +13,7 @@ import { talentsRoutes } from "./routes/talents.js";
 import { dailyRoutes } from "./routes/daily.js";
 import { guessRoutes } from "./routes/guess.js";
 import { statsRoutes } from "./routes/stats.js";
+import { devRecapRoutes } from "./routes/devRecap.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -47,6 +48,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(dailyRoutes);
   await app.register(guessRoutes);
   await app.register(statsRoutes);
+  await app.register(devRecapRoutes);
 
   if (serveClient) {
     const clientDist = resolve(__dirname, "..", env.CLIENT_DIST);
