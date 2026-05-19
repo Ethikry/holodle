@@ -15,6 +15,29 @@ export type SessionResult =
   | { ok: true; session: DiscordSession }
   | { ok: false; reason: string };
 
+// The Discord SDK frequently throws plain objects ({ code, message }) rather
+// than Error instances, so String(err) yields "[object Object]" and hides the
+// actual failure. Stringify defensively so the UI banner shows useful text.
+function describeError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  if (err && typeof err === "object") {
+    // Pull out shape from common SDK error envelopes first.
+    const e = err as { code?: number | string; message?: string; error?: string };
+    if (e.message || e.code !== undefined || e.error) {
+      const code = e.code !== undefined ? `[${e.code}] ` : "";
+      const msg = e.message ?? e.error ?? "";
+      if (msg) return `${code}${msg}`;
+    }
+    try {
+      return JSON.stringify(err);
+    } catch {
+      return Object.prototype.toString.call(err);
+    }
+  }
+  return String(err);
+}
+
 let cached: DiscordSession | null = null;
 let inflight: Promise<SessionResult> | null = null;
 
@@ -82,10 +105,8 @@ export async function getDiscordSession(): Promise<SessionResult> {
       cached = { sdk, accessToken: access_token, instanceId: sdk.instanceId, user: auth.user };
       return { ok: true, session: cached };
     } catch (err) {
-      return {
-        ok: false,
-        reason: `Discord SDK init threw: ${err instanceof Error ? err.message : String(err)}`,
-      };
+      console.error("Discord SDK init threw:", err);
+      return { ok: false, reason: `Discord SDK init threw: ${describeError(err)}` };
     } finally {
       inflight = null;
     }

@@ -108,7 +108,10 @@ export function App(): JSX.Element {
 
   const handleGuess = useCallback(
     async (talentId: string) => {
-      if (!accessToken || !instanceId) return;
+      if (!accessToken || !instanceId) {
+        setError("Not signed in to Discord yet — guesses are disabled until the session is established.");
+        return;
+      }
       try {
         const resp = await submitGuess(accessToken, talentId, instanceId);
         appendGuess(resp.diff, resp.status, resp.answer);
@@ -125,8 +128,13 @@ export function App(): JSX.Element {
   );
 
   const inputDisabled = useMemo(
-    () => status !== "playing" || history.length >= MAX_GUESSES || talents.length === 0 || loading,
-    [status, history.length, talents.length, loading],
+    () =>
+      !accessToken ||
+      status !== "playing" ||
+      history.length >= MAX_GUESSES ||
+      talents.length === 0 ||
+      loading,
+    [accessToken, status, history.length, talents.length, loading],
   );
 
   const emptyCatalog = !loading && talents.length === 0;
