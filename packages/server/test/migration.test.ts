@@ -12,8 +12,34 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 const tmpDir = mkdtempSync(join(tmpdir(), "holodle-migration-"));
 const oldDbPath = join(tmpDir, "old.db");
 
+// Pre-round-2 GuessDiff shape (note `name`, not `generation`).
+const STALE_DIFF_JSON = JSON.stringify([
+  {
+    talentId: "kobo-kanaeru",
+    name: { value: "Kobo Kanaeru", state: "wrong" },
+    branch: { value: "ID", state: "equal" },
+    debutYear: { value: 2022, state: "equal" },
+    archetype: { value: "Human", state: "equal" },
+    height: { value: "Med", state: "equal" },
+    birthMonth: { value: "December", state: "equal" },
+  },
+]);
+
+const FRESH_DIFF_JSON = JSON.stringify([
+  {
+    talentId: "kobo-kanaeru",
+    generation: { value: "ID Gen 3", state: "wrong" },
+    branch: { value: "ID", state: "equal" },
+    debutYear: { value: 2022, state: "equal" },
+    archetype: { value: "Human", state: "equal" },
+    height: { value: "Med", state: "equal" },
+    birthMonth: { value: "December", state: "equal" },
+  },
+]);
+
 beforeAll(() => {
-  // Old user_day shape: no channel_id/tz/settled_at/exit_embed_posted.
+  // Old user_day shape: no channel_id/tz/settled_at/exit_embed_posted, plus
+  // stored diffs in the legacy `name` shape.
   const old = new Database(oldDbPath);
   old.exec(`
     CREATE TABLE user_day (
@@ -27,6 +53,18 @@ beforeAll(() => {
     INSERT INTO user_day (user_id, day_index, guesses_json, status)
       VALUES ('legacy-user', 0, '[]', 'won');
   `);
+  // Row that should be cleared by the data migration.
+  old.prepare(
+    `INSERT INTO user_day (user_id, day_index, guesses_json, status) VALUES (?,?,?,?)`,
+  ).run("stale-user", 800, STALE_DIFF_JSON, "lost");
+  // Row that should pass through untouched.
+  old.prepare(
+    `INSERT INTO user_day (user_id, day_index, guesses_json, status) VALUES (?,?,?,?)`,
+  ).run("fresh-user", 801, FRESH_DIFF_JSON, "won");
+  // Row with malformed JSON — should also be cleared.
+  old.prepare(
+    `INSERT INTO user_day (user_id, day_index, guesses_json, status) VALUES (?,?,?,?)`,
+  ).run("broken-user", 802, "{ this is not json", "playing");
   old.close();
   process.env.DB_PATH = oldDbPath;
   process.env.NODE_ENV = "test";
@@ -55,5 +93,38 @@ describe("getDb migration from pre-round-2 shape", () => {
       .prepare("SELECT user_id, status FROM user_day WHERE user_id = 'legacy-user'")
       .get();
     expect(row).toEqual({ user_id: "legacy-user", status: "won" });
+  });
+
+  it("clears stale pre-round-2 diffs (name without generation) and resets the row", async () => {
+    const { getDb } = await import("../src/db/client.js");
+    const row = getDb()
+      .prepare(
+        "SELECT guesses_json, status, settled_at, exit_embed_posted FROM user_day WHERE user_id = 'stale-user'",
+      )
+      .get() as { guesses_json: string; status: string; settled_at: number | null; exit_embed_posted: number };
+    expect(row.guesses_json).toBe("[]");
+    expect(row.status).toBe("playing");
+    expect(row.settled_at).toBeNull();
+    expect(row.exit_embed_posted).toBe(0);
+  });
+
+  it("preserves fresh (generation-shape) diffs untouched", async () => {
+    const { getDb } = await import("../src/db/client.js");
+    const row = getDb()
+      .prepare("SELECT guesses_json, status FROM user_day WHERE user_id = 'fresh-user'")
+      .get() as { guesses_json: string; status: string };
+    expect(row.status).toBe("won");
+    const parsed = JSON.parse(row.guesses_json);
+    expect(parsed[0]).toHaveProperty("generation");
+    expect(parsed[0]).not.toHaveProperty("name");
+  });
+
+  it("clears rows with malformed guesses_json", async () => {
+    const { getDb } = await import("../src/db/client.js");
+    const row = getDb()
+      .prepare("SELECT guesses_json, status FROM user_day WHERE user_id = 'broken-user'")
+      .get() as { guesses_json: string; status: string };
+    expect(row.guesses_json).toBe("[]");
+    expect(row.status).toBe("playing");
   });
 });

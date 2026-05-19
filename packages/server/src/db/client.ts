@@ -16,7 +16,57 @@ export function getDb(): Database.Database {
   runAdditiveMigrations(db);
   // 3) Indexes last — some reference columns added in step 2.
   db.exec(INDEXES_SQL);
+  // 4) Drop stored guesses_json arrays that predate the Name → Gen swap.
+  //    Their AttrCell shape lacks `.generation`, and the client crashes
+  //    on render with "Cannot read properties of undefined (reading 'state')".
+  clearStaleGenerationDiffs(db);
   return db;
+}
+
+// One-time data migration: scan every user_day row, drop any whose stored
+// guesses_json contains a diff missing the `.generation` field. The row is
+// reset to a fresh playing state — the user effectively gets their guesses
+// back. Settled rows (won/lost) also get reset, which loses the win/loss
+// record for that legacy day but avoids crashing the client when the
+// history is re-rendered. Idempotent: once a row is reset, future runs
+// see an empty array and skip it.
+function clearStaleGenerationDiffs(database: Database.Database): void {
+  const rows = database
+    .prepare("SELECT user_id, day_index, guesses_json FROM user_day")
+    .all() as Array<{ user_id: string; day_index: number; guesses_json: string }>;
+  const reset = database.prepare(
+    `UPDATE user_day
+        SET guesses_json     = '[]',
+            status           = 'playing',
+            settled_at       = NULL,
+            exit_embed_posted= 0
+      WHERE user_id = ? AND day_index = ?`,
+  );
+  let cleared = 0;
+  for (const row of rows) {
+    let stale = false;
+    try {
+      const guesses = JSON.parse(row.guesses_json) as unknown[];
+      if (Array.isArray(guesses) && guesses.length > 0) {
+        const first = guesses[0] as Record<string, unknown> | null;
+        // Old shape had `.name`; new shape has `.generation`. We treat
+        // either signal — a missing `generation` OR a stray `name` field —
+        // as definitive evidence of a pre-round-2 row.
+        if (first && (!("generation" in first) || "name" in first)) {
+          stale = true;
+        }
+      }
+    } catch {
+      stale = true; // unparseable JSON — just clear it
+    }
+    if (stale) {
+      reset.run(row.user_id, row.day_index);
+      cleared++;
+    }
+  }
+  if (cleared > 0) {
+    console.log(`[db] cleared ${cleared} pre-round-2 user_day row(s) with stale GuessDiff shape`);
+  }
 }
 
 // Add any columns from ADDITIVE_MIGRATIONS that are missing on existing
