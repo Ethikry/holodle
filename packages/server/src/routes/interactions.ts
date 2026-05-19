@@ -129,7 +129,7 @@ export async function interactionsRoutes(app: FastifyInstance): Promise<void> {
 
     if (
       payload.type === TYPE_APPLICATION_COMMAND &&
-      payload.data?.name === "Launch"
+      payload.data?.name?.toLowerCase() === "launch"
     ) {
       // Kick off the follow-up posting asynchronously. Discord requires us
       // to respond within 3 seconds — embed posting/editing is too slow to
