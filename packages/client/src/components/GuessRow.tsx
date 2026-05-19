@@ -7,6 +7,9 @@ const BUCKET_LABEL: Record<HeightBucket, string> = {
   Tall: "Tall (>160)",
 };
 
+// One row of the guess grid. 7 columns: avatar + 6 attribute cells.
+// The CSS-grid template is defined on the parent GuessGrid so header labels
+// line up with the cells below.
 export function GuessRow({
   diff,
   talents,
@@ -16,34 +19,41 @@ export function GuessRow({
 }): JSX.Element {
   const talent = talents.find((t) => t.id === diff.talentId);
   return (
-    <tr className="text-center">
-      <td className="px-2 py-2">
-        <div className="card mx-auto flex h-12 w-12 items-center justify-center overflow-hidden">
+    <div
+      role="row"
+      className="grid grid-cols-[72px_repeat(6,minmax(0,1fr))] items-center gap-2"
+    >
+      <div role="cell" className="flex items-center justify-center">
+        <div className="card flex h-14 w-14 items-center justify-center overflow-hidden border border-holo-accent/30">
           {talent?.avatarUrl ? (
-            <img src={talent.avatarUrl} alt={talent.name} className="h-full w-full object-cover" />
+            <img
+              src={talent.avatarUrl}
+              alt={talent.name}
+              className="h-full w-full object-cover"
+            />
           ) : (
             <span className="text-xs text-holo-muted">?</span>
           )}
         </div>
-      </td>
-      <td className="px-2 py-2">
+      </div>
+      <div role="cell">
         <AttributePill cell={diff.generation} />
-      </td>
-      <td className="px-2 py-2">
+      </div>
+      <div role="cell">
         <AttributePill cell={diff.branch} />
-      </td>
-      <td className="px-2 py-2">
+      </div>
+      <div role="cell">
         <AttributePill cell={diff.debutYear} />
-      </td>
-      <td className="px-2 py-2">
+      </div>
+      <div role="cell">
         <AttributePill cell={diff.archetype} />
-      </td>
-      <td className="px-2 py-2">
+      </div>
+      <div role="cell">
         <AttributePill cell={{ ...diff.height, value: BUCKET_LABEL[diff.height.value] }} />
-      </td>
-      <td className="px-2 py-2">
+      </div>
+      <div role="cell">
         <AttributePill cell={diff.birthMonth} />
-      </td>
-    </tr>
+      </div>
+    </div>
   );
 }
