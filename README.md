@@ -95,12 +95,39 @@ Avatar PNGs live at `packages/client/public/avatars/<id>.png`.
 
 ## Discord developer portal setup
 
+Holodle uses Discord's **user-install** flow (same pattern as the official
+Wordle activity). There is **no bot user** — channel messages are posted
+via interaction follow-up webhooks tied to the launching user's Entry Point
+interaction. Anyone who installs the app to their personal account can
+launch Holodle in any channel where they have permission to use Apps,
+even if the app is not installed in that server.
+
 1. Open https://discord.com/developers/applications and create a new
    application (or use an existing one).
-2. **OAuth2** tab — copy the **Client ID** and reset the **Client Secret**.
+2. **General Information** — copy the **Public Key** into `.env` as
+   `DISCORD_PUBLIC_KEY`. This is used to verify Ed25519 signatures on the
+   interactions endpoint.
+3. **OAuth2** tab — copy the **Client ID** and reset the **Client Secret**.
    Put both into `.env` (the secret is server-only; never expose it to the
    client bundle).
-3. **Activities → URL Mappings** — add **one** row only:
+4. **Installation** page:
+   - **Installation Contexts**: tick **User Install** and **Guild Install**.
+   - **Install Link**: select "Discord Provided Link".
+   - **Default Install Settings**:
+     - User Install → scopes: `applications.commands` only.
+     - Guild Install → scopes: `applications.commands` only.
+       **Do not add the `bot` scope.**
+5. **General Information → Interactions Endpoint URL**:
+   `https://<your-host>/api/interactions`. Discord pings this URL on save;
+   it must be live and respond to a signed PING (type 1) with PONG before
+   save succeeds. If `DISCORD_PUBLIC_KEY` is missing or wrong, every
+   request returns 401 and Discord rejects the endpoint.
+6. **Activities → Settings** — ensure Activities are enabled. The
+   Entry Point command (named "Launch") will already exist with the
+   `DISCORD_LAUNCH_ACTIVITY (2)` handler — leave it as-is. Our server
+   handles `data.name === "Launch"` to post the in-channel embed before
+   returning `{type: 12}` to launch the activity.
+7. **Activities → URL Mappings** — add **one** row only:
    - prefix `/` → target `your-subdomain.trycloudflare.com` (no scheme).
 
    Do **not** add a separate `/api` mapping. Discord URL Mappings strip the
@@ -109,24 +136,17 @@ Avatar PNGs live at `packages/client/public/avatars/<id>.png`.
    routes entirely and fall through to the SPA fallback (HTML for JSON =
    `Unexpected token '<'` in the client). A single `/` mapping preserves
    the full path end-to-end.
-4. **Activities → URL Mappings** also requires entries for any external
+8. **Activities → URL Mappings** also requires entries for any external
    hosts your client fetches from (Discord blocks unmapped origins). Add
    `cdn.discordapp.com` if you load Discord avatars; add any other CDN you
    reference.
-5. **Bot** tab — required for the per-player and end-of-day recap embeds.
-   - **Add Bot** if one doesn't exist, then **Reset Token** and copy the
-     bot token into `.env` as `DISCORD_BOT_TOKEN`. The bot token is
-     server-only; never expose it to the client bundle.
-   - Under **Privileged Gateway Intents**, none are required for posting
-     messages — the bot only uses the REST API, never the gateway.
-   - **OAuth2 → URL Generator**: tick `bot` under scopes and
-     `Send Messages` under bot permissions. Open the generated URL and
-     install the bot in the same guild your Activity runs in. The bot
-     must have permission to send messages in the channel the Activity
-     is launched from, or the embeds will silently fail (the failure is
-     logged on the server but doesn't break gameplay).
-   - If `DISCORD_BOT_TOKEN` is unset, the server logs a warning at boot
-     and both embed types no-op cleanly.
+
+### Installing the app to your account
+
+Once installation is configured, hit the **Install Link** on the
+Installation page and choose **Add to My Apps**. You can then run
+`/Launch` in any channel — including channels in servers where the app is
+not installed as a member.
 
 ## Running a local dev tunnel
 
@@ -205,33 +225,34 @@ request; the server computes a per-user `dayIndex` against that locale.
 Two players in different timezones can be on different puzzles at the
 same wall-clock moment — that's intentional.
 
-The end-of-day **recap embed** fires once per day at midnight in
-**America/Chicago** (CST/CDT, DST-aware). For each channel that had
-players settle a game during the previous 24 hours, the bot posts a
-single embed grouping mentions by score. Idempotency is enforced by the
-`daily_recaps` SQLite table — the recap can be triggered twice for the
-same window without double-posting.
+In-channel embeds (yesterday's recap + the now-playing message) are
+**UTC-anchored** instead, so two viewers in different timezones see the
+same channel embed. Channel state is keyed by `puzzle_id` in UTC
+(`YYYY-MM-DD`), while user progress is still computed in the user's own
+tz inside `/api/guess`.
 
-While developing, you can trigger the recap on demand instead of waiting
-for midnight:
+## In-channel embeds (user-install flow)
 
-```bash
-curl -X POST http://localhost:3001/api/dev/post-recap \
-  -H "Authorization: Bearer dev:anyone"
-```
+There's no scheduled cron and no bot token. Every channel message comes
+from an interaction follow-up webhook tied to a specific player's
+**/Launch** click, valid for 15 minutes from issue.
 
-The `/api/dev/*` namespace is registered only when `NODE_ENV !== production`.
+- **Now-playing embed.** First `/Launch` in a channel on a given UTC day
+  posts a single embed listing the current participants (`X player(s)
+  currently playing`) with a "Play now!" button. Subsequent `/Launch`
+  clicks within 15 minutes **edit** the same message via PATCH to add
+  the new participant. The freshest interaction token is persisted in
+  `channel_daily_state` so completions from `/api/guess` (won/lost) can
+  also edit the message to refresh per-player scores — as long as
+  *someone* launched within the previous 15 minutes. After the token
+  expires, in-flight completions are dropped on the floor (matches
+  Wordle's behavior; late joiners stop appearing).
+- **Yesterday's recap embed.** First `/Launch` of a new UTC day in a
+  channel posts a one-shot recap of the previous day's players, grouped
+  by guesses-to-win. Idempotency via the `channel_recap_posted` table —
+  subsequent launches the same day do not repost.
 
-## Embed posting (per-player exit + daily recap)
-
-- **Per-player exit embed** posts when a player closes the Activity iframe
-  (Socket.IO disconnect), debounced 30 s so a refresh or brief network
-  blip doesn't double-post. The embed shows the player's avatar, mention,
-  final state (won / lost / partial), and a colored-square grid of their
-  guesses. Idempotency: a flag on `user_day.exit_embed_posted` prevents a
-  second post for the same player/day.
-- **Recap embed** fires at CST midnight per the section above.
-
-Both routes use the same `postChannelMessage` helper which logs and
-returns null on Discord-side failures — gameplay never breaks if the
-bot can't post.
+If an embed POST or PATCH fails (network, expired token, missing scope),
+the failure is logged and the activity still launches normally. The
+interaction handler must respond with `{type: 12}` within 3 seconds, so
+all follow-up writes run async after the response is sent.

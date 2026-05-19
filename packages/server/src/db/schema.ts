@@ -39,11 +39,40 @@ CREATE TABLE IF NOT EXISTS daily_recaps (
   fired_at   INTEGER NOT NULL,
   PRIMARY KEY (channel_id, fired_at)
 );
+
+CREATE TABLE IF NOT EXISTS channel_daily_state (
+  channel_id           TEXT NOT NULL,
+  puzzle_id            TEXT NOT NULL,
+  message_id           TEXT,
+  latest_token         TEXT NOT NULL,
+  latest_token_app_id  TEXT NOT NULL,
+  latest_token_exp     INTEGER NOT NULL,
+  PRIMARY KEY (channel_id, puzzle_id)
+);
+
+CREATE TABLE IF NOT EXISTS channel_recap_posted (
+  channel_id TEXT NOT NULL,
+  puzzle_id  TEXT NOT NULL,
+  PRIMARY KEY (channel_id, puzzle_id)
+);
+
+CREATE TABLE IF NOT EXISTS channel_daily_participant (
+  channel_id   TEXT NOT NULL,
+  puzzle_id    TEXT NOT NULL,
+  user_id      TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  guesses_used INTEGER NOT NULL DEFAULT 0,
+  status       TEXT NOT NULL DEFAULT 'playing',
+  joined_at    INTEGER NOT NULL,
+  PRIMARY KEY (channel_id, puzzle_id, user_id)
+);
 `;
 
 export const INDEXES_SQL = `
 CREATE INDEX IF NOT EXISTS idx_user_day_day ON user_day(day_index);
 CREATE INDEX IF NOT EXISTS idx_user_day_settled ON user_day(settled_at);
+CREATE INDEX IF NOT EXISTS idx_channel_participant_channel_puzzle
+  ON channel_daily_participant(channel_id, puzzle_id);
 `;
 
 // Additive columns that need ALTER TABLE on databases predating round-2.
