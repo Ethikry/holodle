@@ -14,6 +14,8 @@ const TalentSchema = z.object({
   name: z.string().min(1),
   avatarUrl: z.string().min(1),
   branch: BranchSchema,
+  // Free-form group label — "Gen 0", "GAMERS", "Promise", "Regloss", …
+  generation: z.string().min(1),
   debutYear: z.number().int().min(2000).max(2100),
   archetype: z.string().min(1),
   heightCm: z.number().int().positive(),

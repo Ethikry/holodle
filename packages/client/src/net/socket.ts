@@ -17,6 +17,8 @@ export interface SocketHandlers {
 export function connectSocket(
   accessToken: string,
   instanceId: string,
+  channelId: string | null,
+  tz: string,
   handlers: SocketHandlers,
 ): GameSocket {
   // socket.io-client auto-resolves the origin and uses the proxied /socket.io path.
@@ -26,7 +28,7 @@ export function connectSocket(
   });
 
   socket.on("connect", () => {
-    socket.emit("hello", { accessToken, instanceId }, (ack) => {
+    socket.emit("hello", { accessToken, instanceId, channelId, tz }, (ack) => {
       if (!ack.ok) {
         console.error("Socket hello rejected", ack.error);
         socket.disconnect();

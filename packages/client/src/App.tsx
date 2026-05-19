@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { MAX_GUESSES } from "@holodle/shared";
 import { getDevSession, getDiscordSession, isEmbeddedInDiscord } from "./sdk/discord.js";
-import { fetchDaily, fetchStats, fetchTalents, submitGuess } from "./net/api.js";
+import { LOCAL_TZ, fetchDaily, fetchStats, fetchTalents, submitGuess } from "./net/api.js";
 import { connectSocket } from "./net/socket.js";
 import { useGame } from "./state/game.js";
 
@@ -18,6 +18,7 @@ export function App(): JSX.Element {
   const {
     accessToken,
     instanceId,
+    channelId,
     talents,
     history,
     status,
@@ -72,6 +73,7 @@ export function App(): JSX.Element {
       setSession({
         accessToken: session.accessToken,
         instanceId: session.instanceId,
+        channelId: session.channelId,
         selfUserId: session.user.id,
       });
 
@@ -88,13 +90,20 @@ export function App(): JSX.Element {
         errs.push(describe(err));
       }
 
-      // 4. Socket presence.
-      const socket = connectSocket(session.accessToken, session.instanceId, {
-        onSnapshot: setSnapshot,
-        onJoin: upsertPlayer,
-        onProgress: updateProgress,
-        onLeave: ({ userId }) => removePlayer(userId),
-      });
+      // 4. Socket presence — pass channelId + tz so the server can route
+      // the exit embed and compute the right user-local dayIndex.
+      const socket = connectSocket(
+        session.accessToken,
+        session.instanceId,
+        session.channelId,
+        LOCAL_TZ,
+        {
+          onSnapshot: setSnapshot,
+          onJoin: upsertPlayer,
+          onProgress: updateProgress,
+          onLeave: ({ userId }) => removePlayer(userId),
+        },
+      );
       socketCleanup = () => socket.disconnect();
 
       if (!cancelled) {
@@ -117,7 +126,7 @@ export function App(): JSX.Element {
         return;
       }
       try {
-        const resp = await submitGuess(accessToken, talentId, instanceId);
+        const resp = await submitGuess(accessToken, talentId, instanceId, channelId);
         appendGuess(resp.diff, resp.status, resp.answer);
         if (resp.status !== "playing") {
           // Refresh stats on settle.
@@ -128,7 +137,7 @@ export function App(): JSX.Element {
         setError(err instanceof Error ? err.message : String(err));
       }
     },
-    [accessToken, instanceId, appendGuess, setStats, setError],
+    [accessToken, instanceId, channelId, appendGuess, setStats, setError],
   );
 
   const inputDisabled = useMemo(

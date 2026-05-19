@@ -13,6 +13,7 @@ interface GameState {
   // Identity / session
   accessToken: string | null;
   instanceId: string | null;
+  channelId: string | null;
   selfUserId: string | null;
 
   // Catalog
@@ -38,7 +39,12 @@ interface GameState {
 }
 
 interface GameActions {
-  setSession: (s: { accessToken: string; instanceId: string; selfUserId: string }) => void;
+  setSession: (s: {
+    accessToken: string;
+    instanceId: string;
+    channelId: string | null;
+    selfUserId: string;
+  }) => void;
   setTalents: (t: TalentSummary[]) => void;
   setDaily: (d: DailyState) => void;
   appendGuess: (diff: GuessDiff, status: GameStatus, answer?: TalentSummary) => void;
@@ -55,6 +61,7 @@ interface GameActions {
 export const useGame = create<GameState & GameActions>((set) => ({
   accessToken: null,
   instanceId: null,
+  channelId: null,
   selfUserId: null,
 
   talents: [],
@@ -71,8 +78,8 @@ export const useGame = create<GameState & GameActions>((set) => ({
   loading: false,
   error: null,
 
-  setSession: ({ accessToken, instanceId, selfUserId }) =>
-    set({ accessToken, instanceId, selfUserId }),
+  setSession: ({ accessToken, instanceId, channelId, selfUserId }) =>
+    set({ accessToken, instanceId, channelId, selfUserId }),
   setTalents: (talents) => set({ talents }),
   setDaily: (d) =>
     set({

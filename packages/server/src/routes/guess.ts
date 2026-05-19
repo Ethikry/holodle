@@ -5,16 +5,21 @@ import { MAX_GUESSES } from "@holodle/shared";
 import { requireUser } from "../auth/requireUser.js";
 import { loadUserDay, saveUserDay, settleDay } from "../db/client.js";
 import { compareGuess } from "../game/compare.js";
-import { dayIndexFor, pickDaily } from "../game/dailyPicker.js";
+import { dayIndexFor, pickDaily, safeTz } from "../game/dailyPicker.js";
 import { updateProgress } from "../game/instance.js";
 import { getRegistry } from "../game/talents.js";
 import { broadcastProgress } from "../ws/socket.js";
 
 const BodySchema = z.object({
   talentId: z.string().min(1),
-  // Optional — only needed to broadcast progress to the right Socket.IO room.
-  // If absent, the guess still persists but no room update is emitted.
+  // Optional — needed to broadcast progress to the right Socket.IO room.
   instanceId: z.string().optional(),
+  // Optional — the channel the activity was launched from. Persisted so the
+  // exit embed (step G) and the EOD recap (step H) know where to post.
+  channelId: z.string().optional(),
+  // Optional IANA timezone. Selects which user-local calendar drives the
+  // daily puzzle. Falls back to UTC when missing or invalid.
+  tz: z.string().optional(),
 });
 
 export async function guessRoutes(app: FastifyInstance): Promise<void> {
@@ -28,6 +33,7 @@ export async function guessRoutes(app: FastifyInstance): Promise<void> {
       return { error: "Invalid body", details: parsed.error.flatten() };
     }
     const { talentId, instanceId } = parsed.data;
+    const tz = safeTz(parsed.data.tz);
 
     const reg = getRegistry();
     const guess = reg.byId.get(talentId);
@@ -36,13 +42,14 @@ export async function guessRoutes(app: FastifyInstance): Promise<void> {
       return { error: "Unknown talentId" };
     }
 
-    const answer = pickDaily(reg.activePool);
+    const now = Date.now();
+    const answer = pickDaily(reg.activePool, now, tz);
     if (!answer) {
       reply.code(503);
       return { error: "No active talents available" };
     }
 
-    const dayIndex = dayIndexFor();
+    const dayIndex = dayIndexFor(now, tz);
     const row = loadUserDay(user.id, dayIndex);
 
     if (row.status !== "playing") {

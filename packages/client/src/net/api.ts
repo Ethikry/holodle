@@ -42,24 +42,31 @@ async function ok<T>(resp: Response): Promise<T> {
   }
 }
 
+// Resolved at module-load; the user's locale is determined by the system at
+// page load, so a stable value for the session is fine.
+export const LOCAL_TZ: string =
+  Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
 export async function fetchTalents(): Promise<TalentSummary[]> {
   return ok<TalentSummary[]>(await fetch("/api/talents"));
 }
 
 export async function fetchDaily(accessToken: string): Promise<DailyState> {
-  return ok<DailyState>(await fetch("/api/daily", { headers: authHeaders(accessToken) }));
+  const url = `/api/daily?tz=${encodeURIComponent(LOCAL_TZ)}`;
+  return ok<DailyState>(await fetch(url, { headers: authHeaders(accessToken) }));
 }
 
 export async function submitGuess(
   accessToken: string,
   talentId: string,
   instanceId: string,
+  channelId: string | null,
 ): Promise<GuessResponse> {
   return ok<GuessResponse>(
     await fetch("/api/guess", {
       method: "POST",
       headers: authHeaders(accessToken),
-      body: JSON.stringify({ talentId, instanceId }),
+      body: JSON.stringify({ talentId, instanceId, channelId, tz: LOCAL_TZ }),
     }),
   );
 }

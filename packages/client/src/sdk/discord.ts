@@ -8,6 +8,9 @@ export interface DiscordSession {
   sdk: DiscordSDK;
   accessToken: string;
   instanceId: string;
+  // The Discord text/voice channel the activity was launched from. Used to
+  // route the exit embed and the EOD recap to the right place.
+  channelId: string | null;
   user: { id: string; username: string; global_name?: string | null; avatar?: string | null };
 }
 
@@ -123,7 +126,17 @@ export async function getDiscordSession(): Promise<SessionResult> {
         // ignore — mobile-only, may not exist in all SDK versions
       }
 
-      cached = { sdk, accessToken: access_token, instanceId: sdk.instanceId, user: auth.user };
+      // channelId is exposed directly off the SDK once ready(). May be null
+      // for activities launched outside a text/voice channel context.
+      const channelId = (sdk as unknown as { channelId: string | null }).channelId ?? null;
+
+      cached = {
+        sdk,
+        accessToken: access_token,
+        instanceId: sdk.instanceId,
+        channelId,
+        user: auth.user,
+      };
       return { ok: true, session: cached };
     } catch (err) {
       console.error("Discord SDK init threw:", err);
@@ -145,6 +158,7 @@ export function getDevSession(): DiscordSession {
     sdk: null as unknown as DiscordSDK,
     accessToken: `dev:${id}`,
     instanceId: "dev-instance",
+    channelId: null,
     user: { id, username: id, global_name: `Dev ${id}`, avatar: null },
   };
 }

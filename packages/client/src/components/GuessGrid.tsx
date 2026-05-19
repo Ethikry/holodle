@@ -16,7 +16,7 @@ export function GuessGrid(): JSX.Element {
         <thead>
           <tr className="text-xs font-semibold uppercase tracking-wider text-holo-muted">
             <th className="px-2 py-2">Talent</th>
-            <th className="px-2 py-2">Name</th>
+            <th className="px-2 py-2">Gen</th>
             <th className="px-2 py-2">Branch</th>
             <th className="px-2 py-2">Debut Year</th>
             <th className="px-2 py-2">Archetype</th>

@@ -2,8 +2,8 @@ import type { GuessDiff, TalentSummary, HeightBucket } from "@holodle/shared";
 import { AttributePill } from "./AttributePill.js";
 
 const BUCKET_LABEL: Record<HeightBucket, string> = {
-  Small: "Small (<150)",
-  Med: "Med (150–160)",
+  Smol: "Smol (≤150)",
+  Med: "Med (151–160)",
   Tall: "Tall (>160)",
 };
 
@@ -27,7 +27,7 @@ export function GuessRow({
         </div>
       </td>
       <td className="px-2 py-2">
-        <AttributePill cell={diff.name} />
+        <AttributePill cell={diff.generation} />
       </td>
       <td className="px-2 py-2">
         <AttributePill cell={diff.branch} />

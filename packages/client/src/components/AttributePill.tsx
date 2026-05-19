@@ -1,16 +1,10 @@
 import type { AttrCell, CellState } from "@holodle/shared";
 
+// Visual variants: equal (green) or wrong (red). The "wrong" variant absorbs
+// the directional year states ("higher" / "lower") which surface as an arrow
+// next to the value rather than a separate color.
 function classFor(state: CellState): string {
-  switch (state) {
-    case "equal":
-      return "pill-equal";
-    case "near":
-      return "pill-near";
-    case "higher":
-    case "lower":
-    case "wrong":
-      return "pill-wrong";
-  }
+  return state === "equal" ? "cell-equal" : "cell-wrong";
 }
 
 function arrowFor(state: CellState): string | null {
