@@ -1,11 +1,17 @@
 // SQLite schema, inlined as a string so it travels with the compiled JS
 // without a separate file-copy step in tsc/Docker/Fly.
 //
-// For tables that already exist in the wild (post-v0.1 databases), CREATE
-// TABLE IF NOT EXISTS won't add new columns. The migration helper in
-// db/client.ts uses PRAGMA table_info + ALTER TABLE to top up missing
-// columns at boot.
-export const SCHEMA_SQL = `
+// Boot order in db/client.ts:
+//   1) exec TABLES_SQL — creates tables (CREATE IF NOT EXISTS, idempotent).
+//   2) runAdditiveMigrations — ALTER TABLE adds columns missing on
+//      pre-round-2 databases (CREATE TABLE IF NOT EXISTS won't touch
+//      existing tables).
+//   3) exec INDEXES_SQL — creates indexes, including ones that reference
+//      columns added in step 2. Must run AFTER the ALTERs.
+// Splitting steps 1 and 3 prevents the "no such column: settled_at" error
+// you'd otherwise get on a pre-existing database, where the index DDL fires
+// against the old, un-migrated table.
+export const TABLES_SQL = `
 CREATE TABLE IF NOT EXISTS user_day (
   user_id           TEXT NOT NULL,
   day_index         INTEGER NOT NULL,
@@ -33,14 +39,15 @@ CREATE TABLE IF NOT EXISTS daily_recaps (
   fired_at   INTEGER NOT NULL,
   PRIMARY KEY (channel_id, fired_at)
 );
+`;
 
+export const INDEXES_SQL = `
 CREATE INDEX IF NOT EXISTS idx_user_day_day ON user_day(day_index);
 CREATE INDEX IF NOT EXISTS idx_user_day_settled ON user_day(settled_at);
 `;
 
 // Additive columns that need ALTER TABLE on databases predating round-2.
-// Each entry: { table, column, ddl }. Run via the migration helper in
-// db/client.ts at boot.
+// Order matters only insofar as the index step assumes these columns exist.
 export const ADDITIVE_MIGRATIONS: Array<{ table: string; column: string; ddl: string }> = [
   { table: "user_day", column: "channel_id", ddl: "ALTER TABLE user_day ADD COLUMN channel_id TEXT" },
   { table: "user_day", column: "tz", ddl: "ALTER TABLE user_day ADD COLUMN tz TEXT" },

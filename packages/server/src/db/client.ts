@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import type { GameStatus, GuessDiff, UserStats } from "@holodle/shared";
 import { env } from "../env.js";
-import { ADDITIVE_MIGRATIONS, SCHEMA_SQL } from "./schema.js";
+import { ADDITIVE_MIGRATIONS, INDEXES_SQL, TABLES_SQL } from "./schema.js";
 
 let db: Database.Database | null = null;
 
@@ -10,8 +10,12 @@ export function getDb(): Database.Database {
   db = new Database(env.DB_PATH);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
-  db.exec(SCHEMA_SQL);
+  // 1) Create tables (idempotent — no-op on existing DBs).
+  db.exec(TABLES_SQL);
+  // 2) Add columns missing on pre-round-2 databases.
   runAdditiveMigrations(db);
+  // 3) Indexes last — some reference columns added in step 2.
+  db.exec(INDEXES_SQL);
   return db;
 }
 
