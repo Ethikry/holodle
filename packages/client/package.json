@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "pnpm --filter @holodle/shared build",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "preview": "vite preview",
+    "pretypecheck": "pnpm --filter @holodle/shared build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },
