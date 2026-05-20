@@ -7,6 +7,12 @@ import type { Embed, MessageComponent } from "./embeds.js";
 
 const DISCORD_API = "https://discord.com/api/v10";
 
+export interface FollowupFile {
+  filename: string; // also the suffix in `attachment://<filename>` on the embed
+  data: Buffer;
+  contentType?: string;
+}
+
 export interface FollowupPayload {
   embeds?: Embed[];
   components?: MessageComponent[];
@@ -14,11 +20,48 @@ export interface FollowupPayload {
   // Flags bitfield. We never set ephemeral here — the activity launch flow
   // wants public messages — but expose it so dev tooling can inspect.
   flags?: number;
+  // Optional PNG (or other binary) attachments. When present, the request is
+  // sent as multipart/form-data with a `payload_json` part. Each embed that
+  // wants to display one references it via `attachment://<filename>`.
+  files?: FollowupFile[];
 }
 
 export interface PostedMessage {
   id: string;
   channel_id: string;
+}
+
+// Internal helper — encodes either JSON or multipart based on whether the
+// payload carries files.
+function encodeRequest(
+  payload: FollowupPayload,
+): { headers: Record<string, string>; body: string | FormData } {
+  const { files, ...rest } = payload;
+  if (!files || files.length === 0) {
+    return {
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(rest),
+    };
+  }
+  // Discord wants multipart/form-data with one `payload_json` part and one
+  // `files[N]` part per attachment. The `attachments` array in payload_json
+  // is how each file's id is exposed to embed image/thumbnail URLs (via
+  // `attachment://<filename>`). On PATCH, omitting an attachment from this
+  // list deletes it — we want fresh attachments each tick, so we always
+  // declare exactly the files we're attaching now.
+  const form = new FormData();
+  const attachments = files.map((f, i) => ({ id: i, filename: f.filename }));
+  form.append(
+    "payload_json",
+    JSON.stringify({ ...rest, attachments }),
+  );
+  files.forEach((f, i) => {
+    const blob = new Blob([new Uint8Array(f.data)], {
+      type: f.contentType ?? "application/octet-stream",
+    });
+    form.append(`files[${i}]`, blob, f.filename);
+  });
+  return { headers: {}, body: form };
 }
 
 export async function postFollowup(
@@ -29,16 +72,13 @@ export async function postFollowup(
 ): Promise<PostedMessage | null> {
   const wait = options.wait ? "?wait=true" : "";
   const url = `${DISCORD_API}/webhooks/${applicationId}/${token}${wait}`;
+  const { headers, body } = encodeRequest(payload);
   try {
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    const resp = await fetch(url, { method: "POST", headers, body });
     if (!resp.ok) {
-      const body = await resp.text().catch(() => "");
+      const errBody = await resp.text().catch(() => "");
       console.error(
-        `[discord] postFollowup failed: ${resp.status} ${resp.statusText} — ${body.slice(0, 200)}`,
+        `[discord] postFollowup failed: ${resp.status} ${resp.statusText} — ${errBody.slice(0, 200)}`,
       );
       return null;
     }
@@ -57,16 +97,13 @@ export async function patchFollowup(
   payload: FollowupPayload,
 ): Promise<boolean> {
   const url = `${DISCORD_API}/webhooks/${applicationId}/${token}/messages/${messageId}`;
+  const { headers, body } = encodeRequest(payload);
   try {
-    const resp = await fetch(url, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    const resp = await fetch(url, { method: "PATCH", headers, body });
     if (!resp.ok) {
-      const body = await resp.text().catch(() => "");
+      const errBody = await resp.text().catch(() => "");
       console.error(
-        `[discord] patchFollowup failed: ${resp.status} ${resp.statusText} — ${body.slice(0, 200)}`,
+        `[discord] patchFollowup failed: ${resp.status} ${resp.statusText} — ${errBody.slice(0, 200)}`,
       );
       return false;
     }

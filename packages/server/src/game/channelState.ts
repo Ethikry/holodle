@@ -110,26 +110,29 @@ export interface UpsertParticipantInput {
   puzzleId: string;
   userId: string;
   displayName: string;
+  avatarUrl?: string | null;
 }
 
-// Idempotent. If the participant already exists, only display_name is
-// refreshed (name changes between launches); guesses_used/status are
+// Idempotent. If the participant already exists, display_name + avatar_url
+// are refreshed (both can change between launches); guesses_used/status are
 // preserved so a re-launch never clobbers an in-progress count.
 export function upsertParticipant({
   channelId,
   puzzleId,
   userId,
   displayName,
+  avatarUrl,
 }: UpsertParticipantInput): void {
   getDb()
     .prepare(
       `INSERT INTO channel_daily_participant
-         (channel_id, puzzle_id, user_id, display_name, guesses_used, status, joined_at)
-       VALUES (?, ?, ?, ?, 0, 'playing', strftime('%s','now'))
+         (channel_id, puzzle_id, user_id, display_name, avatar_url, guesses_used, status, joined_at)
+       VALUES (?, ?, ?, ?, ?, 0, 'playing', strftime('%s','now'))
        ON CONFLICT(channel_id, puzzle_id, user_id) DO UPDATE SET
-         display_name = excluded.display_name`,
+         display_name = excluded.display_name,
+         avatar_url   = COALESCE(excluded.avatar_url, channel_daily_participant.avatar_url)`,
     )
-    .run(channelId, puzzleId, userId, displayName);
+    .run(channelId, puzzleId, userId, displayName, avatarUrl ?? null);
 }
 
 export function listParticipants(
@@ -138,7 +141,7 @@ export function listParticipants(
 ): NowPlayingParticipant[] {
   const rows = getDb()
     .prepare(
-      `SELECT user_id, display_name, guesses_used, status
+      `SELECT user_id, display_name, avatar_url, guesses_used, status
          FROM channel_daily_participant
         WHERE channel_id = ? AND puzzle_id = ?
         ORDER BY joined_at ASC`,
@@ -146,12 +149,14 @@ export function listParticipants(
     .all(channelId, puzzleId) as Array<{
     user_id: string;
     display_name: string;
+    avatar_url: string | null;
     guesses_used: number;
     status: "playing" | "won" | "lost";
   }>;
   return rows.map((r) => ({
     userId: r.user_id,
     displayName: r.display_name,
+    avatarUrl: r.avatar_url,
     guessesUsed: r.guesses_used,
     status: r.status,
   }));
@@ -205,7 +210,7 @@ export async function recordCompletion(
   if (!state || !state.messageId) return;
   if (state.latestTokenExp <= nowSec) return; // token expired — no-op
   const participants = listParticipants(channelId, puzzleId);
-  const { embed, components } = buildNowPlayingEmbed({
+  const { embed, components, file } = await buildNowPlayingEmbed({
     puzzleId,
     participants,
     applicationId: state.latestTokenAppId,
@@ -214,6 +219,7 @@ export async function recordCompletion(
     await patchFollowup(state.latestTokenAppId, state.latestToken, state.messageId, {
       embeds: [embed],
       components,
+      files: [file],
     });
   } catch (err) {
     console.error("[channelState] recordCompletion patch failed:", err);

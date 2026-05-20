@@ -28,11 +28,14 @@ interface InteractionUser {
   id: string;
   username?: string;
   global_name?: string | null;
+  avatar?: string | null;
+  discriminator?: string;
 }
 
 interface InteractionMember {
   user?: InteractionUser;
   nick?: string | null;
+  avatar?: string | null; // per-guild avatar override
 }
 
 interface InteractionPayload {
@@ -57,6 +60,29 @@ function pickDisplayName(p: InteractionPayload, user: InteractionUser): string {
     user.username ||
     user.id
   );
+}
+
+// Build a Discord CDN avatar URL from the interaction payload. Prefers the
+// per-guild member avatar, falls back to the user's global avatar, then to
+// Discord's default (embed) avatar so the renderer always has something.
+function pickAvatarUrl(p: InteractionPayload, user: InteractionUser): string {
+  const guildId = p.guild_id ?? null;
+  const guildAvatar = p.member?.avatar ?? null;
+  if (guildAvatar && guildId) {
+    const ext = guildAvatar.startsWith("a_") ? "gif" : "png";
+    return `https://cdn.discordapp.com/guilds/${guildId}/users/${user.id}/avatars/${guildAvatar}.${ext}?size=256`;
+  }
+  if (user.avatar) {
+    const ext = user.avatar.startsWith("a_") ? "gif" : "png";
+    return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${ext}?size=256`;
+  }
+  // No custom avatar set. Discord computes the default-avatar index from the
+  // snowflake (new-username system) or the discriminator (legacy).
+  const idx =
+    user.discriminator && user.discriminator !== "0"
+      ? Number(user.discriminator) % 5
+      : Number((BigInt(user.id) >> 22n) % 6n);
+  return `https://cdn.discordapp.com/embed/avatars/${idx}.png`;
 }
 
 // Channel-day puzzle id is UTC-anchored so two viewers in different
@@ -158,17 +184,18 @@ async function handleLaunch(payload: InteractionPayload): Promise<void> {
   const puzzleId = channelPuzzleId(nowMs);
   const yesterdayId = channelYesterdayId(nowMs);
   const displayName = pickDisplayName(payload, user);
+  const avatarUrl = pickAvatarUrl(payload, user);
 
   // 1) Yesterday's recap (fire-and-forget, no message_id capture).
   if (!isRecapPosted(channelId, yesterdayId)) {
     const players = listYesterdayRecapPlayers(channelId, yesterdayId);
     if (players.length > 0 && tryClaimRecapPosted(channelId, yesterdayId)) {
-      const embed = buildYesterdayRecapEmbed({
+      const { embed, file } = buildYesterdayRecapEmbed({
         puzzleId: yesterdayId,
         players,
       });
       try {
-        await postFollowup(applicationId, token, { embeds: [embed] });
+        await postFollowup(applicationId, token, { embeds: [embed], files: [file] });
       } catch (err) {
         console.error("[interactions] recap follow-up failed:", err);
       }
@@ -186,10 +213,11 @@ async function handleLaunch(payload: InteractionPayload): Promise<void> {
     puzzleId,
     userId: user.id,
     displayName,
+    avatarUrl,
   });
 
   const participants = listParticipants(channelId, puzzleId);
-  const { embed, components } = buildNowPlayingEmbed({
+  const { embed, components, file } = await buildNowPlayingEmbed({
     puzzleId,
     participants,
     applicationId,
@@ -200,7 +228,7 @@ async function handleLaunch(payload: InteractionPayload): Promise<void> {
       const posted = await postFollowup(
         applicationId,
         token,
-        { embeds: [embed], components },
+        { embeds: [embed], components, files: [file] },
         { wait: true },
       );
       if (posted) setChannelMessageId(channelId, puzzleId, posted.id);
@@ -212,6 +240,7 @@ async function handleLaunch(payload: InteractionPayload): Promise<void> {
       await patchFollowup(applicationId, token, state.messageId, {
         embeds: [embed],
         components,
+        files: [file],
       });
     } catch (err) {
       console.error("[interactions] now-playing patch failed:", err);
