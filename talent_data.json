@@ -174,7 +174,7 @@
     "branch": "JP",
     "generation": "Gen 2",
     "debutYear": 2018,
-    "archetype": "Human",
+    "archetype": "Animal",
     "heightCm": 154,
     "birthMonth": "July",
     "active": true
@@ -330,7 +330,7 @@
     "branch": "JP",
     "generation": "Gen 4",
     "debutYear": 2019,
-    "archetype": "Animal",
+    "archetype": "Dragon",
     "heightCm": 180,
     "birthMonth": "June",
     "active": false
@@ -383,6 +383,18 @@
     "birthMonth": "January",
     "active": true
   },
+    {
+    "id": "mano-aloe",
+    "name": "Mano Aloe",
+    "avatarUrl": "/avatars/mano-aloe.webp",
+    "branch": "JP",
+    "generation": "Gen 5",
+    "debutYear": 2020,
+    "archetype": "Devil",
+    "heightCm": 150,
+    "birthMonth": "October",
+    "active": false
+  },
   {
     "id": "la-darknesss",
     "name": "La+ Darknesss",
@@ -390,7 +402,7 @@
     "branch": "JP",
     "generation": "holoX",
     "debutYear": 2021,
-    "archetype": "Demon",
+    "archetype": "Alien",
     "heightCm": 139,
     "birthMonth": "May",
     "active": true
@@ -402,7 +414,7 @@
     "branch": "JP",
     "generation": "holoX",
     "debutYear": 2021,
-    "archetype": "Human",
+    "archetype": "Animal",
     "heightCm": 161,
     "birthMonth": "June",
     "active": true
@@ -426,7 +438,7 @@
     "branch": "JP",
     "generation": "holoX",
     "debutYear": 2021,
-    "archetype": "Shinigami",
+    "archetype": "Animal",
     "heightCm": 148,
     "birthMonth": "May",
     "active": true
@@ -558,7 +570,7 @@
     "branch": "EN",
     "generation": "Myth",
     "debutYear": 2020,
-    "archetype": "Shinigami",
+    "archetype": "Reaper",
     "heightCm": 167,
     "birthMonth": "April",
     "active": true
@@ -582,7 +594,7 @@
     "branch": "EN",
     "generation": "Myth",
     "debutYear": 2020,
-    "archetype": "Priestess",
+    "archetype": "Human",
     "heightCm": 157,
     "birthMonth": "May",
     "active": true
@@ -630,7 +642,7 @@
     "branch": "EN",
     "generation": "Council",
     "debutYear": 2021,
-    "archetype": "Cosmos",
+    "archetype": "Space",
     "heightCm": 169,
     "birthMonth": "June",
     "active": false
@@ -642,7 +654,7 @@
     "branch": "EN",
     "generation": "Promise",
     "debutYear": 2021,
-    "archetype": "Druid",
+    "archetype": "Kirin",
     "heightCm": 164,
     "birthMonth": "March",
     "active": false
@@ -666,7 +678,7 @@
     "branch": "EN",
     "generation": "Promise",
     "debutYear": 2021,
-    "archetype": "Civilization",
+    "archetype": "Animal",
     "heightCm": 156,
     "birthMonth": "August",
     "active": false
@@ -702,7 +714,7 @@
     "branch": "EN",
     "generation": "Advent",
     "debutYear": 2023,
-    "archetype": "Gnome",
+    "archetype": "Rock",
     "heightCm": 140,
     "birthMonth": "April",
     "active": true
@@ -714,7 +726,7 @@
     "branch": "EN",
     "generation": "Advent",
     "debutYear": 2023,
-    "archetype": "Valkyrie",
+    "archetype": "Devil",
     "heightCm": 175,
     "birthMonth": "November",
     "active": true
@@ -750,7 +762,7 @@
     "branch": "EN",
     "generation": "Justice",
     "debutYear": 2024,
-    "archetype": "Vampire",
+    "archetype": "Human",
     "heightCm": 171,
     "birthMonth": "April",
     "active": true
@@ -762,7 +774,7 @@
     "branch": "EN",
     "generation": "Justice",
     "debutYear": 2024,
-    "archetype": "Gargoyle",
+    "archetype": "Human",
     "heightCm": 153,
     "birthMonth": "October",
     "active": true
@@ -774,7 +786,7 @@
     "branch": "EN",
     "generation": "Justice",
     "debutYear": 2024,
-    "archetype": "Android",
+    "archetype": "Robot",
     "heightCm": 162,
     "birthMonth": "November",
     "active": true
