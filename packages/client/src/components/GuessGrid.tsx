@@ -21,14 +21,14 @@ export function GuessGrid(): JSX.Element {
     );
   }
   return (
-    <section className="mx-2 my-2 overflow-x-auto" aria-label="Your guesses">
+    <section className="mx-1 my-2 sm:mx-2" aria-label="Your guesses">
       <div className="mx-auto w-full max-w-3xl">
         <div
           role="row"
-          className="grid grid-cols-[72px_repeat(6,minmax(0,1fr))] items-end gap-2 px-1 pb-2 text-center text-[11px] font-semibold uppercase tracking-wider text-holo-muted"
+          className="grid grid-cols-[48px_repeat(6,minmax(0,1fr))] items-end gap-1 px-1 pb-2 text-center text-[9px] font-semibold uppercase tracking-wider text-holo-muted sm:grid-cols-[72px_repeat(6,minmax(0,1fr))] sm:gap-2 sm:text-[11px]"
         >
           {COLUMN_HEADERS.map((h) => (
-            <div role="columnheader" key={h.label} className="leading-tight">
+            <div role="columnheader" key={h.label} className="break-words leading-tight">
               {h.label}
             </div>
           ))}

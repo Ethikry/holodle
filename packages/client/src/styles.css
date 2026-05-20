@@ -19,9 +19,13 @@
 @layer components {
   /* Guess-grid cells. Match the Holodle Classic reference: uniformly-sized
      rounded rectangles with a 2px state-colored border and a lightly-tinted
-     fill. Single line, no wrapping, centered text. */
+     fill. Single line, no wrapping, centered text. On narrow viewports
+     (Discord mobile) we tighten padding + font so the 6 attribute columns
+     fit on a ~400px wide iframe without overflow/clipping. Truncate with
+     an ellipsis as a backstop for any value that still doesn't fit. */
   .cell {
-    @apply inline-flex w-full items-center justify-center whitespace-nowrap rounded-xl border-2 px-3 py-2 text-sm font-semibold;
+    @apply inline-flex w-full items-center justify-center overflow-hidden whitespace-nowrap rounded-lg border-2 px-1 py-1 text-[11px] font-semibold sm:rounded-xl sm:px-3 sm:py-2 sm:text-sm;
+    text-overflow: ellipsis;
   }
   .cell-equal {
     @apply cell bg-holo-okBg/60 text-holo-ok border-holo-okBd;
