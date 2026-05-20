@@ -1,10 +1,14 @@
 import type { GuessDiff, TalentSummary, HeightBucket } from "@holodle/shared";
 import { AttributePill } from "./AttributePill.js";
 
+// Short bucket labels: the parenthetical range overflowed the column on
+// narrow viewports (Discord mobile) and bled into the Birth Month column.
+// The bucket name alone is enough for "did I match", and the cm range
+// is documented in the help modal.
 const BUCKET_LABEL: Record<HeightBucket, string> = {
-  Smol: "Smol (≤150)",
-  Med: "Med (151–160)",
-  Tall: "Tall (>160)",
+  Smol: "Smol",
+  Med: "Med",
+  Tall: "Tall",
 };
 
 // One row of the guess grid. 7 columns: avatar + 6 attribute cells.
@@ -21,10 +25,10 @@ export function GuessRow({
   return (
     <div
       role="row"
-      className="grid grid-cols-[72px_repeat(6,minmax(0,1fr))] items-center gap-2"
+      className="grid grid-cols-[48px_repeat(6,minmax(0,1fr))] items-center gap-1 sm:grid-cols-[72px_repeat(6,minmax(0,1fr))] sm:gap-2"
     >
       <div role="cell" className="flex items-center justify-center">
-        <div className="card flex h-14 w-14 items-center justify-center overflow-hidden border border-holo-accent/30">
+        <div className="card flex h-10 w-10 items-center justify-center overflow-hidden border border-holo-accent/30 sm:h-14 sm:w-14">
           {talent?.avatarUrl ? (
             <img
               src={talent.avatarUrl}
