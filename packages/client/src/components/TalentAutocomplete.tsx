@@ -2,6 +2,29 @@ import { useMemo, useState } from "react";
 import type { TalentSummary } from "@holodle/shared";
 import { useGame } from "../state/game.js";
 
+// Stable circular avatar with a gray placeholder fallback. We track failed
+// URLs in component state instead of mutating .style.visibility so the layout
+// stays predictable across rerenders (avoids the dropdown row reflowing).
+function AvatarCircle({ talent }: { talent: TalentSummary }): JSX.Element {
+  const [failed, setFailed] = useState(false);
+  if (failed || !talent.avatarUrl) {
+    return (
+      <div
+        aria-hidden
+        className="h-10 w-10 shrink-0 rounded-full bg-holo-bg ring-1 ring-holo-accent/20"
+      />
+    );
+  }
+  return (
+    <img
+      src={talent.avatarUrl}
+      alt=""
+      className="h-10 w-10 shrink-0 rounded-full object-cover ring-1 ring-holo-accent/20"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 export function TalentAutocomplete({
   onSubmit,
   disabled,
@@ -38,10 +61,10 @@ export function TalentAutocomplete({
         disabled={disabled}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        className="w-full rounded-2xl border border-holo-muted/20 bg-white px-4 py-3 text-base shadow-card focus:border-holo-accent focus:outline-none disabled:opacity-60"
+        className="w-full rounded-2xl border-2 border-holo-accent/30 bg-white px-4 py-3 text-base shadow-card transition focus:border-holo-accent focus:outline-none disabled:opacity-60"
       />
       {matches.length > 0 && (
-        <ul className="mt-2 max-h-64 overflow-y-auto rounded-2xl bg-white shadow-card">
+        <ul className="card mt-2 max-h-64 overflow-y-auto divide-y divide-holo-muted/10">
           {matches.map((t) => (
             <li key={t.id}>
               <button
@@ -49,14 +72,7 @@ export function TalentAutocomplete({
                 onClick={() => commit(t.id)}
                 className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-holo-bg"
               >
-                <img
-                  src={t.avatarUrl}
-                  alt=""
-                  className="h-8 w-8 rounded-full object-cover"
-                  onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).style.visibility = "hidden";
-                  }}
-                />
+                <AvatarCircle talent={t} />
                 <span className="font-medium">{t.name}</span>
               </button>
             </li>

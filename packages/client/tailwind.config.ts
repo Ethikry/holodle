@@ -13,11 +13,10 @@ export default {
           accent: "#22b8e6", // sky-blue "HOLO" half of the wordmark
           ok: "#16a34a",
           okBg: "#dcfce7",
-          okBorder: "#86efac",
-          warn: "#f97316",
-          warnBg: "#ffedd5",
+          okBd: "#86efac", // border for green box cells
           bad: "#dc2626",
           badBg: "#fee2e2",
+          badBd: "#fca5a5", // border for red box cells
           muted: "#64748b",
         },
       },

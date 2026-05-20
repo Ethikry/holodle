@@ -8,6 +8,9 @@ export interface DiscordSession {
   sdk: DiscordSDK;
   accessToken: string;
   instanceId: string;
+  // The Discord text/voice channel the activity was launched from. Used to
+  // route the exit embed and the EOD recap to the right place.
+  channelId: string | null;
   user: { id: string; username: string; global_name?: string | null; avatar?: string | null };
 }
 
@@ -81,14 +84,35 @@ export async function getDiscordSession(): Promise<SessionResult> {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code }),
       });
+      const tokenBody = await tokenResp.text();
       if (!tokenResp.ok) {
-        const text = await tokenResp.text().catch(() => "");
+        if (tokenBody.trimStart().startsWith("<")) {
+          return {
+            ok: false,
+            reason: `/api/token returned an HTML error page (status ${tokenResp.status}). Is the Fastify server on :3001 running?`,
+          };
+        }
         return {
           ok: false,
-          reason: `Token exchange failed (${tokenResp.status}): ${text || "see server logs"}.`,
+          reason: `Token exchange failed (${tokenResp.status}): ${tokenBody || "see server logs"}.`,
         };
       }
-      const { access_token } = (await tokenResp.json()) as { access_token: string };
+      if (tokenBody.trimStart().startsWith("<")) {
+        return {
+          ok: false,
+          reason:
+            "/api/token returned HTML instead of JSON. The Fastify server on :3001 is probably not running — restart `pnpm dev` and confirm you see '... talents loaded' in the server logs.",
+        };
+      }
+      let access_token: string;
+      try {
+        access_token = (JSON.parse(tokenBody) as { access_token: string }).access_token;
+      } catch (err) {
+        return {
+          ok: false,
+          reason: `/api/token returned invalid JSON: ${describeError(err)}`,
+        };
+      }
 
       const auth = await sdk.commands.authenticate({ access_token });
       if (!auth?.user) {
@@ -102,7 +126,17 @@ export async function getDiscordSession(): Promise<SessionResult> {
         // ignore — mobile-only, may not exist in all SDK versions
       }
 
-      cached = { sdk, accessToken: access_token, instanceId: sdk.instanceId, user: auth.user };
+      // channelId is exposed directly off the SDK once ready(). May be null
+      // for activities launched outside a text/voice channel context.
+      const channelId = (sdk as unknown as { channelId: string | null }).channelId ?? null;
+
+      cached = {
+        sdk,
+        accessToken: access_token,
+        instanceId: sdk.instanceId,
+        channelId,
+        user: auth.user,
+      };
       return { ok: true, session: cached };
     } catch (err) {
       console.error("Discord SDK init threw:", err);
@@ -124,6 +158,7 @@ export function getDevSession(): DiscordSession {
     sdk: null as unknown as DiscordSDK,
     accessToken: `dev:${id}`,
     instanceId: "dev-instance",
+    channelId: null,
     user: { id, username: id, global_name: `Dev ${id}`, avatar: null },
   };
 }

@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import type { GameStatus, GuessDiff, UserStats } from "@holodle/shared";
 import { env } from "../env.js";
-import { SCHEMA_SQL } from "./schema.js";
+import { ADDITIVE_MIGRATIONS, INDEXES_SQL, TABLES_SQL } from "./schema.js";
 
 let db: Database.Database | null = null;
 
@@ -10,8 +10,75 @@ export function getDb(): Database.Database {
   db = new Database(env.DB_PATH);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
-  db.exec(SCHEMA_SQL);
+  // 1) Create tables (idempotent — no-op on existing DBs).
+  db.exec(TABLES_SQL);
+  // 2) Add columns missing on pre-round-2 databases.
+  runAdditiveMigrations(db);
+  // 3) Indexes last — some reference columns added in step 2.
+  db.exec(INDEXES_SQL);
+  // 4) Drop stored guesses_json arrays that predate the Name → Gen swap.
+  //    Their AttrCell shape lacks `.generation`, and the client crashes
+  //    on render with "Cannot read properties of undefined (reading 'state')".
+  clearStaleGenerationDiffs(db);
   return db;
+}
+
+// One-time data migration: scan every user_day row, drop any whose stored
+// guesses_json contains a diff missing the `.generation` field. The row is
+// reset to a fresh playing state — the user effectively gets their guesses
+// back. Settled rows (won/lost) also get reset, which loses the win/loss
+// record for that legacy day but avoids crashing the client when the
+// history is re-rendered. Idempotent: once a row is reset, future runs
+// see an empty array and skip it.
+function clearStaleGenerationDiffs(database: Database.Database): void {
+  const rows = database
+    .prepare("SELECT user_id, day_index, guesses_json FROM user_day")
+    .all() as Array<{ user_id: string; day_index: number; guesses_json: string }>;
+  const reset = database.prepare(
+    `UPDATE user_day
+        SET guesses_json     = '[]',
+            status           = 'playing',
+            settled_at       = NULL,
+            exit_embed_posted= 0
+      WHERE user_id = ? AND day_index = ?`,
+  );
+  let cleared = 0;
+  for (const row of rows) {
+    let stale = false;
+    try {
+      const guesses = JSON.parse(row.guesses_json) as unknown[];
+      if (Array.isArray(guesses) && guesses.length > 0) {
+        const first = guesses[0] as Record<string, unknown> | null;
+        // Old shape had `.name`; new shape has `.generation`. We treat
+        // either signal — a missing `generation` OR a stray `name` field —
+        // as definitive evidence of a pre-round-2 row.
+        if (first && (!("generation" in first) || "name" in first)) {
+          stale = true;
+        }
+      }
+    } catch {
+      stale = true; // unparseable JSON — just clear it
+    }
+    if (stale) {
+      reset.run(row.user_id, row.day_index);
+      cleared++;
+    }
+  }
+  if (cleared > 0) {
+    console.log(`[db] cleared ${cleared} pre-round-2 user_day row(s) with stale GuessDiff shape`);
+  }
+}
+
+// Add any columns from ADDITIVE_MIGRATIONS that are missing on existing
+// tables. CREATE TABLE IF NOT EXISTS doesn't touch existing tables, so
+// pre-round-2 databases need this top-up.
+function runAdditiveMigrations(database: Database.Database): void {
+  for (const { table, column, ddl } of ADDITIVE_MIGRATIONS) {
+    const cols = database.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+    if (!cols.some((c) => c.name === column)) {
+      database.exec(ddl);
+    }
+  }
 }
 
 export interface UserDayRow {
@@ -19,34 +86,87 @@ export interface UserDayRow {
   dayIndex: number;
   guesses: GuessDiff[];
   status: GameStatus;
+  channelId: string | null;
+  tz: string | null;
+  settledAt: number | null;
+  exitEmbedPosted: boolean;
 }
 
 export function loadUserDay(userId: string, dayIndex: number): UserDayRow {
   const row = getDb()
     .prepare(
-      `SELECT guesses_json, status FROM user_day WHERE user_id = ? AND day_index = ?`,
+      `SELECT guesses_json, status, channel_id, tz, settled_at, exit_embed_posted
+         FROM user_day WHERE user_id = ? AND day_index = ?`,
     )
-    .get(userId, dayIndex) as { guesses_json: string; status: GameStatus } | undefined;
-  if (!row) return { userId, dayIndex, guesses: [], status: "playing" };
+    .get(userId, dayIndex) as
+    | {
+        guesses_json: string;
+        status: GameStatus;
+        channel_id: string | null;
+        tz: string | null;
+        settled_at: number | null;
+        exit_embed_posted: number;
+      }
+    | undefined;
+  if (!row) {
+    return {
+      userId,
+      dayIndex,
+      guesses: [],
+      status: "playing",
+      channelId: null,
+      tz: null,
+      settledAt: null,
+      exitEmbedPosted: false,
+    };
+  }
   return {
     userId,
     dayIndex,
     guesses: JSON.parse(row.guesses_json) as GuessDiff[],
     status: row.status,
+    channelId: row.channel_id,
+    tz: row.tz,
+    settledAt: row.settled_at,
+    exitEmbedPosted: row.exit_embed_posted !== 0,
   };
 }
 
 export function saveUserDay(row: UserDayRow): void {
   getDb()
     .prepare(
-      `INSERT INTO user_day (user_id, day_index, guesses_json, status, updated_at)
-       VALUES (?, ?, ?, ?, strftime('%s','now'))
+      `INSERT INTO user_day
+         (user_id, day_index, guesses_json, status, updated_at, channel_id, tz, settled_at, exit_embed_posted)
+       VALUES (?, ?, ?, ?, strftime('%s','now'), ?, ?, ?, ?)
        ON CONFLICT(user_id, day_index) DO UPDATE SET
-         guesses_json = excluded.guesses_json,
-         status       = excluded.status,
-         updated_at   = excluded.updated_at`,
+         guesses_json      = excluded.guesses_json,
+         status            = excluded.status,
+         updated_at        = excluded.updated_at,
+         -- channel_id and tz are sticky: keep the previously-stored value
+         -- when the new value is NULL (e.g. an unauthenticated retry).
+         channel_id        = COALESCE(excluded.channel_id, user_day.channel_id),
+         tz                = COALESCE(excluded.tz, user_day.tz),
+         settled_at        = COALESCE(excluded.settled_at, user_day.settled_at),
+         exit_embed_posted = excluded.exit_embed_posted`,
     )
-    .run(row.userId, row.dayIndex, JSON.stringify(row.guesses), row.status);
+    .run(
+      row.userId,
+      row.dayIndex,
+      JSON.stringify(row.guesses),
+      row.status,
+      row.channelId,
+      row.tz,
+      row.settledAt,
+      row.exitEmbedPosted ? 1 : 0,
+    );
+}
+
+export function markExitEmbedPosted(userId: string, dayIndex: number): void {
+  getDb()
+    .prepare(
+      `UPDATE user_day SET exit_embed_posted = 1 WHERE user_id = ? AND day_index = ?`,
+    )
+    .run(userId, dayIndex);
 }
 
 export function loadStats(userId: string): UserStats & { lastDayIndex: number | null } {
@@ -110,4 +230,58 @@ export function settleDay(userId: string, dayIndex: number, won: boolean): void 
        wins = excluded.wins,
        last_day_index = excluded.last_day_index`,
   ).run(userId, streak, best, played, wins, dayIndex);
+}
+
+// Recap idempotency: returns true if this insert was the first for the
+// (channel, fireTimestamp) pair, false if it had already been recapped.
+export function tryClaimRecap(channelId: string, firedAt: number): boolean {
+  const result = getDb()
+    .prepare(
+      `INSERT INTO daily_recaps (channel_id, fired_at) VALUES (?, ?)
+       ON CONFLICT (channel_id, fired_at) DO NOTHING`,
+    )
+    .run(channelId, firedAt);
+  return result.changes === 1;
+}
+
+// Settled rows in a window. Used by the recap scheduler.
+export interface SettledRow {
+  userId: string;
+  dayIndex: number;
+  guessesUsed: number;
+  status: "won" | "lost";
+  channelId: string;
+  tz: string | null;
+}
+
+export function settledRowsBetween(startSec: number, endSec: number): SettledRow[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT user_id, day_index, guesses_json, status, channel_id, tz
+         FROM user_day
+        WHERE status IN ('won','lost')
+          AND channel_id IS NOT NULL
+          AND settled_at IS NOT NULL
+          AND settled_at >= ?
+          AND settled_at <  ?`,
+    )
+    .all(startSec, endSec) as Array<{
+    user_id: string;
+    day_index: number;
+    guesses_json: string;
+    status: "won" | "lost";
+    channel_id: string;
+    tz: string | null;
+  }>;
+  return rows.map((r) => {
+    const guesses = JSON.parse(r.guesses_json) as GuessDiff[];
+    return {
+      userId: r.user_id,
+      dayIndex: r.day_index,
+      guessesUsed: guesses.length,
+      status: r.status,
+      channelId: r.channel_id,
+      tz: r.tz,
+    };
+  });
 }

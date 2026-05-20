@@ -86,7 +86,8 @@ fails loudly on any malformed entry.
 | `branch`     | `"JP" \| "ID" \| "EN" \| "DEV_IS" \| "Stars"` | Hololive branch. |
 | `debutYear`  | integer (e.g. 2022)                           | Year of debut. |
 | `archetype`  | string                                        | Free-form (Human, Zombie, Phoenix, Shinigami, …). |
-| `heightCm`   | integer cm                                    | Server derives Small/Med/Tall bucket. |
+| `generation` | string                                        | Free-form (`"Gen 0"`, `"GAMERS"`, `"Promise"`, `"Regloss"`, …). Used as the "Gen" column in the guess grid. |
+| `heightCm`   | integer cm                                    | Server derives the bucket: `≤150` Smol, `151–160` Med, `>160` Tall. |
 | `birthMonth` | string, English month name                    | "January", "February", …, "December". |
 | `active`     | boolean                                       | `false` keeps the talent in autocomplete but excludes from the daily pool. |
 
@@ -94,20 +95,58 @@ Avatar PNGs live at `packages/client/public/avatars/<id>.png`.
 
 ## Discord developer portal setup
 
+Holodle uses Discord's **user-install** flow (same pattern as the official
+Wordle activity). There is **no bot user** — channel messages are posted
+via interaction follow-up webhooks tied to the launching user's Entry Point
+interaction. Anyone who installs the app to their personal account can
+launch Holodle in any channel where they have permission to use Apps,
+even if the app is not installed in that server.
+
 1. Open https://discord.com/developers/applications and create a new
    application (or use an existing one).
-2. **OAuth2** tab — copy the **Client ID** and reset the **Client Secret**.
+2. **General Information** — copy the **Public Key** into `.env` as
+   `DISCORD_PUBLIC_KEY`. This is used to verify Ed25519 signatures on the
+   interactions endpoint.
+3. **OAuth2** tab — copy the **Client ID** and reset the **Client Secret**.
    Put both into `.env` (the secret is server-only; never expose it to the
    client bundle).
-3. **Activities** tab — set **Activity URL Mappings**:
-   - Root mapping `/` → your dev tunnel host (e.g.
-     `your-subdomain.trycloudflare.com`).
-   - `/api` → the same host. The Fastify server is fronted by the Vite dev
-     proxy on `/api/*` in dev, and by Fastify directly in production.
-4. **Activities → URL Mappings** also requires entries for any external
-   hosts you load (Discord blocks unmapped fetches). Add `discord.com`
-   (already implicit) and any CDN you reference.
-5. **Bot** tab is not used — Holodle is a user-facing Activity, not a bot.
+4. **Installation** page:
+   - **Installation Contexts**: tick **User Install** and **Guild Install**.
+   - **Install Link**: select "Discord Provided Link".
+   - **Default Install Settings**:
+     - User Install → scopes: `applications.commands` only.
+     - Guild Install → scopes: `applications.commands` only.
+       **Do not add the `bot` scope.**
+5. **General Information → Interactions Endpoint URL**:
+   `https://<your-host>/api/interactions`. Discord pings this URL on save;
+   it must be live and respond to a signed PING (type 1) with PONG before
+   save succeeds. If `DISCORD_PUBLIC_KEY` is missing or wrong, every
+   request returns 401 and Discord rejects the endpoint.
+6. **Activities → Settings** — ensure Activities are enabled. The
+   Entry Point command (named "Launch") will already exist with the
+   `DISCORD_LAUNCH_ACTIVITY (2)` handler — leave it as-is. Our server
+   handles `data.name === "Launch"` to post the in-channel embed before
+   returning `{type: 12}` to launch the activity.
+7. **Activities → URL Mappings** — add **one** row only:
+   - prefix `/` → target `your-subdomain.trycloudflare.com` (no scheme).
+
+   Do **not** add a separate `/api` mapping. Discord URL Mappings strip the
+   prefix before forwarding, so a `/api` row rewrites `/api/talents` to
+   `<tunnel>/talents` — the API requests then miss the server's `/api/*`
+   routes entirely and fall through to the SPA fallback (HTML for JSON =
+   `Unexpected token '<'` in the client). A single `/` mapping preserves
+   the full path end-to-end.
+8. **Activities → URL Mappings** also requires entries for any external
+   hosts your client fetches from (Discord blocks unmapped origins). Add
+   `cdn.discordapp.com` if you load Discord avatars; add any other CDN you
+   reference.
+
+### Installing the app to your account
+
+Once installation is configured, hit the **Install Link** on the
+Installation page and choose **Add to My Apps**. You can then run
+`/Launch` in any channel — including channels in servers where the app is
+not installed as a member.
 
 ## Running a local dev tunnel
 
@@ -163,16 +202,57 @@ is persisted to `/data/holodle.db` via the Fly volume mount.
 ## Gameplay & comparison rules
 
 See [`packages/server/src/game/compare.ts`](packages/server/src/game/compare.ts).
+Every cell is strictly green-equal or red-wrong — no orange "near" states.
 Per-attribute summary:
 
-- **Branch / Archetype / Name** — exact match → green; otherwise red.
-- **Debut Year** — exact → green; `|delta| == 1` → orange (near); otherwise
-  red with `↑` (target is higher) or `↓` (target is lower).
-- **Height** — bucketed (`<150` Small, `150–160` Med, `>160` Tall). Exact
-  bucket → green; adjacent bucket → orange; non-adjacent → red.
-- **Birth Month** — exact → green; ±1 month with Dec↔Jan wrap → orange;
-  otherwise red.
+- **Gen / Branch / Archetype** — exact match → green; otherwise red.
+- **Debut Year** — exact → green; otherwise red with `↑` (target year is
+  higher than your guess) or `↓` (target is lower).
+- **Height** — bucketed (`≤150` Smol, `151–160` Med, `>160` Tall). Exact
+  bucket → green; otherwise red.
+- **Birth Month** — exact → green; otherwise red.
 
 The **answer never reaches the client.** The client renders only the diff
 the server returns; Socket.IO broadcasts contain `{userId, guessesUsed,
 status}` only — never the guessed talent.
+
+## Time, timezones, and daily rollover
+
+Each player's puzzle rolls over at **their own local midnight**. The
+client sends its IANA timezone (from
+`Intl.DateTimeFormat().resolvedOptions().timeZone`) on every authenticated
+request; the server computes a per-user `dayIndex` against that locale.
+Two players in different timezones can be on different puzzles at the
+same wall-clock moment — that's intentional.
+
+In-channel embeds (yesterday's recap + the now-playing message) are
+**UTC-anchored** instead, so two viewers in different timezones see the
+same channel embed. Channel state is keyed by `puzzle_id` in UTC
+(`YYYY-MM-DD`), while user progress is still computed in the user's own
+tz inside `/api/guess`.
+
+## In-channel embeds (user-install flow)
+
+There's no scheduled cron and no bot token. Every channel message comes
+from an interaction follow-up webhook tied to a specific player's
+**/Launch** click, valid for 15 minutes from issue.
+
+- **Now-playing embed.** First `/Launch` in a channel on a given UTC day
+  posts a single embed listing the current participants (`X player(s)
+  currently playing`) with a "Play now!" button. Subsequent `/Launch`
+  clicks within 15 minutes **edit** the same message via PATCH to add
+  the new participant. The freshest interaction token is persisted in
+  `channel_daily_state` so completions from `/api/guess` (won/lost) can
+  also edit the message to refresh per-player scores — as long as
+  *someone* launched within the previous 15 minutes. After the token
+  expires, in-flight completions are dropped on the floor (matches
+  Wordle's behavior; late joiners stop appearing).
+- **Yesterday's recap embed.** First `/Launch` of a new UTC day in a
+  channel posts a one-shot recap of the previous day's players, grouped
+  by guesses-to-win. Idempotency via the `channel_recap_posted` table —
+  subsequent launches the same day do not repost.
+
+If an embed POST or PATCH fails (network, expired token, missing scope),
+the failure is logged and the activity still launches normally. The
+interaction handler must respond with `{type: 12}` within 3 seconds, so
+all follow-up writes run async after the response is sent.

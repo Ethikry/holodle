@@ -22,6 +22,9 @@ export default defineConfig(({ mode }) => {
       strictPort: true,
       // hmr config friendly to tunneling — allow any host header.
       host: true,
+      // Vite 6+ defaults to blocking non-localhost Host headers. cloudflared
+      // tunnels rotate hostnames every restart, so allow all in dev.
+      allowedHosts: true,
       cors: true,
       proxy: {
         "/api": { target: apiTarget, changeOrigin: true },

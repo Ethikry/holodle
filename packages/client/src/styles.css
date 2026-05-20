@@ -17,17 +17,17 @@
 }
 
 @layer components {
-  .pill {
-    @apply inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold;
+  /* Guess-grid cells. Match the Holodle Classic reference: uniformly-sized
+     rounded rectangles with a 2px state-colored border and a lightly-tinted
+     fill. Single line, no wrapping, centered text. */
+  .cell {
+    @apply inline-flex w-full items-center justify-center whitespace-nowrap rounded-xl border-2 px-3 py-2 text-sm font-semibold;
   }
-  .pill-equal {
-    @apply pill bg-holo-okBg text-holo-ok;
+  .cell-equal {
+    @apply cell bg-holo-okBg/60 text-holo-ok border-holo-okBd;
   }
-  .pill-near {
-    @apply pill bg-holo-warnBg text-holo-warn;
-  }
-  .pill-wrong {
-    @apply pill bg-holo-badBg text-holo-bad;
+  .cell-wrong {
+    @apply cell bg-holo-badBg/60 text-holo-bad border-holo-badBd;
   }
   .card {
     @apply rounded-2xl bg-holo-card shadow-card;

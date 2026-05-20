@@ -33,6 +33,11 @@ const EnvSchema = z.object({
   DB_PATH: z.string().default("./holodle.db"),
   DISCORD_CLIENT_ID: z.string().optional(),
   DISCORD_CLIENT_SECRET: z.string().optional(),
+  // Dev-portal "General Information → Public Key". Used to verify Ed25519
+  // signatures on incoming Discord interactions (POST /api/interactions).
+  // Without it, interactions can't be authenticated and Discord won't accept
+  // the endpoint at save time.
+  DISCORD_PUBLIC_KEY: z.string().optional(),
   CORS_ORIGINS: z.string().default("http://localhost:5173"),
   // Where the built client lives in production (Docker copies it here).
   CLIENT_DIST: z.string().default("../client/dist"),
@@ -45,3 +50,5 @@ export const env: Env = EnvSchema.parse(process.env);
 export const corsOrigins = env.CORS_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean);
 
 export const hasDiscordCreds = !!(env.DISCORD_CLIENT_ID && env.DISCORD_CLIENT_SECRET);
+
+export const hasPublicKey = !!env.DISCORD_PUBLIC_KEY;

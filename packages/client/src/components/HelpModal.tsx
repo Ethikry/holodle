@@ -29,19 +29,19 @@ export function HelpModal(): JSX.Element | null {
           Guess today's Hololive talent in six tries. After each guess each attribute
           turns:
         </p>
-        <ul className="mt-2 space-y-1">
-          <li>
-            <span className="pill-equal">Green</span> — exact match.
+        <ul className="mt-2 space-y-2">
+          <li className="flex items-center gap-2">
+            <span className="cell-equal w-24 shrink-0">Green</span>
+            <span>Exact match.</span>
           </li>
-          <li>
-            <span className="pill-near">Orange</span> — close (off by one).
-          </li>
-          <li>
-            <span className="pill-wrong">Red</span> — no match. ↑ / ↓ point toward the target for years.
+          <li className="flex items-center gap-2">
+            <span className="cell-wrong w-24 shrink-0">Red</span>
+            <span>No match. ↑ / ↓ point toward the target for years.</span>
           </li>
         </ul>
         <p className="mt-3 text-xs text-holo-muted">
-          A new puzzle drops at 00:00 UTC. Streaks roll over daily.
+          A new puzzle drops at midnight in your timezone. Streaks roll
+          over with your local day.
         </p>
       </div>
     </div>

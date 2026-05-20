@@ -1,0 +1,146 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+const tmpDir = mkdtempSync(join(tmpdir(), "holodle-channelstate-"));
+process.env.DB_PATH = join(tmpDir, "test.db");
+process.env.NODE_ENV = "test";
+
+const { getDb } = await import("../src/db/client.js");
+const {
+  upsertChannelToken,
+  setChannelMessageId,
+  getChannelState,
+  upsertParticipant,
+  listParticipants,
+  recordCompletion,
+} = await import("../src/game/channelState.js");
+
+beforeAll(() => {
+  getDb();
+});
+
+beforeEach(() => {
+  const db = getDb();
+  db.exec("DELETE FROM channel_daily_state");
+  db.exec("DELETE FROM channel_daily_participant");
+  db.exec("DELETE FROM channel_recap_posted");
+});
+
+afterAll(() => {
+  rmSync(tmpDir, { recursive: true, force: true });
+});
+
+describe("upsertChannelToken", () => {
+  it("creates a row on first call and overwrites the token on subsequent calls", () => {
+    const s1 = upsertChannelToken("c1", "2026-05-19", "tok-A", "app-1", 1_000_000);
+    expect(s1.latestToken).toBe("tok-A");
+    expect(s1.messageId).toBeNull();
+    expect(s1.latestTokenExp).toBe(1_000_000 + 900);
+
+    const s2 = upsertChannelToken("c1", "2026-05-19", "tok-B", "app-1", 1_000_500);
+    expect(s2.latestToken).toBe("tok-B");
+    expect(s2.latestTokenExp).toBe(1_000_500 + 900);
+  });
+
+  it("preserves the message_id across token refreshes", () => {
+    upsertChannelToken("c1", "2026-05-19", "tok-A", "app-1", 1_000_000);
+    setChannelMessageId("c1", "2026-05-19", "msg-123");
+    upsertChannelToken("c1", "2026-05-19", "tok-B", "app-1", 1_000_500);
+    const state = getChannelState("c1", "2026-05-19");
+    expect(state?.messageId).toBe("msg-123");
+    expect(state?.latestToken).toBe("tok-B");
+  });
+});
+
+describe("upsertParticipant", () => {
+  it("inserts new participants and preserves progress on re-launch", () => {
+    upsertParticipant({
+      channelId: "c1",
+      puzzleId: "2026-05-19",
+      userId: "u1",
+      displayName: "Alice",
+    });
+    // Simulate progress via direct UPDATE (recordCompletion path).
+    getDb()
+      .prepare(
+        `UPDATE channel_daily_participant
+            SET guesses_used = 3, status = 'playing'
+          WHERE user_id = 'u1'`,
+      )
+      .run();
+    // Re-launch with the same user — display_name may change, but the
+    // existing guesses_used/status row must NOT be reset.
+    upsertParticipant({
+      channelId: "c1",
+      puzzleId: "2026-05-19",
+      userId: "u1",
+      displayName: "Alice-renamed",
+    });
+    const ps = listParticipants("c1", "2026-05-19");
+    expect(ps).toHaveLength(1);
+    expect(ps[0]).toMatchObject({
+      userId: "u1",
+      displayName: "Alice-renamed",
+      guessesUsed: 3,
+      status: "playing",
+    });
+  });
+});
+
+describe("recordCompletion token chaining", () => {
+  beforeEach(() => {
+    upsertParticipant({
+      channelId: "c1",
+      puzzleId: "2026-05-19",
+      userId: "u1",
+      displayName: "Alice",
+    });
+  });
+
+  it("PATCHes the message when the latest token is still fresh", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("", { status: 200 }));
+    const now = 1_700_000_000;
+    upsertChannelToken("c1", "2026-05-19", "tok-fresh", "app-1", now);
+    setChannelMessageId("c1", "2026-05-19", "msg-1");
+
+    await recordCompletion("u1", "c1", "2026-05-19", 4, "won", now + 60);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/webhooks/app-1/tok-fresh/messages/msg-1");
+    expect(init.method).toBe("PATCH");
+    fetchSpy.mockRestore();
+  });
+
+  it("is a no-op when the token has expired", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(""));
+    const now = 1_700_000_000;
+    upsertChannelToken("c1", "2026-05-19", "tok-stale", "app-1", now);
+    setChannelMessageId("c1", "2026-05-19", "msg-1");
+
+    // 16 minutes after the token was issued — well past the 15-minute TTL.
+    await recordCompletion("u1", "c1", "2026-05-19", 4, "won", now + 16 * 60);
+
+    // Participant row still gets updated even when no patch fires.
+    const ps = listParticipants("c1", "2026-05-19");
+    expect(ps[0]).toMatchObject({ guessesUsed: 4, status: "won" });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it("is a no-op when there's no message id yet", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(""));
+    const now = 1_700_000_000;
+    upsertChannelToken("c1", "2026-05-19", "tok-fresh", "app-1", now);
+    // No setChannelMessageId — message hasn't been posted yet.
+
+    await recordCompletion("u1", "c1", "2026-05-19", 4, "won", now + 60);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+});

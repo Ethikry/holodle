@@ -8,7 +8,7 @@ export function ResultPanel(): JSX.Element | null {
     const guesses = history.length;
     const name = answer?.name ?? "the talent";
     return (
-      <div className="mx-4 my-4 rounded-2xl border-2 border-holo-okBorder bg-holo-okBg/40 px-6 py-6 text-center">
+      <div className="mx-4 my-4 rounded-2xl border-2 border-holo-okBd bg-holo-okBg/40 px-6 py-6 text-center">
         <div className="text-3xl">🎊</div>
         <p className="mt-2 text-xl font-bold text-holo-ok">Yatta! ✨</p>
         <p className="mt-1 text-sm">

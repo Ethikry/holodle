@@ -9,12 +9,22 @@ import type {
 import { verifyAccessToken } from "../auth/discord.js";
 import { env, corsOrigins } from "../env.js";
 import { listPlayers, removePlayer, upsertPlayer } from "../game/instance.js";
-import { dayIndexFor } from "../game/dailyPicker.js";
+import { dayIndexFor, safeTz } from "../game/dailyPicker.js";
 import { loadUserDay } from "../db/client.js";
 
 type Io = IOServer<ClientToServerEvents, ServerToClientEvents>;
 
+interface JoinedSession {
+  userId: string;
+  displayName: string;
+  avatarUrl: string | null;
+  instanceId: string;
+  channelId: string | null;
+  tz: string;
+}
+
 let io: Io | null = null;
+const lastJoinedByUser = new Map<string, JoinedSession>();
 
 export function attachSocketServer(app: FastifyInstance): Io {
   if (io) return io;
@@ -24,14 +34,13 @@ export function attachSocketServer(app: FastifyInstance): Io {
   });
 
   io.on("connection", (socket) => {
-    let joined: { userId: string; instanceId: string } | null = null;
+    let joined: JoinedSession | null = null;
 
-    socket.on("hello", async ({ accessToken, instanceId }, ack) => {
+    socket.on("hello", async ({ accessToken, instanceId, channelId, tz }, ack) => {
       let userId: string;
       let displayName: string;
       let avatarUrl: string | null = null;
 
-      // Dev escape hatch mirrors requireUser.ts.
       if (
         env.NODE_ENV !== "production" &&
         !env.DISCORD_CLIENT_SECRET &&
@@ -57,9 +66,9 @@ export function attachSocketServer(app: FastifyInstance): Io {
         return;
       }
 
-      // Resume their current progress from SQLite so other players see an
-      // accurate snapshot the moment they join.
-      const row = loadUserDay(userId, dayIndexFor());
+      const validTz = safeTz(tz);
+
+      const row = loadUserDay(userId, dayIndexFor(Date.now(), validTz));
       const snapshot: PlayerSnapshot = {
         userId,
         displayName,
@@ -68,11 +77,19 @@ export function attachSocketServer(app: FastifyInstance): Io {
         status: row.status,
       };
 
-      joined = { userId, instanceId };
+      joined = {
+        userId,
+        displayName,
+        avatarUrl,
+        instanceId,
+        channelId: channelId ?? null,
+        tz: validTz,
+      };
+      lastJoinedByUser.set(userId, joined);
+
       await socket.join(instanceId);
       upsertPlayer(instanceId, snapshot);
 
-      // Send the new player the current room snapshot, then announce them.
       socket.emit("room:snapshot", listPlayers(instanceId));
       socket.to(instanceId).emit("player:joined", snapshot);
       ack({ ok: true });
@@ -80,10 +97,10 @@ export function attachSocketServer(app: FastifyInstance): Io {
 
     socket.on("disconnect", () => {
       if (!joined) return;
-      const { userId, instanceId } = joined;
-      removePlayer(instanceId, userId);
+      const session = joined;
+      removePlayer(session.instanceId, session.userId);
       // biome-ignore lint/style/noNonNullAssertion: io is set before connection handler
-      io!.to(instanceId).emit("player:left", { userId });
+      io!.to(session.instanceId).emit("player:left", { userId: session.userId });
     });
   });
 

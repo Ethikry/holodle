@@ -3,7 +3,8 @@
 
 export type Branch = "JP" | "ID" | "EN" | "DEV_IS" | "Stars";
 
-export type HeightBucket = "Small" | "Med" | "Tall";
+// Cutoffs: ≤150 → Smol, 151–160 → Med, >160 → Tall.
+export type HeightBucket = "Smol" | "Med" | "Tall";
 
 export type Month =
   | "January"
@@ -24,6 +25,8 @@ export interface Talent {
   name: string;
   avatarUrl: string;
   branch: Branch;
+  // Free-form (covers "Gen 0", "GAMERS", "Promise", "Regloss", etc.).
+  generation: string;
   debutYear: number;
   archetype: string;
   heightCm: number;
@@ -39,12 +42,10 @@ export interface TalentSummary {
   avatarUrl: string;
 }
 
-export type CellState =
-  | "equal"
-  | "wrong"
-  | "near"
-  | "higher" // numeric: target > guess (show ↑)
-  | "lower"; // numeric: target < guess (show ↓)
+// No "near" / orange state. Every cell is strictly equal-or-wrong; the year
+// column distinguishes the direction of a miss via "higher" (target > guess,
+// renders ↑) and "lower" (target < guess, renders ↓).
+export type CellState = "equal" | "wrong" | "higher" | "lower";
 
 export interface AttrCell<V> {
   value: V;
@@ -53,8 +54,8 @@ export interface AttrCell<V> {
 
 export interface GuessDiff {
   talentId: string;
-  // Echoed so the client can show what was guessed without a second lookup.
-  name: AttrCell<string>;
+  // "Gen" column. Echoed so the client can render it without a second lookup.
+  generation: AttrCell<string>;
   branch: AttrCell<Branch>;
   debutYear: AttrCell<number>;
   archetype: AttrCell<string>;
@@ -112,7 +113,12 @@ export interface ServerToClientEvents {
 
 export interface ClientToServerEvents {
   hello: (
-    payload: { accessToken: string; instanceId: string },
+    payload: {
+      accessToken: string;
+      instanceId: string;
+      channelId?: string | null;
+      tz?: string;
+    },
     ack: (result: { ok: true } | { ok: false; error: string }) => void,
   ) => void;
 }

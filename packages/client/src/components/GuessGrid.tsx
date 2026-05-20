@@ -1,6 +1,16 @@
 import { useGame } from "../state/game.js";
 import { GuessRow } from "./GuessRow.js";
 
+const COLUMN_HEADERS: Array<{ label: string; align?: string }> = [
+  { label: "Talent" },
+  { label: "Gen" },
+  { label: "Branch" },
+  { label: "Debut Year" },
+  { label: "Archetype" },
+  { label: "Height" },
+  { label: "Birth Month" },
+];
+
 export function GuessGrid(): JSX.Element {
   const { history, talents } = useGame();
   if (history.length === 0) {
@@ -11,25 +21,24 @@ export function GuessGrid(): JSX.Element {
     );
   }
   return (
-    <div className="mx-2 my-2 overflow-x-auto">
-      <table className="mx-auto w-full max-w-3xl border-separate border-spacing-y-2">
-        <thead>
-          <tr className="text-xs font-semibold uppercase tracking-wider text-holo-muted">
-            <th className="px-2 py-2">Talent</th>
-            <th className="px-2 py-2">Name</th>
-            <th className="px-2 py-2">Branch</th>
-            <th className="px-2 py-2">Debut Year</th>
-            <th className="px-2 py-2">Archetype</th>
-            <th className="px-2 py-2">Height</th>
-            <th className="px-2 py-2">Birth Month</th>
-          </tr>
-        </thead>
-        <tbody>
+    <section className="mx-2 my-2 overflow-x-auto" aria-label="Your guesses">
+      <div className="mx-auto w-full max-w-3xl">
+        <div
+          role="row"
+          className="grid grid-cols-[72px_repeat(6,minmax(0,1fr))] items-end gap-2 px-1 pb-2 text-center text-[11px] font-semibold uppercase tracking-wider text-holo-muted"
+        >
+          {COLUMN_HEADERS.map((h) => (
+            <div role="columnheader" key={h.label} className="leading-tight">
+              {h.label}
+            </div>
+          ))}
+        </div>
+        <div className="space-y-2">
           {history.map((diff, i) => (
             <GuessRow key={`${diff.talentId}-${i}`} diff={diff} talents={talents} />
           ))}
-        </tbody>
-      </table>
-    </div>
+        </div>
+      </div>
+    </section>
   );
 }

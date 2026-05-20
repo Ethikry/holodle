@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { MAX_GUESSES } from "@holodle/shared";
 import { getDevSession, getDiscordSession, isEmbeddedInDiscord } from "./sdk/discord.js";
-import { fetchDaily, fetchStats, fetchTalents, submitGuess } from "./net/api.js";
+import { LOCAL_TZ, fetchDaily, fetchStats, fetchTalents, submitGuess } from "./net/api.js";
 import { connectSocket } from "./net/socket.js";
 import { useGame } from "./state/game.js";
 
@@ -13,11 +13,13 @@ import { GuessGrid } from "./components/GuessGrid.js";
 import { TalentAutocomplete } from "./components/TalentAutocomplete.js";
 import { PlayerList } from "./components/PlayerList.js";
 import { HelpModal } from "./components/HelpModal.js";
+import { LoadingScreen } from "./components/LoadingScreen.js";
 
 export function App(): JSX.Element {
   const {
     accessToken,
     instanceId,
+    channelId,
     talents,
     history,
     status,
@@ -38,22 +40,23 @@ export function App(): JSX.Element {
 
   // Bootstrap: load the public talent catalog first (no auth required), then
   // try to establish a Discord session. The catalog load is independent so a
-  // failing OAuth handshake never blanks the autocomplete.
+  // failing OAuth handshake never blanks the autocomplete. Errors from each
+  // step accumulate so a single visible banner doesn't hide upstream causes.
   useEffect(() => {
     let cancelled = false;
     let socketCleanup: (() => void) | null = null;
 
     void (async () => {
       setLoading(true);
+      const errs: string[] = [];
+      const describe = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
       // 1. Public catalog (no auth).
       try {
         const talentList = await fetchTalents();
         if (!cancelled) setTalents(talentList);
       } catch (err) {
-        if (!cancelled) {
-          setError(`Could not load talents: ${err instanceof Error ? err.message : String(err)}`);
-        }
+        errs.push(`Could not load talents: ${describe(err)}`);
       }
 
       // 2. Session.
@@ -62,7 +65,8 @@ export function App(): JSX.Element {
         : ({ ok: true as const, session: getDevSession() });
       if (cancelled) return;
       if (!result.ok) {
-        setError(result.reason);
+        errs.push(result.reason);
+        if (errs.length > 0) setError(errs.join("\n"));
         setLoading(false);
         return;
       }
@@ -70,6 +74,7 @@ export function App(): JSX.Element {
       setSession({
         accessToken: session.accessToken,
         instanceId: session.instanceId,
+        channelId: session.channelId,
         selfUserId: session.user.id,
       });
 
@@ -83,20 +88,29 @@ export function App(): JSX.Element {
         setDaily(daily);
         setStats(stats);
       } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : String(err));
-        }
+        errs.push(describe(err));
       }
 
-      // 4. Socket presence.
-      const socket = connectSocket(session.accessToken, session.instanceId, {
-        onSnapshot: setSnapshot,
-        onJoin: upsertPlayer,
-        onProgress: updateProgress,
-        onLeave: ({ userId }) => removePlayer(userId),
-      });
+      // 4. Socket presence — pass channelId + tz so the server can route
+      // the exit embed and compute the right user-local dayIndex.
+      const socket = connectSocket(
+        session.accessToken,
+        session.instanceId,
+        session.channelId,
+        LOCAL_TZ,
+        {
+          onSnapshot: setSnapshot,
+          onJoin: upsertPlayer,
+          onProgress: updateProgress,
+          onLeave: ({ userId }) => removePlayer(userId),
+        },
+      );
       socketCleanup = () => socket.disconnect();
-      if (!cancelled) setLoading(false);
+
+      if (!cancelled) {
+        if (errs.length > 0) setError(errs.join("\n"));
+        setLoading(false);
+      }
     })();
 
     return () => {
@@ -113,7 +127,7 @@ export function App(): JSX.Element {
         return;
       }
       try {
-        const resp = await submitGuess(accessToken, talentId, instanceId);
+        const resp = await submitGuess(accessToken, talentId, instanceId, channelId);
         appendGuess(resp.diff, resp.status, resp.answer);
         if (resp.status !== "playing") {
           // Refresh stats on settle.
@@ -124,7 +138,7 @@ export function App(): JSX.Element {
         setError(err instanceof Error ? err.message : String(err));
       }
     },
-    [accessToken, instanceId, appendGuess, setStats, setError],
+    [accessToken, instanceId, channelId, appendGuess, setStats, setError],
   );
 
   const inputDisabled = useMemo(
@@ -138,6 +152,15 @@ export function App(): JSX.Element {
   );
 
   const emptyCatalog = !loading && talents.length === 0;
+
+  // While the bootstrap effect is still running, show the LoadingScreen
+  // instead of a half-populated UI. We hold the loading state until talents,
+  // session, daily, and stats have all resolved (or errored). An error that
+  // flips loading=false will fall through to the normal layout below, which
+  // surfaces the red error banner.
+  if (loading) {
+    return <LoadingScreen />;
+  }
 
   return (
     <main className="mx-auto flex min-h-full max-w-3xl flex-col">
@@ -155,7 +178,7 @@ export function App(): JSX.Element {
       <GuessGrid />
       <PlayerList />
       {error && (
-        <div className="mx-4 my-4 rounded-xl border border-holo-bad/40 bg-holo-badBg/40 p-3 text-sm text-holo-bad">
+        <div className="mx-4 my-4 whitespace-pre-line rounded-xl border border-holo-bad/40 bg-holo-badBg/40 p-3 text-sm text-holo-bad">
           {error}
         </div>
       )}

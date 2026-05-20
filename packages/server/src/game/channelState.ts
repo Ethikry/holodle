@@ -1,0 +1,226 @@
+import { getDb } from "../db/client.js";
+import { patchFollowup, postFollowup } from "../discord/followups.js";
+import {
+  buildNowPlayingEmbed,
+  buildYesterdayRecapEmbed,
+  type NowPlayingParticipant,
+  type RecapPlayer,
+} from "../discord/embeds.js";
+
+// Interaction tokens are valid for 15 minutes from issuance. We persist
+// the absolute expiry so we never have to remember "when was this issued".
+const TOKEN_TTL_SEC = 15 * 60;
+
+export interface ChannelDailyState {
+  channelId: string;
+  puzzleId: string;
+  messageId: string | null;
+  latestToken: string;
+  latestTokenAppId: string;
+  latestTokenExp: number;
+}
+
+interface StateRow {
+  channel_id: string;
+  puzzle_id: string;
+  message_id: string | null;
+  latest_token: string;
+  latest_token_app_id: string;
+  latest_token_exp: number;
+}
+
+export function getChannelState(
+  channelId: string,
+  puzzleId: string,
+): ChannelDailyState | null {
+  const row = getDb()
+    .prepare(
+      `SELECT channel_id, puzzle_id, message_id, latest_token, latest_token_app_id, latest_token_exp
+         FROM channel_daily_state WHERE channel_id = ? AND puzzle_id = ?`,
+    )
+    .get(channelId, puzzleId) as StateRow | undefined;
+  if (!row) return null;
+  return {
+    channelId: row.channel_id,
+    puzzleId: row.puzzle_id,
+    messageId: row.message_id,
+    latestToken: row.latest_token,
+    latestTokenAppId: row.latest_token_app_id,
+    latestTokenExp: row.latest_token_exp,
+  };
+}
+
+// Refresh (or create) the row's freshest token. messageId is preserved if
+// already set. Returns the resulting state.
+export function upsertChannelToken(
+  channelId: string,
+  puzzleId: string,
+  token: string,
+  appId: string,
+  nowSec: number = Math.floor(Date.now() / 1000),
+): ChannelDailyState {
+  getDb()
+    .prepare(
+      `INSERT INTO channel_daily_state
+         (channel_id, puzzle_id, message_id, latest_token, latest_token_app_id, latest_token_exp)
+       VALUES (?, ?, NULL, ?, ?, ?)
+       ON CONFLICT(channel_id, puzzle_id) DO UPDATE SET
+         latest_token         = excluded.latest_token,
+         latest_token_app_id  = excluded.latest_token_app_id,
+         latest_token_exp     = excluded.latest_token_exp`,
+    )
+    .run(channelId, puzzleId, token, appId, nowSec + TOKEN_TTL_SEC);
+  // biome-ignore lint/style/noNonNullAssertion: row is guaranteed to exist after upsert
+  return getChannelState(channelId, puzzleId)!;
+}
+
+export function setChannelMessageId(
+  channelId: string,
+  puzzleId: string,
+  messageId: string,
+): void {
+  getDb()
+    .prepare(
+      `UPDATE channel_daily_state SET message_id = ? WHERE channel_id = ? AND puzzle_id = ?`,
+    )
+    .run(messageId, channelId, puzzleId);
+}
+
+export function tryClaimRecapPosted(channelId: string, puzzleId: string): boolean {
+  const result = getDb()
+    .prepare(
+      `INSERT INTO channel_recap_posted (channel_id, puzzle_id) VALUES (?, ?)
+       ON CONFLICT (channel_id, puzzle_id) DO NOTHING`,
+    )
+    .run(channelId, puzzleId);
+  return result.changes === 1;
+}
+
+export function isRecapPosted(channelId: string, puzzleId: string): boolean {
+  const row = getDb()
+    .prepare(
+      `SELECT 1 FROM channel_recap_posted WHERE channel_id = ? AND puzzle_id = ?`,
+    )
+    .get(channelId, puzzleId);
+  return !!row;
+}
+
+export interface UpsertParticipantInput {
+  channelId: string;
+  puzzleId: string;
+  userId: string;
+  displayName: string;
+}
+
+// Idempotent. If the participant already exists, only display_name is
+// refreshed (name changes between launches); guesses_used/status are
+// preserved so a re-launch never clobbers an in-progress count.
+export function upsertParticipant({
+  channelId,
+  puzzleId,
+  userId,
+  displayName,
+}: UpsertParticipantInput): void {
+  getDb()
+    .prepare(
+      `INSERT INTO channel_daily_participant
+         (channel_id, puzzle_id, user_id, display_name, guesses_used, status, joined_at)
+       VALUES (?, ?, ?, ?, 0, 'playing', strftime('%s','now'))
+       ON CONFLICT(channel_id, puzzle_id, user_id) DO UPDATE SET
+         display_name = excluded.display_name`,
+    )
+    .run(channelId, puzzleId, userId, displayName);
+}
+
+export function listParticipants(
+  channelId: string,
+  puzzleId: string,
+): NowPlayingParticipant[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT user_id, display_name, guesses_used, status
+         FROM channel_daily_participant
+        WHERE channel_id = ? AND puzzle_id = ?
+        ORDER BY joined_at ASC`,
+    )
+    .all(channelId, puzzleId) as Array<{
+    user_id: string;
+    display_name: string;
+    guesses_used: number;
+    status: "playing" | "won" | "lost";
+  }>;
+  return rows.map((r) => ({
+    userId: r.user_id,
+    displayName: r.display_name,
+    guessesUsed: r.guesses_used,
+    status: r.status,
+  }));
+}
+
+export function listYesterdayRecapPlayers(
+  channelId: string,
+  puzzleId: string,
+): RecapPlayer[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT user_id, guesses_used, status
+         FROM channel_daily_participant
+        WHERE channel_id = ?
+          AND puzzle_id  = ?
+          AND status IN ('won','lost')
+        ORDER BY guesses_used ASC`,
+    )
+    .all(channelId, puzzleId) as Array<{
+    user_id: string;
+    guesses_used: number;
+    status: "won" | "lost";
+  }>;
+  return rows.map((r) => ({
+    userId: r.user_id,
+    guessesUsed: r.guesses_used,
+    status: r.status,
+  }));
+}
+
+// Called from the guess route on transition to won/lost. Updates the
+// participant snapshot and — if we still hold a fresh interaction token
+// for this channel-day — patches the now-playing message in place.
+export async function recordCompletion(
+  userId: string,
+  channelId: string,
+  puzzleId: string,
+  guessesUsed: number,
+  status: "won" | "lost",
+  nowSec: number = Math.floor(Date.now() / 1000),
+): Promise<void> {
+  getDb()
+    .prepare(
+      `UPDATE channel_daily_participant
+          SET guesses_used = ?, status = ?
+        WHERE channel_id = ? AND puzzle_id = ? AND user_id = ?`,
+    )
+    .run(guessesUsed, status, channelId, puzzleId, userId);
+
+  const state = getChannelState(channelId, puzzleId);
+  if (!state || !state.messageId) return;
+  if (state.latestTokenExp <= nowSec) return; // token expired — no-op
+  const participants = listParticipants(channelId, puzzleId);
+  const { embed, components } = buildNowPlayingEmbed({
+    puzzleId,
+    participants,
+    applicationId: state.latestTokenAppId,
+  });
+  try {
+    await patchFollowup(state.latestTokenAppId, state.latestToken, state.messageId, {
+      embeds: [embed],
+      components,
+    });
+  } catch (err) {
+    console.error("[channelState] recordCompletion patch failed:", err);
+  }
+}
+
+// Helpers re-exported for the interactions route — keeps that file focused
+// on orchestration.
+export { buildNowPlayingEmbed, buildYesterdayRecapEmbed };
+export { postFollowup };
