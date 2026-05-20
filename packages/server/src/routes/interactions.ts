@@ -14,12 +14,14 @@ import {
   upsertChannelToken,
   upsertParticipant,
 } from "../game/channelState.js";
+import { LAUNCH_BUTTON_CUSTOM_ID } from "../discord/embeds.js";
 import { puzzleIdFor } from "../game/dailyPicker.js";
 import { patchFollowup } from "../discord/followups.js";
 
 // Discord interaction types.
 const TYPE_PING = 1;
 const TYPE_APPLICATION_COMMAND = 2;
+const TYPE_MESSAGE_COMPONENT = 3;
 const RESPONSE_PONG = 1;
 const RESPONSE_LAUNCH_ACTIVITY = 12;
 const ONE_DAY_MS = 86_400_000;
@@ -44,7 +46,7 @@ interface InteractionPayload {
   token?: string;
   channel_id?: string;
   guild_id?: string | null;
-  data?: { name?: string };
+  data?: { name?: string; custom_id?: string; component_type?: number };
   member?: InteractionMember;
   user?: InteractionUser;
 }
@@ -167,6 +169,19 @@ export async function interactionsRoutes(app: FastifyInstance): Promise<void> {
       return { type: RESPONSE_LAUNCH_ACTIVITY };
     }
 
+    // Blue "Play now!" button — same launch flow as the /launch command. We
+    // still want to record this clicker as a participant so they show up in
+    // the embed grid the next time it patches.
+    if (
+      payload.type === TYPE_MESSAGE_COMPONENT &&
+      payload.data?.custom_id === LAUNCH_BUTTON_CUSTOM_ID
+    ) {
+      handleLaunch(payload).catch((err) => {
+        req.log.error({ err }, "button launch follow-up failed");
+      });
+      return { type: RESPONSE_LAUNCH_ACTIVITY };
+    }
+
     reply.code(400);
     return { error: "Unsupported interaction" };
   });
@@ -190,7 +205,7 @@ async function handleLaunch(payload: InteractionPayload): Promise<void> {
   if (!isRecapPosted(channelId, yesterdayId)) {
     const players = listYesterdayRecapPlayers(channelId, yesterdayId);
     if (players.length > 0 && tryClaimRecapPosted(channelId, yesterdayId)) {
-      const { embed, file } = buildYesterdayRecapEmbed({
+      const { embed, file } = await buildYesterdayRecapEmbed({
         puzzleId: yesterdayId,
         players,
       });

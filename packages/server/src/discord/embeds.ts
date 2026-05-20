@@ -5,13 +5,13 @@
 // rather than depending on a `discord.js` client — the only thing that ever
 // consumes these is JSON.stringify into a webhook POST body.
 
+import type { GuessDiff } from "@holodle/shared";
 import {
   renderNowPlayingImage,
-  renderRecapImage,
   type NowPlayingImageParticipant,
-  type RecapImagePlayer,
 } from "./imageRender.js";
 import type { FollowupFile } from "./followups.js";
+import { displayPuzzleNumberForPuzzleId } from "../game/dailyPicker.js";
 
 export interface EmbedField {
   name: string;
@@ -29,12 +29,21 @@ export interface Embed {
   fields?: EmbedField[];
 }
 
-export interface ButtonComponent {
+export interface LinkButton {
   type: 2;
   style: 5; // LINK
   label: string;
   url: string;
 }
+
+export interface PrimaryButton {
+  type: 2;
+  style: 1; // PRIMARY (blurple)
+  label: string;
+  custom_id: string;
+}
+
+export type ButtonComponent = LinkButton | PrimaryButton;
 
 export interface ActionRow {
   type: 1;
@@ -54,6 +63,7 @@ export interface NowPlayingParticipant {
   displayName: string;
   avatarUrl: string | null;
   guessesUsed: number;
+  history: GuessDiff[];
   status: "playing" | "won" | "lost";
 }
 
@@ -72,26 +82,33 @@ export interface RenderedMessage {
 export async function buildNowPlayingEmbed({
   puzzleId,
   participants,
-  applicationId,
 }: NowPlayingInput): Promise<RenderedMessage> {
   const imageParticipants: NowPlayingImageParticipant[] = participants.map((p) => ({
-    displayName: p.displayName,
     avatarUrl: p.avatarUrl,
-    guessesUsed: p.guessesUsed,
+    history: p.history,
     status: p.status,
   }));
-  const png = await renderNowPlayingImage({ puzzleId, participants: imageParticipants });
+  const puzzleNumber = displayPuzzleNumberForPuzzleId(puzzleId);
+  const png = await renderNowPlayingImage({
+    puzzleId,
+    puzzleNumber,
+    participants: imageParticipants,
+  });
 
   const embed: Embed = {
     color: COLOR_PLAYING,
     image: { url: `attachment://${NOW_PLAYING_FILENAME}` },
   };
 
-  const button: ButtonComponent = {
+  // Primary (blurple) button. Click → MESSAGE_COMPONENT interaction with
+  // custom_id "launch" → server responds with LAUNCH_ACTIVITY (type 12).
+  // Link buttons (style 5) can't be colored; primary + LAUNCH_ACTIVITY is
+  // the only way to get a blue "Play now!" button.
+  const button: PrimaryButton = {
     type: 2,
-    style: 5,
+    style: 1,
     label: "Play now!",
-    url: `https://discord.com/activities/${applicationId}`,
+    custom_id: LAUNCH_BUTTON_CUSTOM_ID,
   };
   const components: MessageComponent[] = [{ type: 1, components: [button] }];
 
@@ -102,9 +119,14 @@ export async function buildNowPlayingEmbed({
   };
 }
 
+export const LAUNCH_BUTTON_CUSTOM_ID = "launch";
+
 export interface RecapPlayer {
   userId: string;
+  displayName: string;
+  avatarUrl: string | null;
   guessesUsed: number;
+  history: GuessDiff[];
   status: "won" | "lost";
 }
 
@@ -119,16 +141,25 @@ export interface RenderedRecap {
   file: FollowupFile;
 }
 
-export function buildYesterdayRecapEmbed({
+export async function buildYesterdayRecapEmbed({
   puzzleId,
   players,
   answerName,
-}: RecapEmbedInput): RenderedRecap {
-  const imagePlayers: RecapImagePlayer[] = players.map((p) => ({
-    guessesUsed: p.guessesUsed,
+}: RecapEmbedInput): Promise<RenderedRecap> {
+  // The recap now uses the same image renderer as Now Playing — players are
+  // already settled (won/lost), so each tile shows their final board.
+  const imageParticipants: NowPlayingImageParticipant[] = players.map((p) => ({
+    avatarUrl: p.avatarUrl,
+    history: p.history,
     status: p.status,
   }));
-  const png = renderRecapImage({ puzzleId, players: imagePlayers, answerName });
+  const puzzleNumber = displayPuzzleNumberForPuzzleId(puzzleId);
+  const png = await renderNowPlayingImage({
+    puzzleId,
+    puzzleNumber,
+    participants: imageParticipants,
+    subtitle: answerName ? `Answer: ${answerName}` : "Yesterday's results",
+  });
 
   return {
     embed: {

@@ -1,159 +1,399 @@
 import { createCanvas, loadImage, type SKRSContext2D } from "@napi-rs/canvas";
+import type { GuessDiff } from "@holodle/shared";
 
-// Composites the PNGs we ship alongside the Now Playing + recap embeds. The
-// goal is the Wordle-style "image embed" look — a single rendered PNG with
-// the puzzle title up top and per-player rows below. Discord renders the
-// attached PNG inline via `attachment://<filename>` on the embed image url.
+// Renders the PNG attached to Now Playing + Recap embeds. Mirrors the Wordle
+// posted-message layout: a small "HOLO ✦ DLE No. N" title up top and a grid
+// of per-participant tiles below. Each tile = circular avatar + 6×6 colored
+// grid showing that player's guess history. Layout adapts to participant
+// count: a wide horizontal panel for one player, narrow vertical cards for
+// 2–3, and a tile grid for larger groups.
 
 const BG = "#1c1c1f";
-const PANEL = "#26272b";
-const PANEL_BORDER = "#3a3b40";
-const TEXT = "#ffffff";
+const TILE_BG = "transparent";
+const TILE_BORDER = "#3a3b40";
+const CELL_EMPTY = "#1f2024";
+const CELL_USED = "#3a3b40";
+const CELL_EQUAL = "#3aa55d";
+const CELL_DIR = "#c89b3f";
+const CELL_BORDER = "#1c1c1f";
+
+const TITLE_ACCENT = "#22b8e6";
+const TITLE_INK = "#ffffff";
 const SUBTEXT = "#b5b8bf";
 
-const PIP_PLAY = "#3a3b40"; // unused guess slot
-const PIP_USED = "#5a5b62"; // a guess was spent here (history not available)
-const PIP_WIN = "#3aa55d";
-const PIP_LOSS = "#ed4245";
+const GRID_COLS = 6;
+const GRID_ROWS = 6;
 
-const TITLE_H = 80;
-const ROW_H = 76;
-const ROW_GAP = 10;
-const PANEL_PAD_X = 24;
-const PANEL_PAD_Y = 18;
-const AVATAR = 56;
-const PIP_SIZE = 32;
-const PIP_GAP = 6;
-const WIDTH = 760;
-
-// ---------- Now Playing --------------------------------------------------
+// ---------- Public types -------------------------------------------------
 
 export interface NowPlayingImageParticipant {
-  displayName: string;
   avatarUrl: string | null;
-  guessesUsed: number;
+  history: GuessDiff[];
   status: "playing" | "won" | "lost";
 }
 
 export interface NowPlayingImageInput {
   puzzleId: string;
+  puzzleNumber?: number; // 1-based; falls back to date string when absent
   participants: NowPlayingImageParticipant[];
+  subtitle?: string | null;
 }
 
+// Re-exported for the recap path that builds on top of the same renderer.
+export interface RecapImagePlayer {
+  avatarUrl: string | null;
+  history: GuessDiff[];
+  status: "won" | "lost";
+}
+
+export interface RecapImageInput {
+  puzzleId: string;
+  puzzleNumber?: number;
+  players: RecapImagePlayer[];
+  answerName?: string | null;
+}
+
+// ---------- Layout planning ---------------------------------------------
+
+interface TileMetrics {
+  width: number;
+  height: number;
+  cols: number;
+  rows: number;
+  avatar: number;
+  cell: number;
+  cellGap: number;
+  gridPadTop: number;
+  layout: "horizontal" | "vertical";
+}
+
+interface OverallLayout {
+  width: number;
+  height: number;
+  tile: TileMetrics;
+  tileCols: number; // tiles per row
+  tileGap: number;
+  contentY: number; // y-coord where tiles start
+  padX: number;
+}
+
+const TITLE_BAND_H = 64;
+const SUBTITLE_BAND_H = 26;
+const BOTTOM_PAD = 24;
+const SIDE_PAD = 24;
+const TILE_GAP = 14;
+
+function planLayout(n: number, hasSubtitle: boolean): OverallLayout {
+  if (n <= 1) {
+    // Single wide horizontal tile, like Wordle's solo card.
+    const tile: TileMetrics = {
+      width: 700,
+      height: 360,
+      cols: GRID_COLS,
+      rows: GRID_ROWS,
+      avatar: 220,
+      cell: 38,
+      cellGap: 6,
+      gridPadTop: 0,
+      layout: "horizontal",
+    };
+    return wrapLayout([tile], 1, hasSubtitle);
+  }
+  if (n === 2) {
+    const tile = verticalTile({ avatar: 150, cell: 36 });
+    return wrapLayout([tile, tile], 2, hasSubtitle);
+  }
+  if (n === 3) {
+    const tile = verticalTile({ avatar: 130, cell: 32 });
+    return wrapLayout([tile, tile, tile], 3, hasSubtitle);
+  }
+  if (n <= 6) {
+    const tile = verticalTile({ avatar: 96, cell: 22 });
+    return wrapLayout(repeat(tile, n), 3, hasSubtitle);
+  }
+  if (n <= 12) {
+    const tile = verticalTile({ avatar: 76, cell: 18 });
+    const cols = Math.min(6, Math.ceil(n / 2));
+    return wrapLayout(repeat(tile, n), cols, hasSubtitle);
+  }
+  // 13+ — pack 7-per-row like the Wordle group-of-13 screenshot.
+  const tile = verticalTile({ avatar: 64, cell: 14 });
+  const cols = 7;
+  return wrapLayout(repeat(tile, n), cols, hasSubtitle);
+}
+
+function verticalTile(opts: { avatar: number; cell: number }): TileMetrics {
+  const cellGap = Math.max(2, Math.round(opts.cell * 0.16));
+  const gridW = GRID_COLS * opts.cell + (GRID_COLS - 1) * cellGap;
+  const gridH = GRID_ROWS * opts.cell + (GRID_ROWS - 1) * cellGap;
+  // Tile padding: 12px around content; avatar above grid with a small gap.
+  const innerPadY = 14;
+  const innerPadX = 12;
+  const avatarGridGap = 12;
+  const width = Math.max(opts.avatar + innerPadX * 2, gridW + innerPadX * 2);
+  const height = innerPadY * 2 + opts.avatar + avatarGridGap + gridH;
+  return {
+    width,
+    height,
+    cols: GRID_COLS,
+    rows: GRID_ROWS,
+    avatar: opts.avatar,
+    cell: opts.cell,
+    cellGap,
+    gridPadTop: innerPadY + opts.avatar + avatarGridGap,
+    layout: "vertical",
+  };
+}
+
+function repeat<T>(value: T, n: number): T[] {
+  return Array.from({ length: n }, () => value);
+}
+
+function wrapLayout(tiles: TileMetrics[], cols: number, hasSubtitle: boolean): OverallLayout {
+  const first = tiles[0]!;
+  const rows = Math.ceil(tiles.length / cols);
+  const tilesWidth = cols * first.width + (cols - 1) * TILE_GAP;
+  const tilesHeight = rows * first.height + (rows - 1) * TILE_GAP;
+  const width = SIDE_PAD * 2 + tilesWidth;
+  const contentY = TITLE_BAND_H + (hasSubtitle ? SUBTITLE_BAND_H : 0);
+  const height = contentY + tilesHeight + BOTTOM_PAD;
+  return {
+    width,
+    height,
+    tile: first,
+    tileCols: cols,
+    tileGap: TILE_GAP,
+    contentY,
+    padX: SIDE_PAD,
+  };
+}
+
+// ---------- Public render ------------------------------------------------
+
 export async function renderNowPlayingImage(input: NowPlayingImageInput): Promise<Buffer> {
-  const rows = Math.max(1, input.participants.length);
-  const panelH = PANEL_PAD_Y * 2 + rows * ROW_H + (rows - 1) * ROW_GAP;
-  const height = TITLE_H + panelH + 24;
-  const canvas = createCanvas(WIDTH, height);
+  const hasSubtitle = !!input.subtitle;
+  const layout = planLayout(input.participants.length, hasSubtitle);
+  const canvas = createCanvas(layout.width, layout.height);
   const ctx = canvas.getContext("2d");
 
   ctx.fillStyle = BG;
-  ctx.fillRect(0, 0, WIDTH, height);
+  ctx.fillRect(0, 0, layout.width, layout.height);
 
-  // Title.
-  ctx.fillStyle = TEXT;
-  ctx.font = "700 30px sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(`Holodle No. ${input.puzzleId}`, WIDTH / 2, 44);
+  drawTitle(ctx, layout.width, input.puzzleNumber, input.puzzleId);
 
-  // Subtitle.
-  ctx.fillStyle = SUBTEXT;
-  ctx.font = "500 17px sans-serif";
-  const subtitle =
-    input.participants.length === 1
-      ? "1 player currently playing"
-      : `${input.participants.length} players currently playing`;
-  ctx.fillText(subtitle, WIDTH / 2, 70);
-
-  // Panel.
-  const panelW = WIDTH - 48;
-  const panelX = (WIDTH - panelW) / 2;
-  const panelY = TITLE_H + 4;
-  drawPanel(ctx, panelX, panelY, panelW, panelH);
+  if (hasSubtitle && input.subtitle) {
+    ctx.fillStyle = SUBTEXT;
+    ctx.font = "500 14px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(input.subtitle, layout.width / 2, TITLE_BAND_H + SUBTITLE_BAND_H / 2);
+  }
 
   if (input.participants.length === 0) {
     ctx.fillStyle = SUBTEXT;
-    ctx.font = "500 18px sans-serif";
+    ctx.font = "500 16px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("Waiting for players…", WIDTH / 2, panelY + panelH / 2);
+    ctx.textBaseline = "middle";
+    ctx.fillText("Waiting for players…", layout.width / 2, layout.height / 2);
     return canvas.toBuffer("image/png");
   }
 
+  // Draw tiles.
   for (let i = 0; i < input.participants.length; i++) {
     const p = input.participants[i];
     if (!p) continue;
-    const rowY = panelY + PANEL_PAD_Y + i * (ROW_H + ROW_GAP);
-    await drawParticipantRow(ctx, panelX + PANEL_PAD_X, rowY, panelW - PANEL_PAD_X * 2, p);
+    const col = i % layout.tileCols;
+    const row = Math.floor(i / layout.tileCols);
+    const tx = layout.padX + col * (layout.tile.width + layout.tileGap);
+    const ty = layout.contentY + row * (layout.tile.height + layout.tileGap);
+    await drawTile(ctx, tx, ty, layout.tile, p);
   }
 
   return canvas.toBuffer("image/png");
 }
 
-async function drawParticipantRow(
+// ---------- Title --------------------------------------------------------
+
+function drawTitle(
+  ctx: SKRSContext2D,
+  width: number,
+  puzzleNumber: number | undefined,
+  fallbackPuzzleId: string,
+): void {
+  // Two-color "HOLO ✦ DLE No. {n}" — mirrors the in-activity wordmark.
+  // The star is drawn as a canvas path so we don't depend on any particular
+  // installed font having the U+2726 glyph (system sans on alpine often
+  // doesn't, and we'd render a tofu box).
+  const numberLabel = puzzleNumber !== undefined ? `${puzzleNumber}` : fallbackPuzzleId;
+  const suffix = `  No. ${numberLabel}`;
+
+  const wordFont = "800 28px sans-serif";
+  const numFont = "600 22px sans-serif";
+  const starSize = 18;
+  const starGap = 10; // space on each side of the star
+
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+
+  // Measure to center the composite as a unit.
+  ctx.font = wordFont;
+  const wHolo = ctx.measureText("HOLO").width;
+  const wDle = ctx.measureText("DLE").width;
+  const wStar = starSize + starGap * 2;
+  ctx.font = numFont;
+  const wNum = ctx.measureText(suffix).width;
+  const totalW = wHolo + wStar + wDle + wNum;
+
+  let x = (width - totalW) / 2;
+  const y = TITLE_BAND_H / 2;
+
+  ctx.fillStyle = TITLE_ACCENT;
+  ctx.font = wordFont;
+  ctx.fillText("HOLO", x, y);
+  x += wHolo;
+
+  drawFourPointStar(ctx, x + starGap + starSize / 2, y, starSize / 2, TITLE_ACCENT);
+  x += wStar;
+
+  ctx.fillStyle = TITLE_INK;
+  ctx.font = wordFont;
+  ctx.fillText("DLE", x, y);
+  x += wDle;
+
+  ctx.fillStyle = SUBTEXT;
+  ctx.font = numFont;
+  ctx.fillText(suffix, x, y);
+}
+
+// Four-point sparkle ✦. Center (cx,cy), outer radius `r`; inner radius is
+// r * 0.32 so the points stay sharp (matches the activity wordmark glyph).
+function drawFourPointStar(
+  ctx: SKRSContext2D,
+  cx: number,
+  cy: number,
+  r: number,
+  fill: string,
+): void {
+  const inner = r * 0.32;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - r);
+  ctx.lineTo(cx + inner, cy - inner);
+  ctx.lineTo(cx + r, cy);
+  ctx.lineTo(cx + inner, cy + inner);
+  ctx.lineTo(cx, cy + r);
+  ctx.lineTo(cx - inner, cy + inner);
+  ctx.lineTo(cx - r, cy);
+  ctx.lineTo(cx - inner, cy - inner);
+  ctx.closePath();
+  ctx.fillStyle = fill;
+  ctx.fill();
+}
+
+// ---------- Tiles --------------------------------------------------------
+
+async function drawTile(
   ctx: SKRSContext2D,
   x: number,
   y: number,
-  w: number,
+  tile: TileMetrics,
   p: NowPlayingImageParticipant,
 ): Promise<void> {
-  const avatarY = y + (ROW_H - AVATAR) / 2;
-  await drawAvatar(ctx, p.avatarUrl, x, avatarY, AVATAR);
+  // Rounded border around the whole tile (Wordle uses a thin grey outline).
+  roundedRect(ctx, x, y, tile.width, tile.height, 18);
+  if (TILE_BG !== "transparent") {
+    ctx.fillStyle = TILE_BG;
+    ctx.fill();
+  }
+  ctx.strokeStyle = TILE_BORDER;
+  ctx.lineWidth = 1;
+  ctx.stroke();
 
-  // Name + status text stacked to the right of the avatar.
-  const textX = x + AVATAR + 16;
-  ctx.fillStyle = TEXT;
-  ctx.font = "600 20px sans-serif";
-  ctx.textAlign = "left";
-  ctx.textBaseline = "alphabetic";
-  ctx.fillText(truncate(ctx, p.displayName, 280), textX, y + 28);
+  if (tile.layout === "horizontal") {
+    const innerPadX = 28;
+    const innerPadY = (tile.height - tile.avatar) / 2;
+    await drawAvatarCircle(ctx, p.avatarUrl, x + innerPadX, y + innerPadY, tile.avatar);
+    const gridW = GRID_COLS * tile.cell + (GRID_COLS - 1) * tile.cellGap;
+    const gridH = GRID_ROWS * tile.cell + (GRID_ROWS - 1) * tile.cellGap;
+    const gridX = x + tile.width - innerPadX - gridW;
+    const gridY = y + (tile.height - gridH) / 2;
+    drawGuessGrid(ctx, gridX, gridY, tile.cell, tile.cellGap, p.history);
+    return;
+  }
 
-  ctx.fillStyle = statusColor(p.status);
-  ctx.font = "500 15px sans-serif";
-  ctx.fillText(statusLine(p), textX, y + 52);
+  // Vertical tile: avatar centered up top, grid centered below.
+  const avatarX = x + (tile.width - tile.avatar) / 2;
+  const avatarY = y + 14;
+  await drawAvatarCircle(ctx, p.avatarUrl, avatarX, avatarY, tile.avatar);
 
-  // 6-pip progress bar on the right.
-  const pipsW = 6 * PIP_SIZE + 5 * PIP_GAP;
-  const pipsX = x + w - pipsW;
-  const pipsY = y + (ROW_H - PIP_SIZE) / 2;
-  drawPips(ctx, pipsX, pipsY, p);
+  const gridW = GRID_COLS * tile.cell + (GRID_COLS - 1) * tile.cellGap;
+  const gridX = x + (tile.width - gridW) / 2;
+  const gridY = y + tile.gridPadTop;
+  drawGuessGrid(ctx, gridX, gridY, tile.cell, tile.cellGap, p.history);
 }
 
-function statusColor(status: NowPlayingImageParticipant["status"]): string {
-  if (status === "won") return PIP_WIN;
-  if (status === "lost") return PIP_LOSS;
-  return SUBTEXT;
-}
-
-function statusLine(p: NowPlayingImageParticipant): string {
-  if (p.status === "won") return `Won in ${p.guessesUsed}/6`;
-  if (p.status === "lost") return `Lost (X/6)`;
-  return `Playing — ${p.guessesUsed}/6`;
-}
-
-function drawPips(
+function drawGuessGrid(
   ctx: SKRSContext2D,
   x: number,
   y: number,
-  p: NowPlayingImageParticipant,
+  cell: number,
+  gap: number,
+  history: GuessDiff[],
 ): void {
-  for (let i = 0; i < 6; i++) {
-    const cx = x + i * (PIP_SIZE + PIP_GAP);
-    let fill = PIP_PLAY;
-    if (i < p.guessesUsed) {
-      // The last used pip carries the outcome color; intermediate pips show
-      // "used" gray since we don't have per-guess hint history at this level.
-      if (i === p.guessesUsed - 1 && p.status === "won") fill = PIP_WIN;
-      else if (i === p.guessesUsed - 1 && p.status === "lost") fill = PIP_LOSS;
-      else fill = PIP_USED;
+  for (let row = 0; row < GRID_ROWS; row++) {
+    const diff = history[row];
+    for (let col = 0; col < GRID_COLS; col++) {
+      const cx = x + col * (cell + gap);
+      const cy = y + row * (cell + gap);
+      drawGuessCell(ctx, cx, cy, cell, cellRenderAt(diff, col));
     }
-    ctx.fillStyle = fill;
-    roundedRect(ctx, cx, y, PIP_SIZE, PIP_SIZE, 6);
-    ctx.fill();
   }
 }
 
-async function drawAvatar(
+interface CellRender {
+  fill: string;
+  glyph?: string;
+}
+
+function cellRenderAt(diff: GuessDiff | undefined, col: number): CellRender {
+  if (!diff) return { fill: CELL_EMPTY };
+  const cells = [
+    diff.generation,
+    diff.branch,
+    diff.debutYear,
+    diff.archetype,
+    diff.height,
+    diff.birthMonth,
+  ];
+  const c = cells[col];
+  if (!c) return { fill: CELL_USED };
+  if (c.state === "equal") return { fill: CELL_EQUAL };
+  if (c.state === "higher") return { fill: CELL_DIR, glyph: "↑" };
+  if (c.state === "lower") return { fill: CELL_DIR, glyph: "↓" };
+  return { fill: CELL_USED };
+}
+
+function drawGuessCell(
+  ctx: SKRSContext2D,
+  x: number,
+  y: number,
+  size: number,
+  r: CellRender,
+): void {
+  ctx.fillStyle = r.fill;
+  ctx.fillRect(x, y, size, size);
+  ctx.strokeStyle = CELL_BORDER;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x, y, size, size);
+  if (r.glyph && size >= 24) {
+    ctx.fillStyle = TITLE_INK;
+    ctx.font = `700 ${Math.round(size * 0.7)}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(r.glyph, x + size / 2, y + size / 2 + 1);
+  }
+}
+
+async function drawAvatarCircle(
   ctx: SKRSContext2D,
   url: string | null,
   x: number,
@@ -181,119 +421,7 @@ async function drawAvatar(
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.lineWidth = 2;
-  ctx.strokeStyle = PANEL_BORDER;
-  ctx.stroke();
-}
-
-// ---------- Recap --------------------------------------------------------
-
-export interface RecapImagePlayer {
-  guessesUsed: number;
-  status: "won" | "lost";
-}
-
-export interface RecapImageInput {
-  puzzleId: string;
-  players: RecapImagePlayer[];
-  answerName?: string | null;
-}
-
-const RECAP_ROW_H = 44;
-const RECAP_ROW_GAP = 8;
-
-export function renderRecapImage(input: RecapImageInput): Buffer {
-  type Bucket = { label: string; count: number; tone: "win" | "loss" };
-  const winCounts = new Map<number, number>();
-  let lossCount = 0;
-  for (const p of input.players) {
-    if (p.status === "won") {
-      winCounts.set(p.guessesUsed, (winCounts.get(p.guessesUsed) ?? 0) + 1);
-    } else {
-      lossCount += 1;
-    }
-  }
-  const buckets: Bucket[] = [];
-  for (const n of [...winCounts.keys()].sort((a, b) => a - b)) {
-    buckets.push({ label: `${n}/6`, count: winCounts.get(n)!, tone: "win" });
-  }
-  if (lossCount > 0) buckets.push({ label: "X/6", count: lossCount, tone: "loss" });
-
-  const rows = Math.max(1, buckets.length);
-  const panelH = 24 * 2 + rows * RECAP_ROW_H + (rows - 1) * RECAP_ROW_GAP;
-  const footerH = input.answerName ? 36 : 0;
-  const height = TITLE_H + panelH + footerH + 24;
-
-  const canvas = createCanvas(WIDTH, height);
-  const ctx = canvas.getContext("2d");
-  ctx.fillStyle = BG;
-  ctx.fillRect(0, 0, WIDTH, height);
-
-  // Title.
-  ctx.fillStyle = TEXT;
-  ctx.font = "700 30px sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(`Holodle No. ${input.puzzleId}`, WIDTH / 2, 44);
-
-  ctx.fillStyle = SUBTEXT;
-  ctx.font = "500 16px sans-serif";
-  ctx.fillText("Yesterday's results", WIDTH / 2, 70);
-
-  // Panel.
-  const panelW = WIDTH - 48;
-  const panelX = (WIDTH - panelW) / 2;
-  const panelY = TITLE_H + 4;
-  drawPanel(ctx, panelX, panelY, panelW, panelH);
-
-  if (buckets.length === 0) {
-    ctx.fillStyle = SUBTEXT;
-    ctx.font = "500 18px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("No completed games in the past day.", WIDTH / 2, panelY + panelH / 2);
-  } else {
-    for (let i = 0; i < buckets.length; i++) {
-      const b = buckets[i];
-      if (!b) continue;
-      const rowY = panelY + 24 + i * (RECAP_ROW_H + RECAP_ROW_GAP);
-      // Chip.
-      const chipW = 64;
-      const chipX = panelX + 24;
-      ctx.fillStyle = b.tone === "win" ? PIP_WIN : PIP_USED;
-      roundedRect(ctx, chipX, rowY + 4, chipW, RECAP_ROW_H - 8, 8);
-      ctx.fill();
-      ctx.fillStyle = TEXT;
-      ctx.font = "700 18px sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(b.label, chipX + chipW / 2, rowY + RECAP_ROW_H / 2);
-
-      ctx.textAlign = "left";
-      ctx.fillStyle = TEXT;
-      ctx.font = "500 18px sans-serif";
-      const label = `${b.count} player${b.count === 1 ? "" : "s"}`;
-      ctx.fillText(label, chipX + chipW + 14, rowY + RECAP_ROW_H / 2);
-    }
-  }
-
-  if (input.answerName) {
-    ctx.fillStyle = SUBTEXT;
-    ctx.font = "500 15px sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(`Answer: ${input.answerName}`, WIDTH / 2, panelY + panelH + 18);
-  }
-
-  return canvas.toBuffer("image/png");
-}
-
-// ---------- shared shapes ------------------------------------------------
-
-function drawPanel(ctx: SKRSContext2D, x: number, y: number, w: number, h: number): void {
-  roundedRect(ctx, x, y, w, h, 14);
-  ctx.fillStyle = PANEL;
-  ctx.fill();
-  ctx.lineWidth = 1;
-  ctx.strokeStyle = PANEL_BORDER;
+  ctx.strokeStyle = TILE_BORDER;
   ctx.stroke();
 }
 
@@ -318,16 +446,14 @@ function roundedRect(
   ctx.closePath();
 }
 
-function truncate(ctx: SKRSContext2D, text: string, maxWidth: number): string {
-  if (ctx.measureText(text).width <= maxWidth) return text;
-  const ellipsis = "…";
-  let lo = 0;
-  let hi = text.length;
-  while (lo + 1 < hi) {
-    const mid = Math.floor((lo + hi) / 2);
-    const candidate = `${text.slice(0, mid)}${ellipsis}`;
-    if (ctx.measureText(candidate).width <= maxWidth) lo = mid;
-    else hi = mid;
-  }
-  return `${text.slice(0, lo)}${ellipsis}`;
+// ---------- Legacy recap (kept for fallback) -----------------------------
+
+export function renderRecapImage(input: RecapImageInput): Buffer {
+  // The recap now reuses renderNowPlayingImage via buildYesterdayRecapEmbed.
+  // This sync helper remains for any caller that wants a plain bucket image;
+  // current callers route through the async path.
+  void input;
+  throw new Error(
+    "renderRecapImage is deprecated — use renderNowPlayingImage with a subtitle for recap output.",
+  );
 }

@@ -11,7 +11,7 @@ import { StatsRow } from "./components/StatsRow.js";
 import { ResultPanel } from "./components/ResultPanel.js";
 import { GuessGrid } from "./components/GuessGrid.js";
 import { TalentAutocomplete } from "./components/TalentAutocomplete.js";
-import { PlayerList } from "./components/PlayerList.js";
+import { PlayerBoardSidebar } from "./components/PlayerBoardSidebar.js";
 import { HelpModal } from "./components/HelpModal.js";
 import { LoadingScreen } from "./components/LoadingScreen.js";
 
@@ -163,29 +163,31 @@ export function App(): JSX.Element {
   }
 
   return (
-    <main className="mx-auto flex min-h-full max-w-3xl flex-col">
-      <Header />
-      <StatusBanner />
-      <StatsRow />
-      <ResultPanel />
-      {emptyCatalog ? (
-        <div className="mx-4 my-6 rounded-2xl border border-dashed border-holo-muted/40 p-6 text-center text-sm text-holo-muted">
-          No talents loaded yet. Edit <code>talent_data.json</code> at the repo root to add some.
-        </div>
-      ) : (
-        <TalentAutocomplete onSubmit={handleGuess} disabled={inputDisabled} />
-      )}
-      <GuessGrid />
-      <PlayerList />
-      {error && (
-        <div className="mx-4 my-4 whitespace-pre-line rounded-xl border border-holo-bad/40 bg-holo-badBg/40 p-3 text-sm text-holo-bad">
-          {error}
-        </div>
-      )}
-      <footer className="mt-auto py-6 text-center text-xs text-holo-muted">
-        Holodle — Fan-made game. Not affiliated with Cover Corp.
-      </footer>
-      <HelpModal />
-    </main>
+    <div className="flex min-h-full">
+      <PlayerBoardSidebar />
+      <main className="mx-auto flex min-h-full max-w-3xl flex-1 flex-col">
+        <Header />
+        <StatusBanner />
+        <StatsRow />
+        <ResultPanel />
+        {emptyCatalog ? (
+          <div className="mx-4 my-6 rounded-2xl border border-dashed border-holo-muted/40 p-6 text-center text-sm text-holo-muted">
+            No talents loaded yet. Edit <code>talent_data.json</code> at the repo root to add some.
+          </div>
+        ) : (
+          <TalentAutocomplete onSubmit={handleGuess} disabled={inputDisabled} />
+        )}
+        <GuessGrid />
+        {error && (
+          <div className="mx-4 my-4 whitespace-pre-line rounded-xl border border-holo-bad/40 bg-holo-badBg/40 p-3 text-sm text-holo-bad">
+            {error}
+          </div>
+        )}
+        <footer className="mt-auto py-6 text-center text-xs text-holo-muted">
+          Holodle — Fan-made game. Not affiliated with Cover Corp.
+        </footer>
+        <HelpModal />
+      </main>
+    </div>
   );
 }
