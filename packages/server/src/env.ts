@@ -33,10 +33,11 @@ const EnvSchema = z.object({
   DB_PATH: z.string().default("./holodle.db"),
   DISCORD_CLIENT_ID: z.string().optional(),
   DISCORD_CLIENT_SECRET: z.string().optional(),
-  // Bot user token (separate from the OAuth client secret). Needed to post
-  // the exit and recap embeds via the Discord REST API. Optional in dev —
-  // when absent the bot module no-ops and logs a warning at boot.
-  DISCORD_BOT_TOKEN: z.string().optional(),
+  // Dev-portal "General Information → Public Key". Used to verify Ed25519
+  // signatures on incoming Discord interactions (POST /api/interactions).
+  // Without it, interactions can't be authenticated and Discord won't accept
+  // the endpoint at save time.
+  DISCORD_PUBLIC_KEY: z.string().optional(),
   CORS_ORIGINS: z.string().default("http://localhost:5173"),
   // Where the built client lives in production (Docker copies it here).
   CLIENT_DIST: z.string().default("../client/dist"),
@@ -50,4 +51,4 @@ export const corsOrigins = env.CORS_ORIGINS.split(",").map((s) => s.trim()).filt
 
 export const hasDiscordCreds = !!(env.DISCORD_CLIENT_ID && env.DISCORD_CLIENT_SECRET);
 
-export const hasBotToken = !!env.DISCORD_BOT_TOKEN;
+export const hasPublicKey = !!env.DISCORD_PUBLIC_KEY;

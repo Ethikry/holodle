@@ -5,9 +5,10 @@ import { MAX_GUESSES } from "@holodle/shared";
 import { requireUser } from "../auth/requireUser.js";
 import { loadUserDay, saveUserDay, settleDay } from "../db/client.js";
 import { compareGuess } from "../game/compare.js";
-import { dayIndexFor, pickDaily, safeTz } from "../game/dailyPicker.js";
+import { dayIndexFor, pickDaily, puzzleIdFor, safeTz } from "../game/dailyPicker.js";
 import { updateProgress } from "../game/instance.js";
 import { getRegistry } from "../game/talents.js";
+import { recordCompletion } from "../game/channelState.js";
 import { broadcastProgress } from "../ws/socket.js";
 
 const BodySchema = z.object({
@@ -99,6 +100,23 @@ export async function guessRoutes(app: FastifyInstance): Promise<void> {
     if (instanceId) {
       updateProgress(instanceId, user.id, row.guesses.length, row.status);
       broadcastProgress(instanceId, user.id, row.guesses.length, row.status);
+    }
+
+    // On terminal status, refresh the channel's now-playing embed via the
+    // freshest interaction token. Channel state is keyed by UTC puzzle id
+    // (the per-user `tz` only drives that user's own dayIndex). Fire and
+    // forget — a Discord outage must never fail this response.
+    if (row.channelId && (row.status === "won" || row.status === "lost")) {
+      const channelPuzzleId = puzzleIdFor(now, "UTC");
+      void recordCompletion(
+        user.id,
+        row.channelId,
+        channelPuzzleId,
+        row.guesses.length,
+        row.status,
+      ).catch((err) => {
+        req.log.error({ err }, "recordCompletion threw");
+      });
     }
 
     return response;

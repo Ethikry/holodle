@@ -1,0 +1,229 @@
+import type { FastifyInstance, FastifyRequest } from "fastify";
+import { env } from "../env.js";
+import { verifyInteractionSignature } from "../discord/verify.js";
+import {
+  buildNowPlayingEmbed,
+  buildYesterdayRecapEmbed,
+  getChannelState,
+  isRecapPosted,
+  listParticipants,
+  listYesterdayRecapPlayers,
+  postFollowup,
+  setChannelMessageId,
+  tryClaimRecapPosted,
+  upsertChannelToken,
+  upsertParticipant,
+} from "../game/channelState.js";
+import { puzzleIdFor } from "../game/dailyPicker.js";
+import { patchFollowup } from "../discord/followups.js";
+
+// Discord interaction types.
+const TYPE_PING = 1;
+const TYPE_APPLICATION_COMMAND = 2;
+const RESPONSE_PONG = 1;
+const RESPONSE_LAUNCH_ACTIVITY = 12;
+const ONE_DAY_MS = 86_400_000;
+
+interface InteractionUser {
+  id: string;
+  username?: string;
+  global_name?: string | null;
+}
+
+interface InteractionMember {
+  user?: InteractionUser;
+  nick?: string | null;
+}
+
+interface InteractionPayload {
+  type: number;
+  application_id?: string;
+  token?: string;
+  channel_id?: string;
+  guild_id?: string | null;
+  data?: { name?: string };
+  member?: InteractionMember;
+  user?: InteractionUser;
+}
+
+function pickUser(p: InteractionPayload): InteractionUser | null {
+  return p.member?.user ?? p.user ?? null;
+}
+
+function pickDisplayName(p: InteractionPayload, user: InteractionUser): string {
+  return (
+    p.member?.nick ||
+    user.global_name ||
+    user.username ||
+    user.id
+  );
+}
+
+// Channel-day puzzle id is UTC-anchored so two viewers in different
+// timezones see the same channel embed. Per-user puzzles still use the
+// user's own tz inside /api/guess.
+function channelPuzzleId(nowMs: number): string {
+  return puzzleIdFor(nowMs, "UTC");
+}
+function channelYesterdayId(nowMs: number): string {
+  return puzzleIdFor(nowMs - ONE_DAY_MS, "UTC");
+}
+
+export async function interactionsRoutes(app: FastifyInstance): Promise<void> {
+  // Override the JSON body parser for this route only so we keep raw bytes
+  // for Ed25519 verification. Without `parseAs: 'buffer'`, Fastify hands us
+  // a parsed object whose re-serialization is not byte-stable.
+  app.addContentTypeParser(
+    "application/json",
+    { parseAs: "buffer" },
+    (_req, body, done) => {
+      // Body is delivered as Buffer; expose it on the request via a symbol so
+      // the handler can re-read it after Fastify hands back the parsed JSON.
+      try {
+        const raw = body as Buffer;
+        const parsed = raw.length === 0 ? {} : JSON.parse(raw.toString("utf8"));
+        // Stash the raw buffer on the parsed value so the handler can pluck
+        // it without a second body read.
+        Object.defineProperty(parsed, RAW_BODY_SYMBOL, {
+          value: raw,
+          enumerable: false,
+        });
+        done(null, parsed);
+      } catch (err) {
+        done(err instanceof Error ? err : new Error(String(err)), undefined);
+      }
+    },
+  );
+
+  app.post("/api/interactions", async (req, reply) => {
+    const signature = headerString(req, "x-signature-ed25519");
+    const timestamp = headerString(req, "x-signature-timestamp");
+    const body = req.body as Record<string | symbol, unknown>;
+    const rawBody = body?.[RAW_BODY_SYMBOL] as Buffer | undefined;
+
+    if (!env.DISCORD_PUBLIC_KEY) {
+      req.log.error("DISCORD_PUBLIC_KEY missing — refusing interaction");
+      reply.code(401);
+      return { error: "Server not configured" };
+    }
+    if (!signature || !timestamp || !rawBody) {
+      reply.code(401);
+      return { error: "Missing signature headers" };
+    }
+    const ok = verifyInteractionSignature({
+      rawBody,
+      signature,
+      timestamp,
+      publicKey: env.DISCORD_PUBLIC_KEY,
+    });
+    if (!ok) {
+      reply.code(401);
+      return { error: "Invalid request signature" };
+    }
+
+    const payload = body as unknown as InteractionPayload;
+
+    if (payload.type === TYPE_PING) {
+      return { type: RESPONSE_PONG };
+    }
+
+    if (
+      payload.type === TYPE_APPLICATION_COMMAND &&
+      payload.data?.name?.toLowerCase() === "launch"
+    ) {
+      // Kick off the follow-up posting asynchronously. Discord requires us
+      // to respond within 3 seconds — embed posting/editing is too slow to
+      // do inline. We fire-and-forget; failures are logged but never block
+      // the activity launch.
+      handleLaunch(payload).catch((err) => {
+        req.log.error({ err }, "interaction follow-up failed");
+      });
+      return { type: RESPONSE_LAUNCH_ACTIVITY };
+    }
+
+    reply.code(400);
+    return { error: "Unsupported interaction" };
+  });
+}
+
+async function handleLaunch(payload: InteractionPayload): Promise<void> {
+  const applicationId = payload.application_id;
+  const token = payload.token;
+  const channelId = payload.channel_id;
+  if (!applicationId || !token || !channelId) return;
+  const user = pickUser(payload);
+  if (!user) return;
+
+  const nowMs = Date.now();
+  const puzzleId = channelPuzzleId(nowMs);
+  const yesterdayId = channelYesterdayId(nowMs);
+  const displayName = pickDisplayName(payload, user);
+
+  // 1) Yesterday's recap (fire-and-forget, no message_id capture).
+  if (!isRecapPosted(channelId, yesterdayId)) {
+    const players = listYesterdayRecapPlayers(channelId, yesterdayId);
+    if (players.length > 0 && tryClaimRecapPosted(channelId, yesterdayId)) {
+      const embed = buildYesterdayRecapEmbed({
+        puzzleId: yesterdayId,
+        players,
+      });
+      try {
+        await postFollowup(applicationId, token, { embeds: [embed] });
+      } catch (err) {
+        console.error("[interactions] recap follow-up failed:", err);
+      }
+    }
+  }
+
+  // 2) Refresh channel_daily_state with the new token before any posting —
+  //    that way recordCompletion calls from /api/guess will use the latest
+  //    one immediately.
+  const state = upsertChannelToken(channelId, puzzleId, token, applicationId);
+
+  // 3) Register this user as a participant (idempotent — keeps their progress).
+  upsertParticipant({
+    channelId,
+    puzzleId,
+    userId: user.id,
+    displayName,
+  });
+
+  const participants = listParticipants(channelId, puzzleId);
+  const { embed, components } = buildNowPlayingEmbed({
+    puzzleId,
+    participants,
+    applicationId,
+  });
+
+  if (!state.messageId) {
+    try {
+      const posted = await postFollowup(
+        applicationId,
+        token,
+        { embeds: [embed], components },
+        { wait: true },
+      );
+      if (posted) setChannelMessageId(channelId, puzzleId, posted.id);
+    } catch (err) {
+      console.error("[interactions] now-playing post failed:", err);
+    }
+  } else {
+    try {
+      await patchFollowup(applicationId, token, state.messageId, {
+        embeds: [embed],
+        components,
+      });
+    } catch (err) {
+      console.error("[interactions] now-playing patch failed:", err);
+    }
+  }
+}
+
+const RAW_BODY_SYMBOL = Symbol.for("holodle.rawBody");
+
+function headerString(req: FastifyRequest, name: string): string | null {
+  const v = req.headers[name];
+  if (Array.isArray(v)) return v[0] ?? null;
+  if (typeof v === "string") return v;
+  return null;
+}
