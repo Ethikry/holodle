@@ -155,7 +155,17 @@ Then in Discord:
 2. Click the Activities (rocket) icon and pick your app.
 3. The iframe loads the tunnel URL; hot-reload works through Vite.
 
-## Production deploy (Fly.io)
+## Production deploy
+
+Two supported targets:
+
+- **Oracle Cloud (Always Free, arm64 + cloudflared)** — see
+  [`docs/oracle-cloud-deploy.md`](docs/oracle-cloud-deploy.md). Uses the
+  bundled `docker-compose.yml` with a Cloudflare Tunnel sidecar; no inbound
+  ports required.
+- **Fly.io** — see below.
+
+### Fly.io
 
 ```bash
 fly launch --no-deploy            # accepts the bundled fly.toml

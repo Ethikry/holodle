@@ -2,17 +2,48 @@ services:
   holodle:
     build: .
     image: holodle:local
+    restart: unless-stopped
+    expose:
+      - "3001"
     ports:
-      - "3001:3001"
+      # Bind to localhost only — the public surface is the cloudflared tunnel.
+      # Override to "0.0.0.0:3001:3001" for local docker-compose smoke tests.
+      - "127.0.0.1:3001:3001"
     environment:
       NODE_ENV: production
       PORT: 3001
       DB_PATH: /data/holodle.db
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
       DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-https://discord.com}
     volumes:
       - holodle_data:/data
+
+  # Cloudflare Tunnel sidecar. Two modes:
+  #
+  #   1. Quick Tunnel (default below): no domain needed, but the
+  #      *.trycloudflare.com URL changes on every restart, so Discord URL
+  #      Mappings break each time. Fine for first-boot validation.
+  #
+  #   2. Named Tunnel (recommended for keeping a stable URL): create a tunnel
+  #      in the Cloudflare Zero Trust dashboard, copy the token, set
+  #      CLOUDFLARED_TOKEN in .env, and switch `command:` to:
+  #         tunnel --no-autoupdate run --token ${CLOUDFLARED_TOKEN}
+  #      Requires a domain on Cloudflare DNS.
+  #
+  # cloudflared connects OUTBOUND to Cloudflare's edge, so no inbound ports
+  # need to be opened on the Oracle Cloud security list / VCN.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    depends_on:
+      - holodle
+    command: tunnel --no-autoupdate --url http://holodle:3001
+    # Uncomment for Named Tunnel mode:
+    # command: tunnel --no-autoupdate run --token ${CLOUDFLARED_TOKEN}
+    # environment:
+    #   TUNNEL_TOKEN: ${CLOUDFLARED_TOKEN:-}
 
 volumes:
   holodle_data:

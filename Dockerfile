@@ -1,6 +1,9 @@
 # syntax=docker/dockerfile:1.7
 
 # --- builder: install deps + build all packages ---
+# Multi-arch: builds natively on arm64 (e.g. Oracle Cloud Ampere A1) or x86_64.
+# better-sqlite3 has no prebuilt for alpine+arm64 + Node 20, so we always
+# compile it from source — python3/make/g++ below cover that.
 FROM node:20-alpine AS builder
 RUN apk add --no-cache python3 make g++ libc6-compat
 WORKDIR /app
@@ -28,8 +31,10 @@ RUN pnpm --filter @holodle/shared build \
  && pnpm --filter @holodle/server build
 
 # --- runner: prod deps only + built artifacts ---
+# better-sqlite3 has no musl+arm64 prebuilt, so the prod `pnpm install` below
+# rebuilds it from source — keep python3/make/g++ in this stage too.
 FROM node:20-alpine AS runner
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache python3 make g++ libc6-compat
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3001
