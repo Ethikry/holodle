@@ -49,7 +49,7 @@ COPY packages/client/package.json packages/client/
 
 RUN pnpm install --prod --frozen-lockfile --filter @holodle/server... || pnpm install --prod --filter @holodle/server...
 
-COPY --from=builder /app/packages/shared/src packages/shared/src
+COPY --from=builder /app/packages/shared/dist packages/shared/dist
 COPY --from=builder /app/packages/server/dist packages/server/dist
 COPY --from=builder /app/packages/client/dist packages/client/dist
 COPY --from=builder /app/talent_data.json ./talent_data.json
