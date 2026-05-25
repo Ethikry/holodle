@@ -2,7 +2,7 @@
   {
     "id": "tokino-sora",
     "name": "Tokino Sora",
-    "avatarUrl": "/avatars/tokino-sora.png",
+    "avatarUrl": "/avatars/tokino-sora.webp",
     "branch": "JP",
     "generation": "Gen 0",
     "debutYear": 2017,
@@ -14,7 +14,7 @@
   {
     "id": "roboco-san",
     "name": "Robocosan",
-    "avatarUrl": "/avatars/roboco-san.png",
+    "avatarUrl": "/avatars/roboco-san.webp",
     "branch": "JP",
     "generation": "Gen 0",
     "debutYear": 2018,
@@ -26,7 +26,7 @@
   {
     "id": "sakuramiko",
     "name": "Sakura Miko",
-    "avatarUrl": "/avatars/sakuramiko.png",
+    "avatarUrl": "/avatars/sakuramiko.webp",
     "branch": "JP",
     "generation": "Gen 0",
     "debutYear": 2018,
@@ -38,7 +38,7 @@
   {
     "id": "hoshimachi-suisei",
     "name": "Hoshimachi Suisei",
-    "avatarUrl": "/avatars/hoshimachi-suisei.png",
+    "avatarUrl": "/avatars/hoshimachi-suisei.webp",
     "branch": "JP",
     "generation": "Gen 0",
     "debutYear": 2018,
@@ -50,7 +50,7 @@
   {
     "id": "azki",
     "name": "AZKi",
-    "avatarUrl": "/avatars/azki.png",
+    "avatarUrl": "/avatars/azki.webp",
     "branch": "JP",
     "generation": "Gen 0",
     "debutYear": 2018,
@@ -62,7 +62,7 @@
   {
     "id": "aki-rosenthal",
     "name": "Aki Rosenthal",
-    "avatarUrl": "/avatars/aki-rosenthal.png",
+    "avatarUrl": "/avatars/aki-rosenthal.webp",
     "branch": "JP",
     "generation": "Gen 1",
     "debutYear": 2018,
@@ -74,7 +74,7 @@
   {
     "id": "akai-haato",
     "name": "Akai Haato",
-    "avatarUrl": "/avatars/akai-haato.png",
+    "avatarUrl": "/avatars/akai-haato.webp",
     "branch": "JP",
     "generation": "Gen 1",
     "debutYear": 2018,
@@ -86,7 +86,7 @@
   {
     "id": "shirakami-fubuki",
     "name": "Shirakami Fubuki",
-    "avatarUrl": "/avatars/shirakami-fubuki.png",
+    "avatarUrl": "/avatars/shirakami-fubuki.webp",
     "branch": "JP",
     "generation": "GAMERS",
     "debutYear": 2018,
@@ -98,7 +98,7 @@
   {
     "id": "natsuiro-matsuri",
     "name": "Natsuiro Matsuri",
-    "avatarUrl": "/avatars/natsuiro-matsuri.png",
+    "avatarUrl": "/avatars/natsuiro-matsuri.webp",
     "branch": "JP",
     "generation": "Gen 1",
     "debutYear": 2018,
@@ -110,7 +110,7 @@
   {
     "id": "yozora-mel",
     "name": "Yozora Mel",
-    "avatarUrl": "/avatars/yozora-mel.png",
+    "avatarUrl": "/avatars/yozora-mel.webp",
     "branch": "JP",
     "generation": "Gen 1",
     "debutYear": 2018,
@@ -122,7 +122,7 @@
   {
     "id": "minato-aqua",
     "name": "Minato Aqua",
-    "avatarUrl": "/avatars/minato-aqua.png",
+    "avatarUrl": "/avatars/minato-aqua.webp",
     "branch": "JP",
     "generation": "Gen 2",
     "debutYear": 2018,
@@ -134,7 +134,7 @@
   {
     "id": "murasaki-shion",
     "name": "Murasaki Shion",
-    "avatarUrl": "/avatars/murasaki-shion.png",
+    "avatarUrl": "/avatars/murasaki-shion.webp",
     "branch": "JP",
     "generation": "Gen 2",
     "debutYear": 2018,
@@ -146,7 +146,7 @@
   {
     "id": "nakiri-ayame",
     "name": "Nakiri Ayame",
-    "avatarUrl": "/avatars/nakiri-ayame.png",
+    "avatarUrl": "/avatars/nakiri-ayame.webp",
     "branch": "JP",
     "generation": "Gen 2",
     "debutYear": 2018,
@@ -158,7 +158,7 @@
   {
     "id": "yuzuki-choco",
     "name": "Yuzuki Choco",
-    "avatarUrl": "/avatars/yuzuki-choco.png",
+    "avatarUrl": "/avatars/yuzuki-choco.webp",
     "branch": "JP",
     "generation": "Gen 2",
     "debutYear": 2018,
@@ -170,11 +170,11 @@
   {
     "id": "oozora-subaru",
     "name": "Oozora Subaru",
-    "avatarUrl": "/avatars/oozora-subaru.png",
+    "avatarUrl": "/avatars/oozora-subaru.webp",
     "branch": "JP",
     "generation": "Gen 2",
     "debutYear": 2018,
-    "archetype": "Human",
+    "archetype": "Animal",
     "heightCm": 154,
     "birthMonth": "July",
     "active": true
@@ -182,7 +182,7 @@
   {
     "id": "ookami-mio",
     "name": "Ookami Mio",
-    "avatarUrl": "/avatars/ookami-mio.png",
+    "avatarUrl": "/avatars/ookami-mio.webp",
     "branch": "JP",
     "generation": "GAMERS",
     "debutYear": 2018,
@@ -194,7 +194,7 @@
   {
     "id": "nekomata-okayu",
     "name": "Nekomata Okayu",
-    "avatarUrl": "/avatars/nekomata-okayu.png",
+    "avatarUrl": "/avatars/nekomata-okayu.webp",
     "branch": "JP",
     "generation": "GAMERS",
     "debutYear": 2019,
@@ -206,7 +206,7 @@
   {
     "id": "inugami-korone",
     "name": "Inugami Korone",
-    "avatarUrl": "/avatars/inugami-korone.png",
+    "avatarUrl": "/avatars/inugami-korone.webp",
     "branch": "JP",
     "generation": "GAMERS",
     "debutYear": 2019,
@@ -218,7 +218,7 @@
   {
     "id": "usada-pekora",
     "name": "Usada Pekora",
-    "avatarUrl": "/avatars/usada-pekora.png",
+    "avatarUrl": "/avatars/usada-pekora.webp",
     "branch": "JP",
     "generation": "Gen 3",
     "debutYear": 2019,
@@ -230,7 +230,7 @@
   {
     "id": "shiranui-flare",
     "name": "Shiranui Flare",
-    "avatarUrl": "/avatars/shiranui-flare.png",
+    "avatarUrl": "/avatars/shiranui-flare.webp",
     "branch": "JP",
     "generation": "Gen 3",
     "debutYear": 2019,
@@ -242,7 +242,7 @@
   {
     "id": "shirogane-noel",
     "name": "Shirogane Noel",
-    "avatarUrl": "/avatars/shirogane-noel.png",
+    "avatarUrl": "/avatars/shirogane-noel.webp",
     "branch": "JP",
     "generation": "Gen 3",
     "debutYear": 2019,
@@ -254,7 +254,7 @@
   {
     "id": "houshou-marine",
     "name": "Houshou Marine",
-    "avatarUrl": "/avatars/houshou-marine.png",
+    "avatarUrl": "/avatars/houshou-marine.webp",
     "branch": "JP",
     "generation": "Gen 3",
     "debutYear": 2019,
@@ -266,7 +266,7 @@
   {
     "id": "uruha-rushia",
     "name": "Uruha Rushia",
-    "avatarUrl": "/avatars/uruha-rushia.png",
+    "avatarUrl": "/avatars/uruha-rushia.webp",
     "branch": "JP",
     "generation": "Gen 3",
     "debutYear": 2019,
@@ -278,7 +278,7 @@
   {
     "id": "amane-kanata",
     "name": "Amane Kanata",
-    "avatarUrl": "/avatars/amane-kanata.png",
+    "avatarUrl": "/avatars/amane-kanata.webp",
     "branch": "JP",
     "generation": "Gen 4",
     "debutYear": 2019,
@@ -290,7 +290,7 @@
   {
     "id": "tsunomaki-watame",
     "name": "Tsunomaki Watame",
-    "avatarUrl": "/avatars/tsunomaki-watame.png",
+    "avatarUrl": "/avatars/tsunomaki-watame.webp",
     "branch": "JP",
     "generation": "Gen 4",
     "debutYear": 2019,
@@ -302,7 +302,7 @@
   {
     "id": "tokoyami-towa",
     "name": "Tokoyami Towa",
-    "avatarUrl": "/avatars/tokoyami-towa.png",
+    "avatarUrl": "/avatars/tokoyami-towa.webp",
     "branch": "JP",
     "generation": "Gen 4",
     "debutYear": 2020,
@@ -314,7 +314,7 @@
   {
     "id": "himemori-luna",
     "name": "Himemori Luna",
-    "avatarUrl": "/avatars/himemori-luna.png",
+    "avatarUrl": "/avatars/himemori-luna.webp",
     "branch": "JP",
     "generation": "Gen 4",
     "debutYear": 2020,
@@ -326,11 +326,11 @@
   {
     "id": "kiryu-coco",
     "name": "Kiryu Coco",
-    "avatarUrl": "/avatars/kiryu-coco.png",
+    "avatarUrl": "/avatars/kiryu-coco.webp",
     "branch": "JP",
     "generation": "Gen 4",
     "debutYear": 2019,
-    "archetype": "Animal",
+    "archetype": "Dragon",
     "heightCm": 180,
     "birthMonth": "June",
     "active": false
@@ -338,7 +338,7 @@
   {
     "id": "yukihana-lamy",
     "name": "Yukihana Lamy",
-    "avatarUrl": "/avatars/yukihana-lamy.png",
+    "avatarUrl": "/avatars/yukihana-lamy.webp",
     "branch": "JP",
     "generation": "Gen 5",
     "debutYear": 2020,
@@ -350,7 +350,7 @@
   {
     "id": "momosuzu-nene",
     "name": "Momosuzu Nene",
-    "avatarUrl": "/avatars/momosuzu-nene.png",
+    "avatarUrl": "/avatars/momosuzu-nene.webp",
     "branch": "JP",
     "generation": "Gen 5",
     "debutYear": 2020,
@@ -362,7 +362,7 @@
   {
     "id": "shishiro-botan",
     "name": "Shishiro Botan",
-    "avatarUrl": "/avatars/shishiro-botan.png",
+    "avatarUrl": "/avatars/shishiro-botan.webp",
     "branch": "JP",
     "generation": "Gen 5",
     "debutYear": 2020,
@@ -374,7 +374,7 @@
   {
     "id": "omaru-polka",
     "name": "Omaru Polka",
-    "avatarUrl": "/avatars/omaru-polka.png",
+    "avatarUrl": "/avatars/omaru-polka.webp",
     "branch": "JP",
     "generation": "Gen 5",
     "debutYear": 2020,
@@ -383,14 +383,26 @@
     "birthMonth": "January",
     "active": true
   },
+    {
+    "id": "mano-aloe",
+    "name": "Mano Aloe",
+    "avatarUrl": "/avatars/mano-aloe.webp",
+    "branch": "JP",
+    "generation": "Gen 5",
+    "debutYear": 2020,
+    "archetype": "Devil",
+    "heightCm": 150,
+    "birthMonth": "October",
+    "active": false
+  },
   {
     "id": "la-darknesss",
     "name": "La+ Darknesss",
-    "avatarUrl": "/avatars/la-darknesss.png",
+    "avatarUrl": "/avatars/la-darknesss.webp",
     "branch": "JP",
     "generation": "holoX",
     "debutYear": 2021,
-    "archetype": "Demon",
+    "archetype": "Alien",
     "heightCm": 139,
     "birthMonth": "May",
     "active": true
@@ -398,11 +410,11 @@
   {
     "id": "takane-lui",
     "name": "Takane Lui",
-    "avatarUrl": "/avatars/takane-lui.png",
+    "avatarUrl": "/avatars/takane-lui.webp",
     "branch": "JP",
     "generation": "holoX",
     "debutYear": 2021,
-    "archetype": "Human",
+    "archetype": "Animal",
     "heightCm": 161,
     "birthMonth": "June",
     "active": true
@@ -410,7 +422,7 @@
   {
     "id": "hakui-koyori",
     "name": "Hakui Koyori",
-    "avatarUrl": "/avatars/hakui-koyori.png",
+    "avatarUrl": "/avatars/hakui-koyori.webp",
     "branch": "JP",
     "generation": "holoX",
     "debutYear": 2021,
@@ -422,11 +434,11 @@
   {
     "id": "sakamata-chloe",
     "name": "Sakamata Chloe",
-    "avatarUrl": "/avatars/sakamata-chloe.png",
+    "avatarUrl": "/avatars/sakamata-chloe.webp",
     "branch": "JP",
     "generation": "holoX",
     "debutYear": 2021,
-    "archetype": "Shinigami",
+    "archetype": "Animal",
     "heightCm": 148,
     "birthMonth": "May",
     "active": true
@@ -434,7 +446,7 @@
   {
     "id": "kazama-iroha",
     "name": "Kazama Iroha",
-    "avatarUrl": "/avatars/kazama-iroha.png",
+    "avatarUrl": "/avatars/kazama-iroha.webp",
     "branch": "JP",
     "generation": "holoX",
     "debutYear": 2021,
@@ -446,7 +458,7 @@
   {
     "id": "ayunda-risu",
     "name": "Ayunda Risu",
-    "avatarUrl": "/avatars/ayunda-risu.png",
+    "avatarUrl": "/avatars/ayunda-risu.webp",
     "branch": "ID",
     "generation": "Gen 1",
     "debutYear": 2020,
@@ -458,7 +470,7 @@
   {
     "id": "moona-hoshinova",
     "name": "Moona Hoshinova",
-    "avatarUrl": "/avatars/moona-hoshinova.png",
+    "avatarUrl": "/avatars/moona-hoshinova.webp",
     "branch": "ID",
     "generation": "Gen 1",
     "debutYear": 2020,
@@ -470,7 +482,7 @@
   {
     "id": "airani-iofifteen",
     "name": "Airani Iofifteen",
-    "avatarUrl": "/avatars/airani-iofifteen.png",
+    "avatarUrl": "/avatars/airani-iofifteen.webp",
     "branch": "ID",
     "generation": "Gen 1",
     "debutYear": 2020,
@@ -482,7 +494,7 @@
   {
     "id": "kureiji-ollie",
     "name": "Kureiji Ollie",
-    "avatarUrl": "/avatars/kureiji-ollie.png",
+    "avatarUrl": "/avatars/kureiji-ollie.webp",
     "branch": "ID",
     "generation": "Gen 2",
     "debutYear": 2020,
@@ -494,7 +506,7 @@
   {
     "id": "anya-melfissa",
     "name": "Anya Melfissa",
-    "avatarUrl": "/avatars/anya-melfissa.png",
+    "avatarUrl": "/avatars/anya-melfissa.webp",
     "branch": "ID",
     "generation": "Gen 2",
     "debutYear": 2020,
@@ -506,7 +518,7 @@
   {
     "id": "pavolia-reine",
     "name": "Pavolia Reine",
-    "avatarUrl": "/avatars/pavolia-reine.png",
+    "avatarUrl": "/avatars/pavolia-reine.webp",
     "branch": "ID",
     "generation": "Gen 2",
     "debutYear": 2020,
@@ -518,7 +530,7 @@
   {
     "id": "vestia-zeta",
     "name": "Vestia Zeta",
-    "avatarUrl": "/avatars/vestia-zeta.png",
+    "avatarUrl": "/avatars/vestia-zeta.webp",
     "branch": "ID",
     "generation": "Gen 3",
     "debutYear": 2022,
@@ -530,7 +542,7 @@
   {
     "id": "kaela-kovalskia",
     "name": "Kaela Kovalskia",
-    "avatarUrl": "/avatars/kaela-kovalskia.png",
+    "avatarUrl": "/avatars/kaela-kovalskia.webp",
     "branch": "ID",
     "generation": "Gen 3",
     "debutYear": 2022,
@@ -542,7 +554,7 @@
   {
     "id": "kobo-kanaeru",
     "name": "Kobo Kanaeru",
-    "avatarUrl": "/avatars/kobo-kanaeru.png",
+    "avatarUrl": "/avatars/kobo-kanaeru.webp",
     "branch": "ID",
     "generation": "Gen 3",
     "debutYear": 2022,
@@ -554,11 +566,11 @@
   {
     "id": "mori-calliope",
     "name": "Mori Calliope",
-    "avatarUrl": "/avatars/mori-calliope.png",
+    "avatarUrl": "/avatars/mori-calliope.webp",
     "branch": "EN",
     "generation": "Myth",
     "debutYear": 2020,
-    "archetype": "Shinigami",
+    "archetype": "Reaper",
     "heightCm": 167,
     "birthMonth": "April",
     "active": true
@@ -566,7 +578,7 @@
   {
     "id": "takanashi-kiara",
     "name": "Takanashi Kiara",
-    "avatarUrl": "/avatars/takanashi-kiara.png",
+    "avatarUrl": "/avatars/takanashi-kiara.webp",
     "branch": "EN",
     "generation": "Myth",
     "debutYear": 2020,
@@ -578,11 +590,11 @@
   {
     "id": "ninomae-inanis",
     "name": "Ninomae Ina'nis",
-    "avatarUrl": "/avatars/ninomae-inanis.png",
+    "avatarUrl": "/avatars/ninomae-inanis.webp",
     "branch": "EN",
     "generation": "Myth",
     "debutYear": 2020,
-    "archetype": "Priestess",
+    "archetype": "Human",
     "heightCm": 157,
     "birthMonth": "May",
     "active": true
@@ -590,7 +602,7 @@
   {
     "id": "watson-amelia",
     "name": "Watson Amelia",
-    "avatarUrl": "/avatars/watson-amelia.png",
+    "avatarUrl": "/avatars/watson-amelia.webp",
     "branch": "EN",
     "generation": "Myth",
     "debutYear": 2020,
@@ -602,7 +614,7 @@
   {
     "id": "gawr-gura",
     "name": "Gawr Gura",
-    "avatarUrl": "/avatars/gawr-gura.png",
+    "avatarUrl": "/avatars/gawr-gura.webp",
     "branch": "EN",
     "generation": "Myth",
     "debutYear": 2020,
@@ -614,7 +626,7 @@
   {
     "id": "irys",
     "name": "IRyS",
-    "avatarUrl": "/avatars/irys.png",
+    "avatarUrl": "/avatars/irys.webp",
     "branch": "EN",
     "generation": "Project: HOPE",
     "debutYear": 2021,
@@ -626,11 +638,11 @@
   {
     "id": "tsukumo-sana",
     "name": "Tsukumo Sana",
-    "avatarUrl": "/avatars/tsukumo-sana.png",
+    "avatarUrl": "/avatars/tsukumo-sana.webp",
     "branch": "EN",
     "generation": "Council",
     "debutYear": 2021,
-    "archetype": "Cosmos",
+    "archetype": "Space",
     "heightCm": 169,
     "birthMonth": "June",
     "active": false
@@ -638,11 +650,11 @@
   {
     "id": "ceres-fauna",
     "name": "Ceres Fauna",
-    "avatarUrl": "/avatars/ceres-fauna.png",
+    "avatarUrl": "/avatars/ceres-fauna.webp",
     "branch": "EN",
     "generation": "Promise",
     "debutYear": 2021,
-    "archetype": "Druid",
+    "archetype": "Kirin",
     "heightCm": 164,
     "birthMonth": "March",
     "active": false
@@ -650,7 +662,7 @@
   {
     "id": "ouro-kronii",
     "name": "Ouro Kronii",
-    "avatarUrl": "/avatars/ouro-kronii.png",
+    "avatarUrl": "/avatars/ouro-kronii.webp",
     "branch": "EN",
     "generation": "Promise",
     "debutYear": 2021,
@@ -662,11 +674,11 @@
   {
     "id": "nanashi-mumei",
     "name": "Nanashi Mumei",
-    "avatarUrl": "/avatars/nanashi-mumei.png",
+    "avatarUrl": "/avatars/nanashi-mumei.webp",
     "branch": "EN",
     "generation": "Promise",
     "debutYear": 2021,
-    "archetype": "Civilization",
+    "archetype": "Animal",
     "heightCm": 156,
     "birthMonth": "August",
     "active": false
@@ -674,7 +686,7 @@
   {
     "id": "hakos-baelz",
     "name": "Hakos Baelz",
-    "avatarUrl": "/avatars/hakos-baelz.png",
+    "avatarUrl": "/avatars/hakos-baelz.webp",
     "branch": "EN",
     "generation": "Promise",
     "debutYear": 2021,
@@ -686,7 +698,7 @@
   {
     "id": "shiori-novella",
     "name": "Shiori Novella",
-    "avatarUrl": "/avatars/shiori-novella.png",
+    "avatarUrl": "/avatars/shiori-novella.webp",
     "branch": "EN",
     "generation": "Advent",
     "debutYear": 2023,
@@ -698,11 +710,11 @@
   {
     "id": "koseki-bijou",
     "name": "Koseki Bijou",
-    "avatarUrl": "/avatars/koseki-bijou.png",
+    "avatarUrl": "/avatars/koseki-bijou.webp",
     "branch": "EN",
     "generation": "Advent",
     "debutYear": 2023,
-    "archetype": "Gnome",
+    "archetype": "Rock",
     "heightCm": 140,
     "birthMonth": "April",
     "active": true
@@ -710,11 +722,11 @@
   {
     "id": "nerissa-ravencroft",
     "name": "Nerissa Ravencroft",
-    "avatarUrl": "/avatars/nerissa-ravencroft.png",
+    "avatarUrl": "/avatars/nerissa-ravencroft.webp",
     "branch": "EN",
     "generation": "Advent",
     "debutYear": 2023,
-    "archetype": "Valkyrie",
+    "archetype": "Devil",
     "heightCm": 175,
     "birthMonth": "November",
     "active": true
@@ -722,7 +734,7 @@
   {
     "id": "fuwawa-abyssgard",
     "name": "Fuwawa Abyssgard",
-    "avatarUrl": "/avatars/fuwawa-abyssgard.png",
+    "avatarUrl": "/avatars/fuwawa-abyssgard.webp",
     "branch": "EN",
     "generation": "Advent",
     "debutYear": 2023,
@@ -734,7 +746,7 @@
   {
     "id": "mococo-abyssgard",
     "name": "Mococo Abyssgard",
-    "avatarUrl": "/avatars/mococo-abyssgard.png",
+    "avatarUrl": "/avatars/mococo-abyssgard.webp",
     "branch": "EN",
     "generation": "Advent",
     "debutYear": 2023,
@@ -746,11 +758,11 @@
   {
     "id": "elizabeth-rose-bloodflame",
     "name": "Elizabeth Rose Bloodflame",
-    "avatarUrl": "/avatars/elizabeth-rose-bloodflame.png",
+    "avatarUrl": "/avatars/elizabeth-rose-bloodflame.webp",
     "branch": "EN",
     "generation": "Justice",
     "debutYear": 2024,
-    "archetype": "Vampire",
+    "archetype": "Human",
     "heightCm": 171,
     "birthMonth": "April",
     "active": true
@@ -758,11 +770,11 @@
   {
     "id": "gigi-murin",
     "name": "Gigi Murin",
-    "avatarUrl": "/avatars/gigi-murin.png",
+    "avatarUrl": "/avatars/gigi-murin.webp",
     "branch": "EN",
     "generation": "Justice",
     "debutYear": 2024,
-    "archetype": "Gargoyle",
+    "archetype": "Human",
     "heightCm": 153,
     "birthMonth": "October",
     "active": true
@@ -770,11 +782,11 @@
   {
     "id": "cecilia-immergreen",
     "name": "Cecilia Immergreen",
-    "avatarUrl": "/avatars/cecilia-immergreen.png",
+    "avatarUrl": "/avatars/cecilia-immergreen.webp",
     "branch": "EN",
     "generation": "Justice",
     "debutYear": 2024,
-    "archetype": "Android",
+    "archetype": "Robot",
     "heightCm": 162,
     "birthMonth": "November",
     "active": true
@@ -782,7 +794,7 @@
   {
     "id": "raora-panthera",
     "name": "Raora Panthera",
-    "avatarUrl": "/avatars/raora-panthera.png",
+    "avatarUrl": "/avatars/raora-panthera.webp",
     "branch": "EN",
     "generation": "Justice",
     "debutYear": 2024,
@@ -794,7 +806,7 @@
   {
     "id": "otonose-kanade",
     "name": "Otonose Kanade",
-    "avatarUrl": "/avatars/otonose-kanade.png",
+    "avatarUrl": "/avatars/otonose-kanade.webp",
     "branch": "DEV_IS",
     "generation": "ReGLOSS",
     "debutYear": 2023,
@@ -806,7 +818,7 @@
   {
     "id": "ichijou-ririka",
     "name": "Ichijou Ririka",
-    "avatarUrl": "/avatars/ichijou-ririka.png",
+    "avatarUrl": "/avatars/ichijou-ririka.webp",
     "branch": "DEV_IS",
     "generation": "ReGLOSS",
     "debutYear": 2023,
@@ -818,7 +830,7 @@
   {
     "id": "juufuutei-raden",
     "name": "Juufuutei Raden",
-    "avatarUrl": "/avatars/juufuutei-raden.png",
+    "avatarUrl": "/avatars/juufuutei-raden.webp",
     "branch": "DEV_IS",
     "generation": "ReGLOSS",
     "debutYear": 2023,
@@ -830,7 +842,7 @@
   {
     "id": "todoroki-hajime",
     "name": "Todoroki Hajime",
-    "avatarUrl": "/avatars/todoroki-hajime.png",
+    "avatarUrl": "/avatars/todoroki-hajime.webp",
     "branch": "DEV_IS",
     "generation": "ReGLOSS",
     "debutYear": 2023,
@@ -842,7 +854,7 @@
   {
     "id": "hiodoshi-ao",
     "name": "Hiodoshi Ao",
-    "avatarUrl": "/avatars/hiodoshi-ao.png",
+    "avatarUrl": "/avatars/hiodoshi-ao.webp",
     "branch": "DEV_IS",
     "generation": "ReGLOSS",
     "debutYear": 2023,
@@ -854,7 +866,7 @@
   {
     "id": "isaki-riona",
     "name": "Isaki Riona",
-    "avatarUrl": "/avatars/isaki-riona.png",
+    "avatarUrl": "/avatars/isaki-riona.webp",
     "branch": "DEV_IS",
     "generation": "FLOW GLOW",
     "debutYear": 2024,
@@ -866,7 +878,7 @@
   {
     "id": "koganei-niko",
     "name": "Koganei Niko",
-    "avatarUrl": "/avatars/koganei-niko.png",
+    "avatarUrl": "/avatars/koganei-niko.webp",
     "branch": "DEV_IS",
     "generation": "FLOW GLOW",
     "debutYear": 2024,
@@ -878,7 +890,7 @@
   {
     "id": "mizumiya-su",
     "name": "Mizumiya Su",
-    "avatarUrl": "/avatars/mizumiya-su.png",
+    "avatarUrl": "/avatars/mizumiya-su.webp",
     "branch": "DEV_IS",
     "generation": "FLOW GLOW",
     "debutYear": 2024,
@@ -890,7 +902,7 @@
   {
     "id": "rindo-chihaya",
     "name": "Rindo Chihaya",
-    "avatarUrl": "/avatars/rindo-chihaya.png",
+    "avatarUrl": "/avatars/rindo-chihaya.webp",
     "branch": "DEV_IS",
     "generation": "FLOW GLOW",
     "debutYear": 2024,
@@ -902,7 +914,7 @@
   {
     "id": "kikirara-vivi",
     "name": "Kikirara Vivi",
-    "avatarUrl": "/avatars/kikirara-vivi.png",
+    "avatarUrl": "/avatars/kikirara-vivi.webp",
     "branch": "DEV_IS",
     "generation": "FLOW GLOW",
     "debutYear": 2024,

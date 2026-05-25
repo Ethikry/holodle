@@ -61,7 +61,9 @@ CREATE TABLE IF NOT EXISTS channel_daily_participant (
   puzzle_id    TEXT NOT NULL,
   user_id      TEXT NOT NULL,
   display_name TEXT NOT NULL,
+  avatar_url   TEXT,
   guesses_used INTEGER NOT NULL DEFAULT 0,
+  guesses_json TEXT NOT NULL DEFAULT '[]',
   status       TEXT NOT NULL DEFAULT 'playing',
   joined_at    INTEGER NOT NULL,
   PRIMARY KEY (channel_id, puzzle_id, user_id)
@@ -85,5 +87,15 @@ export const ADDITIVE_MIGRATIONS: Array<{ table: string; column: string; ddl: st
     table: "user_day",
     column: "exit_embed_posted",
     ddl: "ALTER TABLE user_day ADD COLUMN exit_embed_posted INTEGER NOT NULL DEFAULT 0",
+  },
+  {
+    table: "channel_daily_participant",
+    column: "avatar_url",
+    ddl: "ALTER TABLE channel_daily_participant ADD COLUMN avatar_url TEXT",
+  },
+  {
+    table: "channel_daily_participant",
+    column: "guesses_json",
+    ddl: "ALTER TABLE channel_daily_participant ADD COLUMN guesses_json TEXT NOT NULL DEFAULT '[]'",
   },
 ];

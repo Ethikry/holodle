@@ -62,6 +62,36 @@ export function puzzleIdFor(nowMs: number = Date.now(), tz: string = "UTC"): str
   return ymdFormatter(tz).format(new Date(nowMs));
 }
 
+// Sequential puzzle number anchored at PUZZLE_NUMBER_EPOCH_MS (= UTC midnight
+// on the launch date for this counter). Today UTC = 1, tomorrow = 2, etc.
+// Display-only — the canonical key is still puzzleIdFor (YYYY-MM-DD), and we
+// avoid storing this number anywhere so changing the epoch doesn't corrupt
+// existing rows. Negative results clamp to 1 so retroactive embeds for
+// pre-epoch dates don't show "0" or "-3".
+//
+// 2026-05-20 was chosen as day #1: that's the UTC date when the image-embed
+// rewrite first landed in production and we want puzzles numbered from there.
+const PUZZLE_NUMBER_EPOCH_MS = Date.UTC(2026, 4, 20);
+
+export function displayPuzzleNumberFor(nowMs: number = Date.now()): number {
+  const today = dayIndexFor(nowMs, "UTC");
+  const epoch = dayIndexFor(PUZZLE_NUMBER_EPOCH_MS, "UTC");
+  return Math.max(1, today - epoch + 1);
+}
+
+// Same conversion but driven by a puzzleId string (YYYY-MM-DD UTC). Used when
+// the channel embed has the puzzle_id but no surrounding `nowMs`.
+export function displayPuzzleNumberForPuzzleId(puzzleId: string): number {
+  const parts = puzzleId.split("-");
+  const y = parts[0];
+  const m = parts[1];
+  const d = parts[2];
+  if (!y || !m || !d) return 1;
+  const ms = Date.UTC(Number.parseInt(y, 10), Number.parseInt(m, 10) - 1, Number.parseInt(d, 10));
+  if (!Number.isFinite(ms)) return 1;
+  return displayPuzzleNumberFor(ms);
+}
+
 // Convenience: the dayIndex/puzzleId in America/Chicago. Used by the recap
 // scheduler — never by per-user routes.
 export function cstDayIndexFor(nowMs: number = Date.now()): number {

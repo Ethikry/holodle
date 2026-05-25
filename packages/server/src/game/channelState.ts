@@ -1,3 +1,4 @@
+import type { GuessDiff } from "@holodle/shared";
 import { getDb } from "../db/client.js";
 import { patchFollowup, postFollowup } from "../discord/followups.js";
 import {
@@ -110,26 +111,85 @@ export interface UpsertParticipantInput {
   puzzleId: string;
   userId: string;
   displayName: string;
+  avatarUrl?: string | null;
 }
 
-// Idempotent. If the participant already exists, only display_name is
-// refreshed (name changes between launches); guesses_used/status are
-// preserved so a re-launch never clobbers an in-progress count.
+// Idempotent. Seeds (or refreshes) the channel row from the user's most
+// recent user_day so the embed grid reflects any guesses they made before
+// this channel ever existed for them — e.g. a user who completed today's
+// puzzle in a different channel (or before the image-embed code shipped)
+// still gets their board rendered on /launch here. recordParticipantProgress
+// keeps things in sync for every guess after launch.
 export function upsertParticipant({
   channelId,
   puzzleId,
   userId,
   displayName,
+  avatarUrl,
 }: UpsertParticipantInput): void {
+  const progress = findRecentUserDayProgress(userId);
+  const guessesJson = progress ? JSON.stringify(progress.history) : "[]";
+  const guessesUsed = progress ? progress.history.length : 0;
+  const status = progress ? progress.status : "playing";
+
+  // On CONFLICT, only backfill progress when the existing channel row has
+  // none and user_day has some. That preserves any in-channel progress
+  // recordParticipantProgress has already written, while still healing rows
+  // that pre-date this channel for the user.
   getDb()
     .prepare(
       `INSERT INTO channel_daily_participant
-         (channel_id, puzzle_id, user_id, display_name, guesses_used, status, joined_at)
-       VALUES (?, ?, ?, ?, 0, 'playing', strftime('%s','now'))
+         (channel_id, puzzle_id, user_id, display_name, avatar_url, guesses_used, guesses_json, status, joined_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now'))
        ON CONFLICT(channel_id, puzzle_id, user_id) DO UPDATE SET
-         display_name = excluded.display_name`,
+         display_name = excluded.display_name,
+         avatar_url   = COALESCE(excluded.avatar_url, channel_daily_participant.avatar_url),
+         guesses_used = CASE
+           WHEN channel_daily_participant.guesses_used = 0 AND excluded.guesses_used > 0
+           THEN excluded.guesses_used ELSE channel_daily_participant.guesses_used
+         END,
+         guesses_json = CASE
+           WHEN channel_daily_participant.guesses_used = 0 AND excluded.guesses_used > 0
+           THEN excluded.guesses_json ELSE channel_daily_participant.guesses_json
+         END,
+         status = CASE
+           WHEN channel_daily_participant.guesses_used = 0 AND excluded.guesses_used > 0
+           THEN excluded.status ELSE channel_daily_participant.status
+         END`,
     )
-    .run(channelId, puzzleId, userId, displayName);
+    .run(
+      channelId,
+      puzzleId,
+      userId,
+      displayName,
+      avatarUrl ?? null,
+      guessesUsed,
+      guessesJson,
+      status,
+    );
+}
+
+// Latest user_day row for `userId` whose updated_at is within the trailing
+// 36h window — wide enough to cover any timezone's "today" relative to the
+// channel's UTC puzzle, narrow enough that yesterday's settled board stops
+// showing up on the embed once today's puzzle has rolled over everywhere.
+// Returns null when no recent progress exists (fresh participant).
+function findRecentUserDayProgress(
+  userId: string,
+): { history: GuessDiff[]; status: "playing" | "won" | "lost" } | null {
+  const row = getDb()
+    .prepare(
+      `SELECT guesses_json, status FROM user_day
+         WHERE user_id = ?
+           AND updated_at > strftime('%s','now') - 129600
+         ORDER BY updated_at DESC
+         LIMIT 1`,
+    )
+    .get(userId) as { guesses_json: string; status: "playing" | "won" | "lost" } | undefined;
+  if (!row) return null;
+  const history = parseGuesses(row.guesses_json);
+  if (history.length === 0 && row.status === "playing") return null;
+  return { history, status: row.status };
 }
 
 export function listParticipants(
@@ -138,7 +198,7 @@ export function listParticipants(
 ): NowPlayingParticipant[] {
   const rows = getDb()
     .prepare(
-      `SELECT user_id, display_name, guesses_used, status
+      `SELECT user_id, display_name, avatar_url, guesses_used, guesses_json, status
          FROM channel_daily_participant
         WHERE channel_id = ? AND puzzle_id = ?
         ORDER BY joined_at ASC`,
@@ -146,15 +206,28 @@ export function listParticipants(
     .all(channelId, puzzleId) as Array<{
     user_id: string;
     display_name: string;
+    avatar_url: string | null;
     guesses_used: number;
+    guesses_json: string;
     status: "playing" | "won" | "lost";
   }>;
   return rows.map((r) => ({
     userId: r.user_id,
     displayName: r.display_name,
+    avatarUrl: r.avatar_url,
     guessesUsed: r.guesses_used,
+    history: parseGuesses(r.guesses_json),
     status: r.status,
   }));
+}
+
+function parseGuesses(json: string): GuessDiff[] {
+  try {
+    const v = JSON.parse(json);
+    return Array.isArray(v) ? (v as GuessDiff[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 export function listYesterdayRecapPlayers(
@@ -163,7 +236,7 @@ export function listYesterdayRecapPlayers(
 ): RecapPlayer[] {
   const rows = getDb()
     .prepare(
-      `SELECT user_id, guesses_used, status
+      `SELECT user_id, display_name, avatar_url, guesses_used, guesses_json, status
          FROM channel_daily_participant
         WHERE channel_id = ?
           AND puzzle_id  = ?
@@ -172,19 +245,69 @@ export function listYesterdayRecapPlayers(
     )
     .all(channelId, puzzleId) as Array<{
     user_id: string;
+    display_name: string;
+    avatar_url: string | null;
     guesses_used: number;
+    guesses_json: string;
     status: "won" | "lost";
   }>;
   return rows.map((r) => ({
     userId: r.user_id,
+    displayName: r.display_name,
+    avatarUrl: r.avatar_url,
     guessesUsed: r.guesses_used,
+    history: parseGuesses(r.guesses_json),
     status: r.status,
   }));
 }
 
-// Called from the guess route on transition to won/lost. Updates the
-// participant snapshot and — if we still hold a fresh interaction token
-// for this channel-day — patches the now-playing message in place.
+// Called from the guess route on *every* guess. Persists the running history
+// and — if we still hold a fresh interaction token for this channel-day —
+// patches the now-playing message in place so the embed image reflects the
+// new row. Skipping the patch on missing message_id / expired token is the
+// expected case for participants who never launched (they have a user_day
+// row but no channel embed to update).
+export async function recordParticipantProgress(
+  userId: string,
+  channelId: string,
+  puzzleId: string,
+  history: GuessDiff[],
+  status: "playing" | "won" | "lost",
+  nowSec: number = Math.floor(Date.now() / 1000),
+): Promise<void> {
+  const guessesUsed = history.length;
+  const guessesJson = JSON.stringify(history);
+  getDb()
+    .prepare(
+      `UPDATE channel_daily_participant
+          SET guesses_used = ?, guesses_json = ?, status = ?
+        WHERE channel_id = ? AND puzzle_id = ? AND user_id = ?`,
+    )
+    .run(guessesUsed, guessesJson, status, channelId, puzzleId, userId);
+
+  const state = getChannelState(channelId, puzzleId);
+  if (!state || !state.messageId) return;
+  if (state.latestTokenExp <= nowSec) return; // token expired — no-op
+  const participants = listParticipants(channelId, puzzleId);
+  const { embed, components, file } = await buildNowPlayingEmbed({
+    puzzleId,
+    participants,
+    applicationId: state.latestTokenAppId,
+  });
+  try {
+    await patchFollowup(state.latestTokenAppId, state.latestToken, state.messageId, {
+      embeds: [embed],
+      components,
+      files: [file],
+    });
+  } catch (err) {
+    console.error("[channelState] recordParticipantProgress patch failed:", err);
+  }
+}
+
+// Back-compat alias for the old "settled only" signature. The new flow calls
+// recordParticipantProgress on every guess; this is kept for any caller that
+// only knows the final status + count.
 export async function recordCompletion(
   userId: string,
   channelId: string,
@@ -193,6 +316,8 @@ export async function recordCompletion(
   status: "won" | "lost",
   nowSec: number = Math.floor(Date.now() / 1000),
 ): Promise<void> {
+  // Update terminal status; leave guesses_json untouched (already written by
+  // the latest recordParticipantProgress on that user's previous guess).
   getDb()
     .prepare(
       `UPDATE channel_daily_participant
@@ -203,9 +328,9 @@ export async function recordCompletion(
 
   const state = getChannelState(channelId, puzzleId);
   if (!state || !state.messageId) return;
-  if (state.latestTokenExp <= nowSec) return; // token expired — no-op
+  if (state.latestTokenExp <= nowSec) return;
   const participants = listParticipants(channelId, puzzleId);
-  const { embed, components } = buildNowPlayingEmbed({
+  const { embed, components, file } = await buildNowPlayingEmbed({
     puzzleId,
     participants,
     applicationId: state.latestTokenAppId,
@@ -214,6 +339,7 @@ export async function recordCompletion(
     await patchFollowup(state.latestTokenAppId, state.latestToken, state.messageId, {
       embeds: [embed],
       components,
+      files: [file],
     });
   } catch (err) {
     console.error("[channelState] recordCompletion patch failed:", err);

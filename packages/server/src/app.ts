@@ -57,6 +57,15 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
         root: clientDist,
         prefix: "/",
         wildcard: false,
+        // Talent avatars never change content for a given filename (a new
+        // avatar would land under a new path), so the browser can cache them
+        // forever. Other static assets fall back to fastify-static's default
+        // (no Cache-Control).
+        setHeaders: (res, filePath) => {
+          if (filePath.includes(`${"/"}avatars${"/"}`)) {
+            res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+          }
+        },
       });
       // Known API route names without the /api prefix. If we ever see one of
       // these arrive un-prefixed, the most likely cause is a Discord URL

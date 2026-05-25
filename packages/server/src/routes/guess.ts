@@ -8,7 +8,7 @@ import { compareGuess } from "../game/compare.js";
 import { dayIndexFor, pickDaily, puzzleIdFor, safeTz } from "../game/dailyPicker.js";
 import { updateProgress } from "../game/instance.js";
 import { getRegistry } from "../game/talents.js";
-import { recordCompletion } from "../game/channelState.js";
+import { recordParticipantProgress } from "../game/channelState.js";
 import { broadcastProgress } from "../ws/socket.js";
 
 const BodySchema = z.object({
@@ -98,24 +98,26 @@ export async function guessRoutes(app: FastifyInstance): Promise<void> {
     }
 
     if (instanceId) {
-      updateProgress(instanceId, user.id, row.guesses.length, row.status);
-      broadcastProgress(instanceId, user.id, row.guesses.length, row.status);
+      updateProgress(instanceId, user.id, row.guesses.length, diff, row.status);
+      broadcastProgress(instanceId, user.id, row.guesses.length, diff, row.status);
     }
 
-    // On terminal status, refresh the channel's now-playing embed via the
-    // freshest interaction token. Channel state is keyed by UTC puzzle id
-    // (the per-user `tz` only drives that user's own dayIndex). Fire and
-    // forget — a Discord outage must never fail this response.
-    if (row.channelId && (row.status === "won" || row.status === "lost")) {
+    // Persist this guess against the channel's now-playing row and — if a
+    // fresh interaction token still exists — re-render + patch the embed
+    // image in place so other viewers see the new line immediately. Channel
+    // state is keyed by UTC puzzle id (the per-user `tz` only drives that
+    // user's own dayIndex). Fire-and-forget; a Discord outage must never
+    // fail this response.
+    if (row.channelId) {
       const channelPuzzleId = puzzleIdFor(now, "UTC");
-      void recordCompletion(
+      void recordParticipantProgress(
         user.id,
         row.channelId,
         channelPuzzleId,
-        row.guesses.length,
+        row.guesses,
         row.status,
       ).catch((err) => {
-        req.log.error({ err }, "recordCompletion threw");
+        req.log.error({ err }, "recordParticipantProgress threw");
       });
     }
 

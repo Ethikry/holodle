@@ -3,6 +3,7 @@ import { Server as IOServer } from "socket.io";
 import type {
   ClientToServerEvents,
   GameStatus,
+  GuessDiff,
   PlayerSnapshot,
   ServerToClientEvents,
 } from "@holodle/shared";
@@ -74,6 +75,7 @@ export function attachSocketServer(app: FastifyInstance): Io {
         displayName,
         avatarUrl,
         guessesUsed: row.guesses.length,
+        history: row.guesses,
         status: row.status,
       };
 
@@ -111,7 +113,8 @@ export function broadcastProgress(
   instanceId: string,
   userId: string,
   guessesUsed: number,
+  diff: GuessDiff,
   status: GameStatus,
 ): void {
-  io?.to(instanceId).emit("player:progress", { userId, guessesUsed, status });
+  io?.to(instanceId).emit("player:progress", { userId, guessesUsed, diff, status });
 }

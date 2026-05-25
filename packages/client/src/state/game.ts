@@ -3,6 +3,7 @@ import type {
   DailyState,
   GameStatus,
   GuessDiff,
+  PlayerProgressEvent,
   PlayerSnapshot,
   TalentSummary,
   UserStats,
@@ -51,7 +52,7 @@ interface GameActions {
   setStats: (s: UserStats) => void;
   upsertPlayer: (p: PlayerSnapshot) => void;
   setSnapshot: (players: PlayerSnapshot[]) => void;
-  updateProgress: (p: { userId: string; guessesUsed: number; status: GameStatus }) => void;
+  updateProgress: (p: PlayerProgressEvent) => void;
   removePlayer: (userId: string) => void;
   setHelpOpen: (open: boolean) => void;
   setLoading: (loading: boolean) => void;
@@ -109,12 +110,17 @@ export const useGame = create<GameState & GameActions>((set) => ({
     set({
       players: new Map(players.map((p) => [p.userId, p])),
     }),
-  updateProgress: ({ userId, guessesUsed, status }) =>
+  updateProgress: ({ userId, guessesUsed, diff, status }) =>
     set((s) => {
       const existing = s.players.get(userId);
       if (!existing) return s;
       const next = new Map(s.players);
-      next.set(userId, { ...existing, guessesUsed, status });
+      next.set(userId, {
+        ...existing,
+        guessesUsed,
+        status,
+        history: [...existing.history, diff],
+      });
       return { players: next };
     }),
   removePlayer: (userId) =>

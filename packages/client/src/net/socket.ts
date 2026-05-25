@@ -1,6 +1,7 @@
 import { io, type Socket } from "socket.io-client";
 import type {
   ClientToServerEvents,
+  PlayerProgressEvent,
   PlayerSnapshot,
   ServerToClientEvents,
 } from "@holodle/shared";
@@ -10,7 +11,7 @@ export type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 export interface SocketHandlers {
   onSnapshot: (players: PlayerSnapshot[]) => void;
   onJoin: (p: PlayerSnapshot) => void;
-  onProgress: (p: { userId: string; guessesUsed: number; status: PlayerSnapshot["status"] }) => void;
+  onProgress: (p: PlayerProgressEvent) => void;
   onLeave: (p: { userId: string }) => void;
 }
 

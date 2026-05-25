@@ -95,12 +95,18 @@ export interface PlayerSnapshot {
   displayName: string;
   avatarUrl: string | null;
   guessesUsed: number;
+  // Full guess history so the in-iframe sidebar can render every other
+  // player's mini board. Empty for any player who hasn't guessed yet.
+  history: GuessDiff[];
   status: GameStatus;
 }
 
 export interface PlayerProgressEvent {
   userId: string;
   guessesUsed: number;
+  // The diff just produced by this guess. Pushed onto the recipient's stored
+  // history so the sidebar grids update without a round-trip.
+  diff: GuessDiff;
   status: GameStatus;
 }
 
