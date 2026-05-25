@@ -42,9 +42,11 @@ export interface TalentSummary {
   avatarUrl: string;
 }
 
-// No "near" / orange state. Every cell is strictly equal-or-wrong; the year
-// column distinguishes the direction of a miss via "higher" (target > guess,
-// renders ↑) and "lower" (target < guess, renders ↓).
+// No "near" / orange state. Every cell is strictly equal-or-wrong; the
+// directional columns (debut year, birth month) distinguish the direction
+// of a miss via "higher" (target > guess, renders ↑) and "lower" (target <
+// guess, renders ↓). Birth month uses linear calendar order (Jan < Dec, no
+// wrap).
 export type CellState = "equal" | "wrong" | "higher" | "lower";
 
 export interface AttrCell<V> {

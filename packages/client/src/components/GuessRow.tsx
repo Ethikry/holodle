@@ -1,4 +1,4 @@
-import type { GuessDiff, TalentSummary, HeightBucket } from "@holodle/shared";
+import type { GuessDiff, Month, TalentSummary, HeightBucket } from "@holodle/shared";
 import { AttributePill } from "./AttributePill.js";
 
 // Short bucket labels: the parenthetical range overflowed the column on
@@ -9,6 +9,25 @@ const BUCKET_LABEL: Record<HeightBucket, string> = {
   Smol: "Smol",
   Med: "Med",
   Tall: "Tall",
+};
+
+// Three-letter month abbreviations. The Birth Month cell was 9 chars wide
+// ("September", "December"), which clipped to "Sept…" / "Dec…" in the ~50px
+// mobile column. The full month name is visible in the help modal; the
+// abbreviation is enough at-a-glance and matches the directional arrow.
+const MONTH_ABBR: Record<Month, string> = {
+  January: "Jan",
+  February: "Feb",
+  March: "Mar",
+  April: "Apr",
+  May: "May",
+  June: "Jun",
+  July: "Jul",
+  August: "Aug",
+  September: "Sep",
+  October: "Oct",
+  November: "Nov",
+  December: "Dec",
 };
 
 // One row of the guess grid. 7 columns: avatar + 6 attribute cells.
@@ -56,7 +75,7 @@ export function GuessRow({
         <AttributePill cell={{ ...diff.height, value: BUCKET_LABEL[diff.height.value] }} />
       </div>
       <div role="cell">
-        <AttributePill cell={diff.birthMonth} />
+        <AttributePill cell={{ ...diff.birthMonth, value: MONTH_ABBR[diff.birthMonth.value] }} />
       </div>
     </div>
   );
