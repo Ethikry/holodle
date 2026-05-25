@@ -158,18 +158,21 @@ export async function interactionsRoutes(app: FastifyInstance): Promise<void> {
       return { type: RESPONSE_PONG };
     }
 
-    if (
-      payload.type === TYPE_APPLICATION_COMMAND &&
-      payload.data?.name?.toLowerCase() === "launch"
-    ) {
-      // Kick off the follow-up posting asynchronously. Discord requires us
-      // to respond within 3 seconds — embed posting/editing is too slow to
-      // do inline. We fire-and-forget; failures are logged but never block
-      // the activity launch.
-      handleLaunch(payload).catch((err) => {
-        req.log.error({ err }, "interaction follow-up failed");
-      });
-      return { type: RESPONSE_LAUNCH_ACTIVITY };
+    // Accept both the auto-generated Entry Point "Launch" command and a
+    // hand-registered "/holodle" command. The latter is friendlier to type
+    // in chat; both fire the same handler.
+    if (payload.type === TYPE_APPLICATION_COMMAND) {
+      const name = payload.data?.name?.toLowerCase();
+      if (name === "launch" || name === "holodle") {
+        // Kick off the follow-up posting asynchronously. Discord requires us
+        // to respond within 3 seconds — embed posting/editing is too slow to
+        // do inline. We fire-and-forget; failures are logged but never block
+        // the activity launch.
+        handleLaunch(payload).catch((err) => {
+          req.log.error({ err }, "interaction follow-up failed");
+        });
+        return { type: RESPONSE_LAUNCH_ACTIVITY };
+      }
     }
 
     // Blue "Play now!" button — same launch flow as the /launch command. We

@@ -63,12 +63,21 @@ describe("compareGuess", () => {
     expect(compareGuess(t({ heightCm: 140 }), tall).height.state).toBe("wrong"); // Smol vs Tall
   });
 
-  it("birthMonth: equal or wrong only — no wrap-around credit", () => {
-    const target = t({ birthMonth: "December" });
-    expect(compareGuess(t({ birthMonth: "December" }), target).birthMonth.state).toBe("equal");
-    expect(compareGuess(t({ birthMonth: "November" }), target).birthMonth.state).toBe("wrong");
-    expect(compareGuess(t({ birthMonth: "January" }), target).birthMonth.state).toBe("wrong");
-    expect(compareGuess(t({ birthMonth: "June" }), target).birthMonth.state).toBe("wrong");
+  it("birthMonth: equal / higher / lower (linear by calendar order, no wrap)", () => {
+    const target = t({ birthMonth: "June" });
+    expect(compareGuess(t({ birthMonth: "June" }), target).birthMonth.state).toBe("equal");
+    // Target (June) is later in the year than guess → ↑ "higher".
+    expect(compareGuess(t({ birthMonth: "January" }), target).birthMonth.state).toBe("higher");
+    expect(compareGuess(t({ birthMonth: "May" }), target).birthMonth.state).toBe("higher");
+    // Target (June) is earlier than guess → ↓ "lower".
+    expect(compareGuess(t({ birthMonth: "July" }), target).birthMonth.state).toBe("lower");
+    expect(compareGuess(t({ birthMonth: "December" }), target).birthMonth.state).toBe("lower");
+
+    // No wrap-around: guessing January against December is "lower" (Jan < Dec),
+    // not "higher" (which would imply Dec is ~1 month after Jan).
+    const dec = t({ birthMonth: "December" });
+    expect(compareGuess(t({ birthMonth: "January" }), dec).birthMonth.state).toBe("higher");
+    expect(compareGuess(t({ birthMonth: "November" }), dec).birthMonth.state).toBe("higher");
   });
 
   it("generation: equal or wrong (string compared exactly)", () => {
