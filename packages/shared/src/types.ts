@@ -63,6 +63,21 @@ export interface GuessDiff {
   birthMonth: AttrCell<Month>;
 }
 
+// Column order for board rows derived from a GuessDiff. Defined as a shared
+// constant so both client and server agree on the order of cell states.
+export const BOARD_COLUMNS: ReadonlyArray<keyof Omit<GuessDiff, "talentId">> = [
+  "generation",
+  "branch",
+  "debutYear",
+  "archetype",
+  "height",
+  "birthMonth",
+];
+
+export function boardRowFromDiff(diff: GuessDiff): CellState[] {
+  return BOARD_COLUMNS.map((k) => diff[k].state);
+}
+
 export type GameStatus = "playing" | "won" | "lost";
 
 export interface DailyState {
@@ -89,25 +104,34 @@ export interface UserStats {
   winRate: number; // 0..1
 }
 
+// A single guess row reduced to its 6 cell-state colors. Values are stripped
+// so we never leak what talent another player guessed — only whether each
+// attribute matched. Used by the boards panel so spectators can see every
+// player's progress as a colored grid.
+export type BoardRow = CellState[];
+
 // Socket.IO event payloads
 export interface PlayerSnapshot {
   userId: string;
   displayName: string;
   avatarUrl: string | null;
   guessesUsed: number;
-  // Full guess history so the in-iframe sidebar can render every other
-  // player's mini board. Empty for any player who hasn't guessed yet.
-  history: GuessDiff[];
   status: GameStatus;
+  // Each row is a 6-tuple of CellStates (one per attribute column). Length
+  // equals guessesUsed; older snapshots from completed players are loaded
+  // from the DB on socket connect. We intentionally do NOT broadcast the
+  // full GuessDiff (with talent ids + attribute values) — only cell colors
+  // — so spectators can't see what talents other players guessed.
+  board: BoardRow[];
 }
 
 export interface PlayerProgressEvent {
   userId: string;
   guessesUsed: number;
-  // The diff just produced by this guess. Pushed onto the recipient's stored
-  // history so the sidebar grids update without a round-trip.
-  diff: GuessDiff;
   status: GameStatus;
+  // Full board, not just the new row — keeps the client deterministic in the
+  // face of dropped events / reconnects.
+  board: BoardRow[];
 }
 
 export interface ServerToClientEvents {
