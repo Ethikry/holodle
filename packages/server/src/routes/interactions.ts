@@ -15,8 +15,9 @@ import {
   upsertParticipant,
 } from "../game/channelState.js";
 import { LAUNCH_BUTTON_CUSTOM_ID } from "../discord/embeds.js";
-import { puzzleIdFor } from "../game/dailyPicker.js";
+import { puzzleIdFor, safeTz } from "../game/dailyPicker.js";
 import { patchFollowup } from "../discord/followups.js";
+import { getLatestUserTz } from "../db/client.js";
 
 // Discord interaction types.
 const TYPE_PING = 1;
@@ -87,14 +88,16 @@ function pickAvatarUrl(p: InteractionPayload, user: InteractionUser): string {
   return `https://cdn.discordapp.com/embed/avatars/${idx}.png`;
 }
 
-// Channel-day puzzle id is UTC-anchored so two viewers in different
-// timezones see the same channel embed. Per-user puzzles still use the
-// user's own tz inside /api/guess.
-function channelPuzzleId(nowMs: number): string {
-  return puzzleIdFor(nowMs, "UTC");
+// Channel-day puzzle id is keyed by the launching user's IANA tz so the
+// embed posted at /launch matches the puzzle that user will actually play
+// in /api/guess. The Discord interaction payload doesn't carry a tz, so we
+// fall back to the most-recent tz this user recorded on a previous guess
+// (or UTC if they've never played).
+function channelPuzzleId(nowMs: number, tz: string): string {
+  return puzzleIdFor(nowMs, tz);
 }
-function channelYesterdayId(nowMs: number): string {
-  return puzzleIdFor(nowMs - ONE_DAY_MS, "UTC");
+function channelYesterdayId(nowMs: number, tz: string): string {
+  return puzzleIdFor(nowMs - ONE_DAY_MS, tz);
 }
 
 export async function interactionsRoutes(app: FastifyInstance): Promise<void> {
@@ -196,8 +199,9 @@ async function handleLaunch(payload: InteractionPayload): Promise<void> {
   if (!user) return;
 
   const nowMs = Date.now();
-  const puzzleId = channelPuzzleId(nowMs);
-  const yesterdayId = channelYesterdayId(nowMs);
+  const tz = safeTz(getLatestUserTz(user.id) ?? undefined);
+  const puzzleId = channelPuzzleId(nowMs, tz);
+  const yesterdayId = channelYesterdayId(nowMs, tz);
   const displayName = pickDisplayName(payload, user);
   const avatarUrl = pickAvatarUrl(payload, user);
 

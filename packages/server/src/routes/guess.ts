@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { GuessResponse } from "@holodle/shared";
-import { MAX_GUESSES } from "@holodle/shared";
+import { MAX_GUESSES, boardRowFromDiff } from "@holodle/shared";
 import { requireUser } from "../auth/requireUser.js";
 import { loadUserDay, saveUserDay, settleDay } from "../db/client.js";
 import { compareGuess } from "../game/compare.js";
@@ -97,23 +97,28 @@ export async function guessRoutes(app: FastifyInstance): Promise<void> {
       };
     }
 
+    const board = row.guesses.map(boardRowFromDiff);
     if (instanceId) {
-      updateProgress(instanceId, user.id, row.guesses.length, diff, row.status);
-      broadcastProgress(instanceId, user.id, row.guesses.length, diff, row.status);
+      updateProgress(instanceId, user.id, row.guesses.length, row.status, board);
+      broadcastProgress(instanceId, user.id, row.guesses.length, row.status, board);
     }
 
     // Persist this guess against the channel's now-playing row and — if a
     // fresh interaction token still exists — re-render + patch the embed
-    // image in place so other viewers see the new line immediately. Channel
-    // state is keyed by UTC puzzle id (the per-user `tz` only drives that
-    // user's own dayIndex). Fire-and-forget; a Discord outage must never
-    // fail this response.
+    // image so other viewers see the new line immediately. Channel state
+    // is keyed by the USER's tz puzzle id so cross-tz players in the same
+    // channel each see an embed for the puzzle they're actually playing;
+    // recordParticipantProgress will borrow a fresh token from another
+    // puzzle row and POST a brand-new embed when no row exists yet for
+    // this puzzle (e.g. user crossed local midnight without re-/launching).
+    // Fire-and-forget; a Discord outage must never fail this response.
     if (row.channelId) {
-      const channelPuzzleId = puzzleIdFor(now, "UTC");
+      const channelPuzzleId = puzzleIdFor(now, tz);
       void recordParticipantProgress(
         user.id,
         row.channelId,
         channelPuzzleId,
+        user.displayName,
         row.guesses,
         row.status,
       ).catch((err) => {
