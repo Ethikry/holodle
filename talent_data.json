@@ -14,7 +14,7 @@
   {
     "id": "roboco-san",
     "name": "Robocosan",
-    "avatarUrl": "/avatars/roboco-san.webp",
+    "avatarUrl": "/avatars/robocosan.webp",
     "branch": "JP",
     "generation": "Gen 0",
     "debutYear": 2018,
@@ -162,7 +162,7 @@
     "branch": "JP",
     "generation": "Gen 2",
     "debutYear": 2018,
-    "archetype": "Devil",
+    "archetype": "Demon",
     "heightCm": 165,
     "birthMonth": "February",
     "active": true
@@ -174,7 +174,7 @@
     "branch": "JP",
     "generation": "Gen 2",
     "debutYear": 2018,
-    "archetype": "Animal",
+    "archetype": "Bird",
     "heightCm": 154,
     "birthMonth": "July",
     "active": true
@@ -390,7 +390,7 @@
     "branch": "JP",
     "generation": "Gen 5",
     "debutYear": 2020,
-    "archetype": "Devil",
+    "archetype": "Succubus",
     "heightCm": 150,
     "birthMonth": "October",
     "active": false
@@ -414,7 +414,7 @@
     "branch": "JP",
     "generation": "holoX",
     "debutYear": 2021,
-    "archetype": "Animal",
+    "archetype": "Bird",
     "heightCm": 161,
     "birthMonth": "June",
     "active": true
@@ -522,7 +522,7 @@
     "branch": "ID",
     "generation": "Gen 2",
     "debutYear": 2020,
-    "archetype": "Animal",
+    "archetype": "Bird",
     "heightCm": 172,
     "birthMonth": "September",
     "active": true
@@ -582,7 +582,7 @@
     "branch": "EN",
     "generation": "Myth",
     "debutYear": 2020,
-    "archetype": "Animal",
+    "archetype": "Bird",
     "heightCm": 165,
     "birthMonth": "July",
     "active": true
@@ -642,7 +642,7 @@
     "branch": "EN",
     "generation": "Council",
     "debutYear": 2021,
-    "archetype": "Space",
+    "archetype": "Alien",
     "heightCm": 169,
     "birthMonth": "June",
     "active": false
@@ -666,7 +666,7 @@
     "branch": "EN",
     "generation": "Promise",
     "debutYear": 2021,
-    "archetype": "Time",
+    "archetype": "Helicopter",
     "heightCm": 168,
     "birthMonth": "March",
     "active": true
@@ -678,7 +678,7 @@
     "branch": "EN",
     "generation": "Promise",
     "debutYear": 2021,
-    "archetype": "Animal",
+    "archetype": "Bird",
     "heightCm": 156,
     "birthMonth": "August",
     "active": false
@@ -726,7 +726,7 @@
     "branch": "EN",
     "generation": "Advent",
     "debutYear": 2023,
-    "archetype": "Devil",
+    "archetype": "Bird",
     "heightCm": 175,
     "birthMonth": "November",
     "active": true
