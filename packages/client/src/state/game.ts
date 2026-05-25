@@ -1,8 +1,10 @@
 import { create } from "zustand";
 import type {
+  BoardRow,
   DailyState,
   GameStatus,
   GuessDiff,
+  PlayerProgressEvent,
   PlayerSnapshot,
   TalentSummary,
   UserStats,
@@ -51,7 +53,7 @@ interface GameActions {
   setStats: (s: UserStats) => void;
   upsertPlayer: (p: PlayerSnapshot) => void;
   setSnapshot: (players: PlayerSnapshot[]) => void;
-  updateProgress: (p: { userId: string; guessesUsed: number; status: GameStatus }) => void;
+  updateProgress: (p: PlayerProgressEvent) => void;
   removePlayer: (userId: string) => void;
   setHelpOpen: (open: boolean) => void;
   setLoading: (loading: boolean) => void;
@@ -109,12 +111,26 @@ export const useGame = create<GameState & GameActions>((set) => ({
     set({
       players: new Map(players.map((p) => [p.userId, p])),
     }),
-  updateProgress: ({ userId, guessesUsed, status }) =>
+  updateProgress: ({ userId, guessesUsed, status, board }) =>
     set((s) => {
       const existing = s.players.get(userId);
-      if (!existing) return s;
       const next = new Map(s.players);
-      next.set(userId, { ...existing, guessesUsed, status });
+      if (existing) {
+        next.set(userId, { ...existing, guessesUsed, status, board });
+      } else {
+        // Progress can arrive before the joined event (e.g. when a player
+        // is already in channel_daily_participant but we haven't received
+        // their snapshot yet). Materialize a partial entry rather than
+        // dropping the update.
+        next.set(userId, {
+          userId,
+          displayName: userId,
+          avatarUrl: null,
+          guessesUsed,
+          status,
+          board,
+        });
+      }
       return { players: next };
     }),
   removePlayer: (userId) =>

@@ -6,9 +6,12 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "prebuild": "pnpm --filter @holodle/shared build",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
+    "pretypecheck": "pnpm --filter @holodle/shared build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pretest": "pnpm --filter @holodle/shared build",
     "test": "vitest run"
   },
   "dependencies": {
@@ -16,6 +19,7 @@
     "@fastify/cors": "^10.0.1",
     "@fastify/static": "^8.0.2",
     "@holodle/shared": "workspace:*",
+    "@napi-rs/canvas": "^1.0.0",
     "better-sqlite3": "^11.3.0",
     "fastify": "^5.0.0",
     "fastify-plugin": "^5.0.1",

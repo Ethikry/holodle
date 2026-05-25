@@ -161,6 +161,20 @@ export function saveUserDay(row: UserDayRow): void {
     );
 }
 
+// Returns the IANA tz this user most-recently played from, or null if no
+// /api/guess has ever recorded one. Used by the interactions handler so the
+// launch-time channel puzzle id matches the puzzle the user actually plays.
+export function getLatestUserTz(userId: string): string | null {
+  const row = getDb()
+    .prepare(
+      `SELECT tz FROM user_day
+        WHERE user_id = ? AND tz IS NOT NULL
+        ORDER BY day_index DESC LIMIT 1`,
+    )
+    .get(userId) as { tz: string } | undefined;
+  return row?.tz ?? null;
+}
+
 export function markExitEmbedPosted(userId: string, dayIndex: number): void {
   getDb()
     .prepare(

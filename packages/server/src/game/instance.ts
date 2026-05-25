@@ -1,4 +1,4 @@
-import type { PlayerSnapshot } from "@holodle/shared";
+import type { BoardRow, PlayerSnapshot } from "@holodle/shared";
 
 // Discord-Activity instance state. One room per `instanceId`. Pure in-memory:
 // this is presence data only; durable user state lives in SQLite.
@@ -28,12 +28,14 @@ export function updateProgress(
   userId: string,
   guessesUsed: number,
   status: PlayerSnapshot["status"],
+  board: BoardRow[],
 ): void {
   const room = rooms.get(instanceId);
   const p = room?.players.get(userId);
   if (!p) return;
   p.guessesUsed = guessesUsed;
   p.status = status;
+  p.board = board;
 }
 
 export function removePlayer(instanceId: string, userId: string): void {

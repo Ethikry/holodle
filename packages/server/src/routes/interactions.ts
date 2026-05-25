@@ -14,12 +14,15 @@ import {
   upsertChannelToken,
   upsertParticipant,
 } from "../game/channelState.js";
-import { puzzleIdFor } from "../game/dailyPicker.js";
+import { LAUNCH_BUTTON_CUSTOM_ID } from "../discord/embeds.js";
+import { puzzleIdFor, safeTz } from "../game/dailyPicker.js";
 import { patchFollowup } from "../discord/followups.js";
+import { getLatestUserTz } from "../db/client.js";
 
 // Discord interaction types.
 const TYPE_PING = 1;
 const TYPE_APPLICATION_COMMAND = 2;
+const TYPE_MESSAGE_COMPONENT = 3;
 const RESPONSE_PONG = 1;
 const RESPONSE_LAUNCH_ACTIVITY = 12;
 const ONE_DAY_MS = 86_400_000;
@@ -28,11 +31,14 @@ interface InteractionUser {
   id: string;
   username?: string;
   global_name?: string | null;
+  avatar?: string | null;
+  discriminator?: string;
 }
 
 interface InteractionMember {
   user?: InteractionUser;
   nick?: string | null;
+  avatar?: string | null; // per-guild avatar override
 }
 
 interface InteractionPayload {
@@ -41,7 +47,7 @@ interface InteractionPayload {
   token?: string;
   channel_id?: string;
   guild_id?: string | null;
-  data?: { name?: string };
+  data?: { name?: string; custom_id?: string; component_type?: number };
   member?: InteractionMember;
   user?: InteractionUser;
 }
@@ -59,14 +65,39 @@ function pickDisplayName(p: InteractionPayload, user: InteractionUser): string {
   );
 }
 
-// Channel-day puzzle id is UTC-anchored so two viewers in different
-// timezones see the same channel embed. Per-user puzzles still use the
-// user's own tz inside /api/guess.
-function channelPuzzleId(nowMs: number): string {
-  return puzzleIdFor(nowMs, "UTC");
+// Build a Discord CDN avatar URL from the interaction payload. Prefers the
+// per-guild member avatar, falls back to the user's global avatar, then to
+// Discord's default (embed) avatar so the renderer always has something.
+function pickAvatarUrl(p: InteractionPayload, user: InteractionUser): string {
+  const guildId = p.guild_id ?? null;
+  const guildAvatar = p.member?.avatar ?? null;
+  if (guildAvatar && guildId) {
+    const ext = guildAvatar.startsWith("a_") ? "gif" : "png";
+    return `https://cdn.discordapp.com/guilds/${guildId}/users/${user.id}/avatars/${guildAvatar}.${ext}?size=256`;
+  }
+  if (user.avatar) {
+    const ext = user.avatar.startsWith("a_") ? "gif" : "png";
+    return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${ext}?size=256`;
+  }
+  // No custom avatar set. Discord computes the default-avatar index from the
+  // snowflake (new-username system) or the discriminator (legacy).
+  const idx =
+    user.discriminator && user.discriminator !== "0"
+      ? Number(user.discriminator) % 5
+      : Number((BigInt(user.id) >> 22n) % 6n);
+  return `https://cdn.discordapp.com/embed/avatars/${idx}.png`;
 }
-function channelYesterdayId(nowMs: number): string {
-  return puzzleIdFor(nowMs - ONE_DAY_MS, "UTC");
+
+// Channel-day puzzle id is keyed by the launching user's IANA tz so the
+// embed posted at /launch matches the puzzle that user will actually play
+// in /api/guess. The Discord interaction payload doesn't carry a tz, so we
+// fall back to the most-recent tz this user recorded on a previous guess
+// (or UTC if they've never played).
+function channelPuzzleId(nowMs: number, tz: string): string {
+  return puzzleIdFor(nowMs, tz);
+}
+function channelYesterdayId(nowMs: number, tz: string): string {
+  return puzzleIdFor(nowMs - ONE_DAY_MS, tz);
 }
 
 export async function interactionsRoutes(app: FastifyInstance): Promise<void> {
@@ -141,6 +172,19 @@ export async function interactionsRoutes(app: FastifyInstance): Promise<void> {
       return { type: RESPONSE_LAUNCH_ACTIVITY };
     }
 
+    // Blue "Play now!" button — same launch flow as the /launch command. We
+    // still want to record this clicker as a participant so they show up in
+    // the embed grid the next time it patches.
+    if (
+      payload.type === TYPE_MESSAGE_COMPONENT &&
+      payload.data?.custom_id === LAUNCH_BUTTON_CUSTOM_ID
+    ) {
+      handleLaunch(payload).catch((err) => {
+        req.log.error({ err }, "button launch follow-up failed");
+      });
+      return { type: RESPONSE_LAUNCH_ACTIVITY };
+    }
+
     reply.code(400);
     return { error: "Unsupported interaction" };
   });
@@ -155,20 +199,22 @@ async function handleLaunch(payload: InteractionPayload): Promise<void> {
   if (!user) return;
 
   const nowMs = Date.now();
-  const puzzleId = channelPuzzleId(nowMs);
-  const yesterdayId = channelYesterdayId(nowMs);
+  const tz = safeTz(getLatestUserTz(user.id) ?? undefined);
+  const puzzleId = channelPuzzleId(nowMs, tz);
+  const yesterdayId = channelYesterdayId(nowMs, tz);
   const displayName = pickDisplayName(payload, user);
+  const avatarUrl = pickAvatarUrl(payload, user);
 
   // 1) Yesterday's recap (fire-and-forget, no message_id capture).
   if (!isRecapPosted(channelId, yesterdayId)) {
     const players = listYesterdayRecapPlayers(channelId, yesterdayId);
     if (players.length > 0 && tryClaimRecapPosted(channelId, yesterdayId)) {
-      const embed = buildYesterdayRecapEmbed({
+      const { embed, file } = await buildYesterdayRecapEmbed({
         puzzleId: yesterdayId,
         players,
       });
       try {
-        await postFollowup(applicationId, token, { embeds: [embed] });
+        await postFollowup(applicationId, token, { embeds: [embed], files: [file] });
       } catch (err) {
         console.error("[interactions] recap follow-up failed:", err);
       }
@@ -186,10 +232,11 @@ async function handleLaunch(payload: InteractionPayload): Promise<void> {
     puzzleId,
     userId: user.id,
     displayName,
+    avatarUrl,
   });
 
   const participants = listParticipants(channelId, puzzleId);
-  const { embed, components } = buildNowPlayingEmbed({
+  const { embed, components, file } = await buildNowPlayingEmbed({
     puzzleId,
     participants,
     applicationId,
@@ -200,7 +247,7 @@ async function handleLaunch(payload: InteractionPayload): Promise<void> {
       const posted = await postFollowup(
         applicationId,
         token,
-        { embeds: [embed], components },
+        { embeds: [embed], components, files: [file] },
         { wait: true },
       );
       if (posted) setChannelMessageId(channelId, puzzleId, posted.id);
@@ -212,6 +259,7 @@ async function handleLaunch(payload: InteractionPayload): Promise<void> {
       await patchFollowup(applicationId, token, state.messageId, {
         embeds: [embed],
         components,
+        files: [file],
       });
     } catch (err) {
       console.error("[interactions] now-playing patch failed:", err);

@@ -1,7 +1,17 @@
-// Embed + component builders for the user-install flow. We intentionally
-// duplicate the minimal types we need here rather than depending on a
-// `discord.js` client — the only thing that ever consumes these is
-// JSON.stringify into a webhook POST body.
+// Embed + component builders for the user-install flow. The visible content
+// of every bot-posted message is now a composited PNG (see imageRender.ts);
+// the embed itself is minimal scaffolding so Discord renders the attached
+// image inline. We intentionally duplicate the minimal types we need here
+// rather than depending on a `discord.js` client — the only thing that ever
+// consumes these is JSON.stringify into a webhook POST body.
+
+import type { GuessDiff } from "@holodle/shared";
+import {
+  renderNowPlayingImage,
+  type NowPlayingImageParticipant,
+} from "./imageRender.js";
+import type { FollowupFile } from "./followups.js";
+import { displayPuzzleNumberForPuzzleId } from "../game/dailyPicker.js";
 
 export interface EmbedField {
   name: string;
@@ -13,17 +23,27 @@ export interface Embed {
   title?: string;
   description?: string;
   color?: number;
+  image?: { url: string };
   thumbnail?: { url: string };
   footer?: { text: string };
   fields?: EmbedField[];
 }
 
-export interface ButtonComponent {
+export interface LinkButton {
   type: 2;
   style: 5; // LINK
   label: string;
   url: string;
 }
+
+export interface PrimaryButton {
+  type: 2;
+  style: 1; // PRIMARY (blurple)
+  label: string;
+  custom_id: string;
+}
+
+export type ButtonComponent = LinkButton | PrimaryButton;
 
 export interface ActionRow {
   type: 1;
@@ -35,10 +55,15 @@ export type MessageComponent = ActionRow;
 const COLOR_RECAP = 0x22b8e6;
 const COLOR_PLAYING = 0x9333ea;
 
+const NOW_PLAYING_FILENAME = "holodle-now-playing.png";
+const RECAP_FILENAME = "holodle-recap.png";
+
 export interface NowPlayingParticipant {
   userId: string;
   displayName: string;
+  avatarUrl: string | null;
   guessesUsed: number;
+  history: GuessDiff[];
   status: "playing" | "won" | "lost";
 }
 
@@ -48,41 +73,60 @@ export interface NowPlayingInput {
   applicationId: string;
 }
 
-export function buildNowPlayingEmbed({
+export interface RenderedMessage {
+  embed: Embed;
+  components: MessageComponent[];
+  file: FollowupFile;
+}
+
+export async function buildNowPlayingEmbed({
   puzzleId,
   participants,
-  applicationId,
-}: NowPlayingInput): { embed: Embed; components: MessageComponent[] } {
-  const count = participants.length;
-  const noun = count === 1 ? "player" : "players";
-  const fields: EmbedField[] = participants.map((p) => {
-    let value: string;
-    if (p.status === "won") value = `Won in ${p.guessesUsed}/6`;
-    else if (p.status === "lost") value = `Lost (X/6)`;
-    else value = `Playing — ${p.guessesUsed}/6`;
-    return { name: p.displayName, value, inline: true };
+}: NowPlayingInput): Promise<RenderedMessage> {
+  const imageParticipants: NowPlayingImageParticipant[] = participants.map((p) => ({
+    avatarUrl: p.avatarUrl,
+    history: p.history,
+    status: p.status,
+  }));
+  const puzzleNumber = displayPuzzleNumberForPuzzleId(puzzleId);
+  const png = await renderNowPlayingImage({
+    puzzleId,
+    puzzleNumber,
+    participants: imageParticipants,
   });
 
   const embed: Embed = {
-    title: `Holodle No. ${puzzleId}`,
-    description: `${count} ${noun} currently playing`,
     color: COLOR_PLAYING,
-    fields,
+    image: { url: `attachment://${NOW_PLAYING_FILENAME}` },
   };
 
-  const button: ButtonComponent = {
+  // Primary (blurple) button. Click → MESSAGE_COMPONENT interaction with
+  // custom_id "launch" → server responds with LAUNCH_ACTIVITY (type 12).
+  // Link buttons (style 5) can't be colored; primary + LAUNCH_ACTIVITY is
+  // the only way to get a blue "Play now!" button.
+  const button: PrimaryButton = {
     type: 2,
-    style: 5,
+    style: 1,
     label: "Play now!",
-    url: `https://discord.com/activities/${applicationId}`,
+    custom_id: LAUNCH_BUTTON_CUSTOM_ID,
   };
   const components: MessageComponent[] = [{ type: 1, components: [button] }];
-  return { embed, components };
+
+  return {
+    embed,
+    components,
+    file: { filename: NOW_PLAYING_FILENAME, data: png, contentType: "image/png" },
+  };
 }
+
+export const LAUNCH_BUTTON_CUSTOM_ID = "launch";
 
 export interface RecapPlayer {
   userId: string;
+  displayName: string;
+  avatarUrl: string | null;
   guessesUsed: number;
+  history: GuessDiff[];
   status: "won" | "lost";
 }
 
@@ -92,36 +136,36 @@ export interface RecapEmbedInput {
   answerName?: string | null;
 }
 
-export function buildYesterdayRecapEmbed({
+export interface RenderedRecap {
+  embed: Embed;
+  file: FollowupFile;
+}
+
+export async function buildYesterdayRecapEmbed({
   puzzleId,
   players,
   answerName,
-}: RecapEmbedInput): Embed {
-  // Group wins by guesses-to-win; losses get their own bucket.
-  const wins = new Map<number, string[]>();
-  const losses: string[] = [];
-  for (const p of players) {
-    const mention = `<@${p.userId}>`;
-    if (p.status === "won") {
-      const arr = wins.get(p.guessesUsed) ?? [];
-      arr.push(mention);
-      wins.set(p.guessesUsed, arr);
-    } else {
-      losses.push(mention);
-    }
-  }
-  const fields: EmbedField[] = [];
-  for (const n of [...wins.keys()].sort((a, b) => a - b)) {
-    fields.push({ name: `${n}/6`, value: wins.get(n)!.join(" ") });
-  }
-  if (losses.length > 0) {
-    fields.push({ name: "X/6", value: losses.join(" ") });
-  }
+}: RecapEmbedInput): Promise<RenderedRecap> {
+  // The recap now uses the same image renderer as Now Playing — players are
+  // already settled (won/lost), so each tile shows their final board.
+  const imageParticipants: NowPlayingImageParticipant[] = players.map((p) => ({
+    avatarUrl: p.avatarUrl,
+    history: p.history,
+    status: p.status,
+  }));
+  const puzzleNumber = displayPuzzleNumberForPuzzleId(puzzleId);
+  const png = await renderNowPlayingImage({
+    puzzleId,
+    puzzleNumber,
+    participants: imageParticipants,
+    subtitle: answerName ? `Answer: ${answerName}` : "Yesterday's results",
+  });
+
   return {
-    title: `Holodle No. ${puzzleId}`,
-    description: "Yesterday's results",
-    color: COLOR_RECAP,
-    fields,
-    footer: answerName ? { text: answerName } : undefined,
+    embed: {
+      color: COLOR_RECAP,
+      image: { url: `attachment://${RECAP_FILENAME}` },
+    },
+    file: { filename: RECAP_FILENAME, data: png, contentType: "image/png" },
   };
 }
