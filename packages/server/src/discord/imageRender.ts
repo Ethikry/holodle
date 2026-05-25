@@ -17,7 +17,6 @@ const CELL_EQUAL = "#3aa55d";
 const CELL_DIR = "#c89b3f";
 const CELL_BORDER = "#1c1c1f";
 
-const TITLE_ACCENT = "#22b8e6";
 const TITLE_INK = "#ffffff";
 const SUBTEXT = "#b5b8bf";
 
@@ -220,73 +219,36 @@ function drawTitle(
   puzzleNumber: number | undefined,
   fallbackPuzzleId: string,
 ): void {
-  // Two-color "HOLO ✦ DLE No. {n}" — mirrors the in-activity wordmark.
-  // The star is drawn as a canvas path so we don't depend on any particular
-  // installed font having the U+2726 glyph (system sans on alpine often
-  // doesn't, and we'd render a tofu box).
+  // Plain "holodle  No. {n}" in white. The earlier two-color HOLO✦DLE
+  // wordmark was replaced because the lowercase wordmark is what we use
+  // everywhere else (chat copy, in-activity Header).
   const numberLabel = puzzleNumber !== undefined ? `${puzzleNumber}` : fallbackPuzzleId;
   const suffix = `  No. ${numberLabel}`;
 
   const wordFont = "800 28px sans-serif";
   const numFont = "600 22px sans-serif";
-  const starSize = 18;
-  const starGap = 10; // space on each side of the star
 
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
 
   // Measure to center the composite as a unit.
   ctx.font = wordFont;
-  const wHolo = ctx.measureText("HOLO").width;
-  const wDle = ctx.measureText("DLE").width;
-  const wStar = starSize + starGap * 2;
+  const wWord = ctx.measureText("holodle").width;
   ctx.font = numFont;
   const wNum = ctx.measureText(suffix).width;
-  const totalW = wHolo + wStar + wDle + wNum;
+  const totalW = wWord + wNum;
 
   let x = (width - totalW) / 2;
   const y = TITLE_BAND_H / 2;
 
-  ctx.fillStyle = TITLE_ACCENT;
-  ctx.font = wordFont;
-  ctx.fillText("HOLO", x, y);
-  x += wHolo;
-
-  drawFourPointStar(ctx, x + starGap + starSize / 2, y, starSize / 2, TITLE_ACCENT);
-  x += wStar;
-
   ctx.fillStyle = TITLE_INK;
   ctx.font = wordFont;
-  ctx.fillText("DLE", x, y);
-  x += wDle;
+  ctx.fillText("holodle", x, y);
+  x += wWord;
 
   ctx.fillStyle = SUBTEXT;
   ctx.font = numFont;
   ctx.fillText(suffix, x, y);
-}
-
-// Four-point sparkle ✦. Center (cx,cy), outer radius `r`; inner radius is
-// r * 0.32 so the points stay sharp (matches the activity wordmark glyph).
-function drawFourPointStar(
-  ctx: SKRSContext2D,
-  cx: number,
-  cy: number,
-  r: number,
-  fill: string,
-): void {
-  const inner = r * 0.32;
-  ctx.beginPath();
-  ctx.moveTo(cx, cy - r);
-  ctx.lineTo(cx + inner, cy - inner);
-  ctx.lineTo(cx + r, cy);
-  ctx.lineTo(cx + inner, cy + inner);
-  ctx.lineTo(cx, cy + r);
-  ctx.lineTo(cx - inner, cy + inner);
-  ctx.lineTo(cx - r, cy);
-  ctx.lineTo(cx - inner, cy - inner);
-  ctx.closePath();
-  ctx.fillStyle = fill;
-  ctx.fill();
 }
 
 // ---------- Tiles --------------------------------------------------------

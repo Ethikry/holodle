@@ -2,10 +2,18 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { GuessDiff } from "@holodle/shared";
 
 const tmpDir = mkdtempSync(join(tmpdir(), "holodle-channelstate-"));
 process.env.DB_PATH = join(tmpDir, "test.db");
 process.env.NODE_ENV = "test";
+
+// Stub the image renderer — these tests are about state transitions, not
+// canvas output. Without this, every recordParticipantProgress that fires a
+// patch would spin up @napi-rs/canvas to composite a PNG we throw away.
+vi.mock("../src/discord/imageRender.js", () => ({
+  renderNowPlayingImage: vi.fn(async () => Buffer.from([0])),
+}));
 
 const { getDb } = await import("../src/db/client.js");
 const {
@@ -14,7 +22,7 @@ const {
   getChannelState,
   upsertParticipant,
   listParticipants,
-  recordCompletion,
+  recordParticipantProgress,
 } = await import("../src/game/channelState.js");
 
 beforeAll(() => {
@@ -26,11 +34,32 @@ beforeEach(() => {
   db.exec("DELETE FROM channel_daily_state");
   db.exec("DELETE FROM channel_daily_participant");
   db.exec("DELETE FROM channel_recap_posted");
+  db.exec("DELETE FROM user_day");
 });
 
 afterAll(() => {
   rmSync(tmpDir, { recursive: true, force: true });
 });
+
+// Minimal GuessDiff stub. recordParticipantProgress only JSON.stringifies
+// these into channel_daily_participant.guesses_json, and listParticipants
+// passes them straight to the (mocked) image renderer, so they don't need
+// real attribute data.
+function stubDiffs(n: number): GuessDiff[] {
+  const diffs: GuessDiff[] = [];
+  for (let i = 0; i < n; i++) {
+    diffs.push({
+      talentId: `t-${i}`,
+      generation: { value: "?", state: "wrong" },
+      branch: { value: "JP", state: "wrong" },
+      debutYear: { value: 2020, state: "wrong" },
+      archetype: { value: "?", state: "wrong" },
+      height: { value: "Med", state: "wrong" },
+      birthMonth: { value: "January", state: "wrong" },
+    });
+  }
+  return diffs;
+}
 
 describe("upsertChannelToken", () => {
   it("creates a row on first call and overwrites the token on subsequent calls", () => {
@@ -62,7 +91,7 @@ describe("upsertParticipant", () => {
       userId: "u1",
       displayName: "Alice",
     });
-    // Simulate progress via direct UPDATE (recordCompletion path).
+    // Simulate progress via direct UPDATE.
     getDb()
       .prepare(
         `UPDATE channel_daily_participant
@@ -89,7 +118,7 @@ describe("upsertParticipant", () => {
   });
 });
 
-describe("recordCompletion token chaining", () => {
+describe("recordParticipantProgress token chaining", () => {
   beforeEach(() => {
     upsertParticipant({
       channelId: "c1",
@@ -107,7 +136,15 @@ describe("recordCompletion token chaining", () => {
     upsertChannelToken("c1", "2026-05-19", "tok-fresh", "app-1", now);
     setChannelMessageId("c1", "2026-05-19", "msg-1");
 
-    await recordCompletion("u1", "c1", "2026-05-19", 4, "won", now + 60);
+    await recordParticipantProgress(
+      "u1",
+      "c1",
+      "2026-05-19",
+      "Alice",
+      stubDiffs(4),
+      "won",
+      now + 60,
+    );
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
@@ -123,7 +160,15 @@ describe("recordCompletion token chaining", () => {
     setChannelMessageId("c1", "2026-05-19", "msg-1");
 
     // 16 minutes after the token was issued — well past the 15-minute TTL.
-    await recordCompletion("u1", "c1", "2026-05-19", 4, "won", now + 16 * 60);
+    await recordParticipantProgress(
+      "u1",
+      "c1",
+      "2026-05-19",
+      "Alice",
+      stubDiffs(4),
+      "won",
+      now + 16 * 60,
+    );
 
     // Participant row still gets updated even when no patch fires.
     const ps = listParticipants("c1", "2026-05-19");
@@ -132,15 +177,65 @@ describe("recordCompletion token chaining", () => {
     fetchSpy.mockRestore();
   });
 
-  it("is a no-op when there's no message id yet", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(""));
+  it("POSTs a new embed when state exists but no message has been posted yet", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({ id: "new-msg", channel_id: "c1" }), { status: 200 }),
+      );
     const now = 1_700_000_000;
     upsertChannelToken("c1", "2026-05-19", "tok-fresh", "app-1", now);
     // No setChannelMessageId — message hasn't been posted yet.
 
-    await recordCompletion("u1", "c1", "2026-05-19", 4, "won", now + 60);
+    await recordParticipantProgress(
+      "u1",
+      "c1",
+      "2026-05-19",
+      "Alice",
+      stubDiffs(4),
+      "won",
+      now + 60,
+    );
 
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/webhooks/app-1/tok-fresh?wait=true");
+    expect(init.method).toBe("POST");
+    // message_id captured from the POST response is now persisted.
+    expect(getChannelState("c1", "2026-05-19")?.messageId).toBe("new-msg");
+    fetchSpy.mockRestore();
+  });
+
+  it("borrows a fresh token from another puzzle when no state exists for this one", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({ id: "new-msg", channel_id: "c1" }), { status: 200 }),
+      );
+    const now = 1_700_000_000;
+    // Yesterday's row holds the fresh token; today's puzzle has no row at all.
+    upsertChannelToken("c1", "2026-05-19", "tok-fresh", "app-1", now);
+    setChannelMessageId("c1", "2026-05-19", "msg-old");
+
+    await recordParticipantProgress(
+      "u1",
+      "c1",
+      "2026-05-20",
+      "Alice",
+      stubDiffs(3),
+      "won",
+      now + 60,
+    );
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    // POST (not PATCH) since 2026-05-20 had no message yet.
+    expect(init.method).toBe("POST");
+    expect(url).toContain("/webhooks/app-1/tok-fresh?wait=true");
+    // New row for 2026-05-20 was created with the borrowed token + new msg id.
+    const next = getChannelState("c1", "2026-05-20");
+    expect(next?.latestToken).toBe("tok-fresh");
+    expect(next?.messageId).toBe("new-msg");
     fetchSpy.mockRestore();
   });
 });

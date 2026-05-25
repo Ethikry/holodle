@@ -1,4 +1,4 @@
-import type { GuessDiff } from "@holodle/shared";
+import { boardRowFromDiff, type GuessDiff, type PlayerSnapshot } from "@holodle/shared";
 import { getDb } from "../db/client.js";
 import { patchFollowup, postFollowup } from "../discord/followups.js";
 import {
@@ -85,6 +85,32 @@ export function setChannelMessageId(
       `UPDATE channel_daily_state SET message_id = ? WHERE channel_id = ? AND puzzle_id = ?`,
     )
     .run(messageId, channelId, puzzleId);
+}
+
+// Find ANY state row for this channel whose latest token is still fresh —
+// even one from a different puzzle. Used to bootstrap a new embed when a
+// user crosses their local midnight without re-/launching: the day-1 token
+// is still valid (15 min) and can be re-used to post a day-2 embed.
+export function findFreshChannelToken(
+  channelId: string,
+  nowSec: number = Math.floor(Date.now() / 1000),
+): { token: string; appId: string; exp: number } | null {
+  const row = getDb()
+    .prepare(
+      `SELECT latest_token, latest_token_app_id, latest_token_exp
+         FROM channel_daily_state
+        WHERE channel_id = ? AND latest_token_exp > ?
+        ORDER BY latest_token_exp DESC LIMIT 1`,
+    )
+    .get(channelId, nowSec) as
+    | { latest_token: string; latest_token_app_id: string; latest_token_exp: number }
+    | undefined;
+  if (!row) return null;
+  return {
+    token: row.latest_token,
+    appId: row.latest_token_app_id,
+    exp: row.latest_token_exp,
+  };
 }
 
 export function tryClaimRecapPosted(channelId: string, puzzleId: string): boolean {
@@ -261,20 +287,31 @@ export function listYesterdayRecapPlayers(
   }));
 }
 
-// Called from the guess route on *every* guess. Persists the running history
-// and — if we still hold a fresh interaction token for this channel-day —
-// patches the now-playing message in place so the embed image reflects the
-// new row. Skipping the patch on missing message_id / expired token is the
-// expected case for participants who never launched (they have a user_day
-// row but no channel embed to update).
+// Called from the guess route on EVERY guess. Persists the running history
+// against channel_daily_participant and — if a fresh interaction token still
+// exists for this channel — re-renders + patches the embed image so other
+// viewers see the new line immediately.
+//
+// Cross-day fallback: when no channel_daily_state row exists for this puzzle
+// (the user crossed their local midnight without anyone re-/launching), we
+// borrow a fresh token from another puzzle row in the same channel and POST
+// a brand-new embed for the new puzzle. Without this, "resuming play across
+// days" would silently drop into the void.
 export async function recordParticipantProgress(
   userId: string,
   channelId: string,
   puzzleId: string,
+  displayName: string,
   history: GuessDiff[],
   status: "playing" | "won" | "lost",
   nowSec: number = Math.floor(Date.now() / 1000),
 ): Promise<void> {
+  // Make sure the participant row exists — upsertParticipant is idempotent
+  // and will backfill from user_day. The user may be playing a puzzle in
+  // this channel that they never explicitly /launched (e.g. they crossed
+  // midnight mid-game).
+  upsertParticipant({ channelId, puzzleId, userId, displayName });
+
   const guessesUsed = history.length;
   const guessesJson = JSON.stringify(history);
   getDb()
@@ -285,15 +322,41 @@ export async function recordParticipantProgress(
     )
     .run(guessesUsed, guessesJson, status, channelId, puzzleId, userId);
 
-  const state = getChannelState(channelId, puzzleId);
-  if (!state || !state.messageId) return;
+  let state = getChannelState(channelId, puzzleId);
+
+  // No row at all for this puzzle — try to bootstrap one using a fresh
+  // token from any other puzzle in this channel.
+  if (!state) {
+    const fresh = findFreshChannelToken(channelId, nowSec);
+    if (!fresh) return; // nothing we can do without a valid token
+    state = upsertChannelToken(channelId, puzzleId, fresh.token, fresh.appId, nowSec);
+  }
+
   if (state.latestTokenExp <= nowSec) return; // token expired — no-op
+
   const participants = listParticipants(channelId, puzzleId);
   const { embed, components, file } = await buildNowPlayingEmbed({
     puzzleId,
     participants,
     applicationId: state.latestTokenAppId,
   });
+
+  // No message yet for this puzzle → POST a new one. Otherwise PATCH in place.
+  if (!state.messageId) {
+    try {
+      const posted = await postFollowup(
+        state.latestTokenAppId,
+        state.latestToken,
+        { embeds: [embed], components, files: [file] },
+        { wait: true },
+      );
+      if (posted) setChannelMessageId(channelId, puzzleId, posted.id);
+    } catch (err) {
+      console.error("[channelState] recordParticipantProgress post failed:", err);
+    }
+    return;
+  }
+
   try {
     await patchFollowup(state.latestTokenAppId, state.latestToken, state.messageId, {
       embeds: [embed],
@@ -305,45 +368,57 @@ export async function recordParticipantProgress(
   }
 }
 
-// Back-compat alias for the old "settled only" signature. The new flow calls
-// recordParticipantProgress on every guess; this is kept for any caller that
-// only knows the final status + count.
-export async function recordCompletion(
-  userId: string,
+// Used by the boards panel: every channel participant for this puzzle,
+// joined with their stored guess colors. `dayIndex` is derived from the
+// viewer's puzzleId by the caller (1:1 with puzzleId via dailyPicker), so
+// we can look each participant's row up directly.
+export function loadChannelBoards(
   channelId: string,
   puzzleId: string,
-  guessesUsed: number,
-  status: "won" | "lost",
-  nowSec: number = Math.floor(Date.now() / 1000),
-): Promise<void> {
-  // Update terminal status; leave guesses_json untouched (already written by
-  // the latest recordParticipantProgress on that user's previous guess).
-  getDb()
+  dayIndex: number,
+): PlayerSnapshot[] {
+  const rows = getDb()
     .prepare(
-      `UPDATE channel_daily_participant
-          SET guesses_used = ?, status = ?
-        WHERE channel_id = ? AND puzzle_id = ? AND user_id = ?`,
+      `SELECT p.user_id,
+              p.display_name,
+              p.guesses_used,
+              p.status,
+              u.guesses_json
+         FROM channel_daily_participant p
+         LEFT JOIN user_day u
+                ON u.user_id = p.user_id
+               AND u.day_index = ?
+        WHERE p.channel_id = ? AND p.puzzle_id = ?
+        ORDER BY p.joined_at ASC`,
     )
-    .run(guessesUsed, status, channelId, puzzleId, userId);
-
-  const state = getChannelState(channelId, puzzleId);
-  if (!state || !state.messageId) return;
-  if (state.latestTokenExp <= nowSec) return;
-  const participants = listParticipants(channelId, puzzleId);
-  const { embed, components, file } = await buildNowPlayingEmbed({
-    puzzleId,
-    participants,
-    applicationId: state.latestTokenAppId,
+    .all(dayIndex, channelId, puzzleId) as Array<{
+    user_id: string;
+    display_name: string;
+    guesses_used: number;
+    status: "playing" | "won" | "lost";
+    guesses_json: string | null;
+  }>;
+  return rows.map((r) => {
+    let board: ReturnType<typeof boardRowFromDiff>[] = [];
+    if (r.guesses_json) {
+      try {
+        const diffs = JSON.parse(r.guesses_json) as GuessDiff[];
+        board = diffs.map(boardRowFromDiff);
+      } catch {
+        board = [];
+      }
+    }
+    return {
+      userId: r.user_id,
+      displayName: r.display_name,
+      // We never persist avatarUrl in channel_daily_participant — those come
+      // from the live socket payload when the user actually connects.
+      avatarUrl: null,
+      guessesUsed: r.guesses_used,
+      status: r.status,
+      board,
+    };
   });
-  try {
-    await patchFollowup(state.latestTokenAppId, state.latestToken, state.messageId, {
-      embeds: [embed],
-      components,
-      files: [file],
-    });
-  } catch (err) {
-    console.error("[channelState] recordCompletion patch failed:", err);
-  }
 }
 
 // Helpers re-exported for the interactions route — keeps that file focused
