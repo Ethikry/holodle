@@ -11,6 +11,7 @@ function t(overrides: Partial<Talent>): Talent {
     generation: "Gen 0",
     debutYear: 2020,
     archetype: "Human",
+    penlightColor: "Blue",
     heightCm: 155,
     birthMonth: "June",
     active: true,
@@ -38,20 +39,21 @@ describe("compareGuess", () => {
     const diff = compareGuess(a, a);
     expect(diff.generation.state).toBe("equal");
     expect(diff.branch.state).toBe("equal");
-    expect(diff.debutYear.state).toBe("equal");
+    expect(diff.penlightColor.state).toBe("equal");
     expect(diff.archetype.state).toBe("equal");
     expect(diff.height.state).toBe("equal");
     expect(diff.birthMonth.state).toBe("equal");
   });
 
-  it("debutYear: equal / higher / lower (no near anymore)", () => {
-    const target = t({ debutYear: 2022 });
-    expect(compareGuess(t({ debutYear: 2022 }), target).debutYear.state).toBe("equal");
-    // Off-by-one used to be "near"; now it's directional only.
-    expect(compareGuess(t({ debutYear: 2021 }), target).debutYear.state).toBe("higher");
-    expect(compareGuess(t({ debutYear: 2023 }), target).debutYear.state).toBe("lower");
-    expect(compareGuess(t({ debutYear: 2018 }), target).debutYear.state).toBe("higher");
-    expect(compareGuess(t({ debutYear: 2026 }), target).debutYear.state).toBe("lower");
+  it("penlightColor: exact-match string (null/None only matches None)", () => {
+    const blue = t({ penlightColor: "Blue" });
+    expect(compareGuess(t({ penlightColor: "Blue" }), blue).penlightColor.state).toBe("equal");
+    expect(compareGuess(t({ penlightColor: "Red" }), blue).penlightColor.state).toBe("wrong");
+
+    const noColor = t({ penlightColor: null });
+    expect(compareGuess(t({ penlightColor: null }), noColor).penlightColor.state).toBe("equal");
+    expect(compareGuess(t({ penlightColor: "Red" }), noColor).penlightColor.state).toBe("wrong");
+    expect(compareGuess(t({ penlightColor: null }), blue).penlightColor.state).toBe("wrong");
   });
 
   it("height buckets: equal or wrong only — no adjacency credit", () => {
@@ -85,6 +87,27 @@ describe("compareGuess", () => {
     expect(compareGuess(t({ generation: "Gen 3" }), target).generation.state).toBe("equal");
     expect(compareGuess(t({ generation: "Gen 4" }), target).generation.state).toBe("wrong");
     expect(compareGuess(t({ generation: "GAMERS" }), target).generation.state).toBe("wrong");
+  });
+
+  it("generation: multi-group talents match on any shared label (Fubuki: Gen 1 + GAMERS)", () => {
+    const fubuki = t({ generation: ["Gen 1", "GAMERS"] });
+    // Guessing a single-group talent that shares one of Fubuki's labels.
+    expect(compareGuess(t({ generation: "Gen 1" }), fubuki).generation.state).toBe("equal");
+    expect(compareGuess(t({ generation: "GAMERS" }), fubuki).generation.state).toBe("equal");
+    // No overlap → wrong.
+    expect(compareGuess(t({ generation: "Gen 2" }), fubuki).generation.state).toBe("wrong");
+    // And the reverse: guessing Fubuki against a Gen 1 target also matches.
+    const aki = t({ generation: "Gen 1" });
+    expect(compareGuess(fubuki, aki).generation.state).toBe("equal");
+    // Display value carries the guess's labels joined.
+    expect(compareGuess(fubuki, aki).generation.value).toBe("Gen 1 / GAMERS");
+  });
+
+  it("archetype: multi-archetype talents match on any shared label (Nerissa: Bird + Demon)", () => {
+    const nerissa = t({ archetype: ["Bird", "Demon"] });
+    expect(compareGuess(t({ archetype: "Bird" }), nerissa).archetype.state).toBe("equal");
+    expect(compareGuess(t({ archetype: "Demon" }), nerissa).archetype.state).toBe("equal");
+    expect(compareGuess(t({ archetype: "Human" }), nerissa).archetype.state).toBe("wrong");
   });
 
   it("branch and archetype: equal or wrong", () => {

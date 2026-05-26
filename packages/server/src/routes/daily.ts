@@ -3,7 +3,7 @@ import type { DailyState } from "@holodle/shared";
 import { MAX_GUESSES } from "@holodle/shared";
 import { requireUser } from "../auth/requireUser.js";
 import { loadUserDay } from "../db/client.js";
-import { dayIndexFor, pickDaily, puzzleIdFor, safeTz } from "../game/dailyPicker.js";
+import { dayIndexFor, pickByIndex, puzzleIdFor, safeTz } from "../game/dailyPicker.js";
 import { getRegistry } from "../game/talents.js";
 
 export async function dailyRoutes(app: FastifyInstance): Promise<void> {
@@ -16,14 +16,15 @@ export async function dailyRoutes(app: FastifyInstance): Promise<void> {
     const tz = safeTz(((req.query as Record<string, string | undefined>) ?? {}).tz);
     const reg = getRegistry();
     const now = Date.now();
-    const answer = pickDaily(reg.activePool, now, tz);
+    const dayIndex = dayIndexFor(now, tz);
+    const row = loadUserDay(user.id, dayIndex);
+    // `endlessOffset` is 0 outside the test guild; the /endless command in
+    // the test guild bumps it to rotate the answer without bumping calendars.
+    const answer = pickByIndex(reg.activePool, dayIndex + row.endlessOffset);
     if (!answer) {
       reply.code(503);
       return { error: "No active talents available" };
     }
-
-    const dayIndex = dayIndexFor(now, tz);
-    const row = loadUserDay(user.id, dayIndex);
     const state: DailyState = {
       puzzleId: puzzleIdFor(now, tz),
       guessesUsed: row.guesses.length,

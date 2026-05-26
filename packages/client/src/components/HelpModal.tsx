@@ -36,7 +36,7 @@ export function HelpModal(): JSX.Element | null {
           </li>
           <li className="flex items-center gap-2">
             <span className="cell-wrong w-24 shrink-0">Red</span>
-            <span>No match. ↑ / ↓ point toward the target for years.</span>
+            <span>No match. ↑ / ↓ point toward the target for birth month.</span>
           </li>
         </ul>
         <p className="mt-3 text-xs text-holo-muted">

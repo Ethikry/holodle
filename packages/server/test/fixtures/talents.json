@@ -7,6 +7,7 @@
     "generation": "Gen 0",
     "debutYear": 2020,
     "archetype": "Human",
+    "penlightColor": "Blue",
     "heightCm": 152,
     "birthMonth": "June",
     "active": true
@@ -19,6 +20,7 @@
     "generation": "Gen 1",
     "debutYear": 2021,
     "archetype": "Zombie",
+    "penlightColor": "Red",
     "heightCm": 168,
     "birthMonth": "December",
     "active": true
@@ -31,6 +33,7 @@
     "generation": "Myth",
     "debutYear": 2022,
     "archetype": "Phoenix",
+    "penlightColor": null,
     "heightCm": 145,
     "birthMonth": "January",
     "active": true

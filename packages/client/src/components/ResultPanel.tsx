@@ -25,9 +25,20 @@ export function ResultPanel(): JSX.Element | null {
     <div className="mx-4 my-4 rounded-2xl border-2 border-holo-bad/40 bg-holo-badBg/40 px-6 py-6 text-center">
       <p className="text-xl font-bold text-holo-bad">Better luck tomorrow.</p>
       {answer && (
-        <p className="mt-1 text-sm">
-          The talent was <span className="font-bold">{answer.name}</span>.
-        </p>
+        <>
+          <div className="mt-3 flex justify-center">
+            <div className="card flex h-20 w-20 items-center justify-center overflow-hidden border border-holo-accent/30">
+              <img
+                src={answer.avatarUrl}
+                alt={answer.name}
+                className="h-full w-full object-cover"
+              />
+            </div>
+          </div>
+          <p className="mt-2 text-sm">
+            The talent was <span className="font-bold">{answer.name}</span>.
+          </p>
+        </>
       )}
     </div>
   );

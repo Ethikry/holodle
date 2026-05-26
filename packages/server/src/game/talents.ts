@@ -9,15 +9,27 @@ const MonthSchema = z.enum([
   "July", "August", "September", "October", "November", "December",
 ]);
 
+// Allow either a plain string or a non-empty array of strings. Used for
+// generation + archetype so multi-group talents (Fubuki, Nerissa) can list
+// every applicable label and match a guess against any of them.
+const StringOrList = z.union([
+  z.string().min(1),
+  z.array(z.string().min(1)).nonempty(),
+]);
+
 const TalentSchema = z.object({
   id: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "id must be lowercase-kebab"),
   name: z.string().min(1),
   avatarUrl: z.string().min(1),
   branch: BranchSchema,
   // Free-form group label — "Gen 0", "GAMERS", "Promise", "Regloss", …
-  generation: z.string().min(1),
+  generation: StringOrList,
+  // Debut year is no longer used for diffing (penlight color replaced it),
+  // but we keep the column so a revert is one schema swap away.
   debutYear: z.number().int().min(2000).max(2100),
-  archetype: z.string().min(1),
+  archetype: StringOrList,
+  // Hololive 7th fes penlight color. `null` for talents with no assigned color.
+  penlightColor: z.string().min(1).nullable(),
   heightCm: z.number().int().positive(),
   birthMonth: MonthSchema,
   active: z.boolean(),

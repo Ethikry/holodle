@@ -13,15 +13,27 @@ import {
   upsertParticipant,
 } from "../game/channelState.js";
 import { LAUNCH_BUTTON_CUSTOM_ID } from "../discord/embeds.js";
-import { puzzleIdFor, safeTz } from "../game/dailyPicker.js";
-import { getLatestUserTz } from "../db/client.js";
+import { dayIndexFor, puzzleIdFor, safeTz } from "../game/dailyPicker.js";
+import { advanceEndless, getLatestUserTz, resetToday } from "../db/client.js";
+
+// Discord guild whose members may invoke the testing-only commands
+// (/endless, /reset-today). Outside this guild the commands aren't even
+// registered, but we still gate the handlers as defense-in-depth in case
+// someone manually crafts an interaction or the registration script is
+// pointed at the wrong guild.
+const TEST_GUILD_ID = "1506301114365247611";
 
 // Discord interaction types.
 const TYPE_PING = 1;
 const TYPE_APPLICATION_COMMAND = 2;
 const TYPE_MESSAGE_COMPONENT = 3;
 const RESPONSE_PONG = 1;
+const RESPONSE_CHANNEL_MESSAGE = 4;
 const RESPONSE_LAUNCH_ACTIVITY = 12;
+
+// Ephemeral message flag — only the invoker sees the reply. Used for the
+// test-guild commands so we don't spam the channel.
+const FLAG_EPHEMERAL = 64;
 
 interface InteractionUser {
   id: string;
@@ -166,6 +178,16 @@ export async function interactionsRoutes(app: FastifyInstance): Promise<void> {
         });
         return { type: RESPONSE_LAUNCH_ACTIVITY };
       }
+      if (name === "endless" || name === "reset-today") {
+        // Guild-gate both. Discord won't surface them outside TEST_GUILD_ID
+        // because they're registered as guild commands there, but a crafted
+        // interaction (or a future mis-deploy) could still reach this code.
+        if (payload.guild_id !== TEST_GUILD_ID) {
+          return ephemeralReply("This command is only available in the testing server.");
+        }
+        if (name === "endless") return handleEndless(payload);
+        return handleResetToday(payload);
+      }
     }
 
     // Blue "Play now!" button — same launch flow as the /launch command. We
@@ -258,6 +280,48 @@ async function handleLaunch(payload: InteractionPayload): Promise<void> {
   } catch (err) {
     console.error("[interactions] syncChannelEmbed failed:", err);
   }
+}
+
+function ephemeralReply(content: string): {
+  type: number;
+  data: { content: string; flags: number };
+} {
+  return {
+    type: RESPONSE_CHANNEL_MESSAGE,
+    data: { content, flags: FLAG_EPHEMERAL },
+  };
+}
+
+// /endless — test-guild only. Bumps the invoker's endless_offset for their
+// current day_index and resets the row to a fresh playing state. The next
+// /api/daily call (after re-launching the activity) will pick a new talent.
+function handleEndless(payload: InteractionPayload): {
+  type: number;
+  data: { content: string; flags: number };
+} {
+  const user = pickUser(payload);
+  if (!user) return ephemeralReply("Couldn't read your user info from this interaction.");
+  const tz = safeTz(getLatestUserTz(user.id) ?? undefined);
+  const dayIndex = dayIndexFor(Date.now(), tz);
+  const offset = advanceEndless(user.id, dayIndex);
+  return ephemeralReply(
+    `Endless mode advanced to talent #${offset + 1} for today. Re-launch /holodle to play the next puzzle.`,
+  );
+}
+
+// /reset-today — test-guild only. Resets every user_day row in the 3-day
+// window centered on UTC today (covers cross-tz players) plus every
+// channel_daily_participant row from the last 48h. Stats untouched.
+function handleResetToday(payload: InteractionPayload): {
+  type: number;
+  data: { content: string; flags: number };
+} {
+  void payload;
+  const todayUtc = dayIndexFor(Date.now(), "UTC");
+  const { userDays, channelRows } = resetToday(todayUtc);
+  return ephemeralReply(
+    `Reset today: cleared ${userDays} user_day row(s) and ${channelRows} channel participant row(s). Everyone can replay.`,
+  );
 }
 
 const RAW_BODY_SYMBOL = Symbol.for("holodle.rawBody");

@@ -66,7 +66,7 @@ export function GuessRow({
         <AttributePill cell={diff.branch} />
       </div>
       <div role="cell">
-        <AttributePill cell={diff.debutYear} />
+        <AttributePill cell={diff.penlightColor} />
       </div>
       <div role="cell">
         <AttributePill cell={diff.archetype} />

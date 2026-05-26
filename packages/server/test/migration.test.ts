@@ -30,7 +30,7 @@ const FRESH_DIFF_JSON = JSON.stringify([
     talentId: "kobo-kanaeru",
     generation: { value: "ID Gen 3", state: "wrong" },
     branch: { value: "ID", state: "equal" },
-    debutYear: { value: 2022, state: "equal" },
+    penlightColor: { value: "Light Blue", state: "equal" },
     archetype: { value: "Human", state: "equal" },
     height: { value: "Med", state: "equal" },
     birthMonth: { value: "December", state: "equal" },
