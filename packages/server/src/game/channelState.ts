@@ -596,6 +596,11 @@ export async function recordParticipantProgress(
 // joined with their stored guess colors. `dayIndex` is derived from the
 // viewer's puzzleId by the caller (1:1 with puzzleId via dailyPicker), so
 // we can look each participant's row up directly.
+//
+// avatar_url is read straight from channel_daily_participant (populated by
+// upsertParticipant on /launch). guesses_json prefers the channel-side
+// row but falls back to user_day for legacy participants whose channel
+// json was never written by the pre-#3 recordCompletion path.
 export function loadChannelBoards(
   channelId: string,
   puzzleId: string,
@@ -605,9 +610,11 @@ export function loadChannelBoards(
     .prepare(
       `SELECT p.user_id,
               p.display_name,
+              p.avatar_url,
               p.guesses_used,
               p.status,
-              u.guesses_json
+              p.guesses_json AS channel_json,
+              u.guesses_json AS userday_json
          FROM channel_daily_participant p
          LEFT JOIN user_day u
                 ON u.user_id = p.user_id
@@ -618,26 +625,23 @@ export function loadChannelBoards(
     .all(dayIndex, channelId, puzzleId) as Array<{
     user_id: string;
     display_name: string;
+    avatar_url: string | null;
     guesses_used: number;
     status: "playing" | "won" | "lost";
-    guesses_json: string | null;
+    channel_json: string | null;
+    userday_json: string | null;
   }>;
   return rows.map((r) => {
-    let board: ReturnType<typeof boardRowFromDiff>[] = [];
-    if (r.guesses_json) {
-      try {
-        const diffs = JSON.parse(r.guesses_json) as GuessDiff[];
-        board = diffs.map(boardRowFromDiff);
-      } catch {
-        board = [];
-      }
-    }
+    const channelDiffs = parseGuesses(r.channel_json ?? "[]");
+    const diffs =
+      channelDiffs.length === 0 && r.userday_json
+        ? parseGuesses(r.userday_json)
+        : channelDiffs;
+    const board = diffs.map(boardRowFromDiff);
     return {
       userId: r.user_id,
       displayName: r.display_name,
-      // We never persist avatarUrl in channel_daily_participant — those come
-      // from the live socket payload when the user actually connects.
-      avatarUrl: null,
+      avatarUrl: r.avatar_url,
       guessesUsed: r.guesses_used,
       status: r.status,
       board,
