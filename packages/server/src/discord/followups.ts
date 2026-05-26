@@ -14,6 +14,9 @@ export interface FollowupFile {
 }
 
 export interface FollowupPayload {
+  // Plain message text rendered above the embed. We use this for the
+  // "X was playing" subtitle on superseded "Now Playing" messages.
+  content?: string;
   embeds?: Embed[];
   components?: MessageComponent[];
   allowed_mentions?: { parse?: string[]; users?: string[]; roles?: string[] };
@@ -24,6 +27,14 @@ export interface FollowupPayload {
   // sent as multipart/form-data with a `payload_json` part. Each embed that
   // wants to display one references it via `attachment://<filename>`.
   files?: FollowupFile[];
+  // Make this message a reply to another. Discord renders the referenced
+  // message as a quoted preview above the new one. `fail_if_not_exists:
+  // false` so a deleted referenced message degrades to a normal post
+  // instead of failing the request.
+  message_reference?: {
+    message_id: string;
+    fail_if_not_exists?: boolean;
+  };
 }
 
 export interface PostedMessage {

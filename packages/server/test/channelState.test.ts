@@ -23,6 +23,9 @@ const {
   upsertParticipant,
   listParticipants,
   recordParticipantProgress,
+  isStaleMessage,
+  findMostRecentUnpostedRecapPuzzle,
+  tryClaimRecapPosted,
 } = await import("../src/game/channelState.js");
 
 beforeAll(() => {
@@ -237,5 +240,166 @@ describe("recordParticipantProgress token chaining", () => {
     expect(next?.latestToken).toBe("tok-fresh");
     expect(next?.messageId).toBe("new-msg");
     fetchSpy.mockRestore();
+  });
+});
+
+describe("isStaleMessage", () => {
+  it("is false when no message has been posted yet", () => {
+    const now = 1_700_000_000;
+    upsertChannelToken("c1", "2026-05-19", "tok", "app-1", now);
+    const state = getChannelState("c1", "2026-05-19");
+    expect(state && isStaleMessage(state, now + 24 * 3600)).toBe(false);
+  });
+
+  it("is false during normal back-and-forth (recent edits within an hour)", () => {
+    const now = 1_700_000_000;
+    upsertChannelToken("c1", "2026-05-19", "tok", "app-1", now);
+    setChannelMessageId("c1", "2026-05-19", "msg-1", now);
+    const state = getChannelState("c1", "2026-05-19");
+    // 25 minutes since post + last edit → not stale.
+    expect(state && isStaleMessage(state, now + 25 * 60)).toBe(false);
+  });
+
+  it("is true when more than 60 minutes have passed since the original post", () => {
+    const now = 1_700_000_000;
+    upsertChannelToken("c1", "2026-05-19", "tok", "app-1", now);
+    setChannelMessageId("c1", "2026-05-19", "msg-1", now);
+    // Bump updated_at recently so only the age threshold is responsible.
+    getDb()
+      .prepare(
+        `UPDATE channel_daily_state SET message_updated_at = ? WHERE channel_id = ? AND puzzle_id = ?`,
+      )
+      .run(now + 65 * 60, "c1", "2026-05-19");
+    const state = getChannelState("c1", "2026-05-19");
+    expect(state && isStaleMessage(state, now + 65 * 60)).toBe(true);
+  });
+
+  it("is true when the message hasn't been edited in 30+ minutes", () => {
+    const now = 1_700_000_000;
+    upsertChannelToken("c1", "2026-05-19", "tok", "app-1", now);
+    setChannelMessageId("c1", "2026-05-19", "msg-1", now);
+    const state = getChannelState("c1", "2026-05-19");
+    // 31 minutes since last edit; total age also 31 min (under 60-min cap)
+    // — so only the idle threshold drives the result.
+    expect(state && isStaleMessage(state, now + 31 * 60)).toBe(true);
+  });
+});
+
+describe("syncChannelEmbed supersede flow", () => {
+  beforeEach(() => {
+    upsertParticipant({
+      channelId: "c1",
+      puzzleId: "2026-05-19",
+      userId: "u1",
+      displayName: "Alice",
+    });
+  });
+
+  it("PATCHes old to past tense + POSTs new with message_reference when stale", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response("", { status: 200 })) // PATCH old
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "new-msg", channel_id: "c1" }), { status: 200 }),
+      ); // POST new
+    const now = 1_700_000_000;
+    upsertChannelToken("c1", "2026-05-19", "tok-fresh", "app-1", now + 80 * 60);
+    setChannelMessageId("c1", "2026-05-19", "old-msg", now);
+
+    // 80 minutes after the original post — past the 60-min age threshold.
+    await recordParticipantProgress(
+      "u1",
+      "c1",
+      "2026-05-19",
+      "Alice",
+      stubDiffs(3),
+      "playing",
+      now + 80 * 60,
+    );
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    const [patchUrl, patchInit] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const [postUrl, postInit] = fetchSpy.mock.calls[1] as [string, RequestInit];
+    expect(patchInit.method).toBe("PATCH");
+    expect(patchUrl).toContain("/messages/old-msg");
+    expect(postInit.method).toBe("POST");
+    expect(postUrl).toContain("/webhooks/app-1/tok-fresh?wait=true");
+
+    // POST payload was multipart (carries the PNG); the payload_json field
+    // inside has message_reference + the past-tense participants are
+    // implicit (we don't snapshot the body here, but state moves on).
+    const next = getChannelState("c1", "2026-05-19");
+    expect(next?.messageId).toBe("new-msg");
+    expect(next?.messageCreatedAt).toBe(now + 80 * 60);
+    fetchSpy.mockRestore();
+  });
+
+  it("PATCHes in place when message is still fresh (under both thresholds)", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("", { status: 200 }));
+    const now = 1_700_000_000;
+    upsertChannelToken("c1", "2026-05-19", "tok-fresh", "app-1", now);
+    setChannelMessageId("c1", "2026-05-19", "msg-1", now);
+
+    // 5 minutes after post — well within both thresholds.
+    await recordParticipantProgress(
+      "u1",
+      "c1",
+      "2026-05-19",
+      "Alice",
+      stubDiffs(2),
+      "playing",
+      now + 5 * 60,
+    );
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(init.method).toBe("PATCH");
+    expect(url).toContain("/messages/msg-1");
+    // message_updated_at gets bumped on successful PATCH.
+    const next = getChannelState("c1", "2026-05-19");
+    expect(next?.messageId).toBe("msg-1");
+    expect(next?.messageUpdatedAt).toBe(now + 5 * 60);
+    fetchSpy.mockRestore();
+  });
+});
+
+describe("findMostRecentUnpostedRecapPuzzle", () => {
+  beforeEach(() => {
+    // Three days of settled plays in channel c1.
+    for (const [puzzleId, userId] of [
+      ["2026-05-15", "u1"],
+      ["2026-05-18", "u2"],
+      ["2026-05-20", "u3"],
+    ] as const) {
+      upsertParticipant({ channelId: "c1", puzzleId, userId, displayName: userId });
+      getDb()
+        .prepare(
+          `UPDATE channel_daily_participant SET status='won', guesses_used=3 WHERE channel_id='c1' AND puzzle_id=? AND user_id=?`,
+        )
+        .run(puzzleId, userId);
+    }
+  });
+
+  it("returns the most recent puzzle older than today with settled plays", () => {
+    expect(findMostRecentUnpostedRecapPuzzle("c1", "2026-05-25")).toBe("2026-05-20");
+  });
+
+  it("skips puzzles that have already been recapped", () => {
+    tryClaimRecapPosted("c1", "2026-05-20");
+    expect(findMostRecentUnpostedRecapPuzzle("c1", "2026-05-25")).toBe("2026-05-18");
+    tryClaimRecapPosted("c1", "2026-05-18");
+    tryClaimRecapPosted("c1", "2026-05-15");
+    expect(findMostRecentUnpostedRecapPuzzle("c1", "2026-05-25")).toBeNull();
+  });
+
+  it("excludes today's puzzle", () => {
+    // 2026-05-20 has settled plays but is == today → skip.
+    expect(findMostRecentUnpostedRecapPuzzle("c1", "2026-05-20")).toBe("2026-05-18");
+  });
+
+  it("returns null when nothing eligible exists in this channel", () => {
+    expect(findMostRecentUnpostedRecapPuzzle("c2", "2026-05-25")).toBeNull();
   });
 });

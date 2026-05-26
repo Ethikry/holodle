@@ -44,6 +44,12 @@ CREATE TABLE IF NOT EXISTS channel_daily_state (
   channel_id           TEXT NOT NULL,
   puzzle_id            TEXT NOT NULL,
   message_id           TEXT,
+  -- Epoch seconds. Set when message_id is first written; tracked so we can
+  -- decide whether to PATCH the existing embed in place or post a new one
+  -- as a reply (see isStaleMessage in channelState.ts). NULL when no
+  -- message has been posted yet for this puzzle.
+  message_created_at   INTEGER,
+  message_updated_at   INTEGER,
   latest_token         TEXT NOT NULL,
   latest_token_app_id  TEXT NOT NULL,
   latest_token_exp     INTEGER NOT NULL,
@@ -97,5 +103,15 @@ export const ADDITIVE_MIGRATIONS: Array<{ table: string; column: string; ddl: st
     table: "channel_daily_participant",
     column: "guesses_json",
     ddl: "ALTER TABLE channel_daily_participant ADD COLUMN guesses_json TEXT NOT NULL DEFAULT '[]'",
+  },
+  {
+    table: "channel_daily_state",
+    column: "message_created_at",
+    ddl: "ALTER TABLE channel_daily_state ADD COLUMN message_created_at INTEGER",
+  },
+  {
+    table: "channel_daily_state",
+    column: "message_updated_at",
+    ddl: "ALTER TABLE channel_daily_state ADD COLUMN message_updated_at INTEGER",
   },
 ];
