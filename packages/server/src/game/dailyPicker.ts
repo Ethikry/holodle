@@ -92,6 +92,35 @@ export function displayPuzzleNumberForPuzzleId(puzzleId: string): number {
   return displayPuzzleNumberFor(ms);
 }
 
+// Parse YYYY-MM-DD back into a dayIndex. Inverse of puzzleIdFor — useful
+// when we have a puzzle_id string from the DB and want to look up a
+// user_day row keyed by dayIndex, without having to re-derive the source
+// timezone (puzzleIdFor's tz only affects the YMD; dayIndex is purely a
+// function of the YMD).
+export function dayIndexForPuzzleId(puzzleId: string): number {
+  const parts = puzzleId.split("-");
+  const y = parts[0];
+  const m = parts[1];
+  const d = parts[2];
+  if (!y || !m || !d) return 0;
+  const ms = Date.UTC(Number.parseInt(y, 10), Number.parseInt(m, 10) - 1, Number.parseInt(d, 10));
+  if (!Number.isFinite(ms)) return 0;
+  return Math.floor((ms - EPOCH_UTC_MS) / 86_400_000);
+}
+
+// "YYYY-MM-DD" → "YYYY-MM-DD" the previous calendar day. Pure date math
+// (no tz). Used by computeChannelStreak to walk backward.
+export function prevPuzzleId(puzzleId: string): string {
+  const parts = puzzleId.split("-");
+  const y = parts[0];
+  const m = parts[1];
+  const d = parts[2];
+  if (!y || !m || !d) return puzzleId;
+  const ms = Date.UTC(Number.parseInt(y, 10), Number.parseInt(m, 10) - 1, Number.parseInt(d, 10));
+  if (!Number.isFinite(ms)) return puzzleId;
+  return ymdFormatter("UTC").format(new Date(ms - 86_400_000));
+}
+
 // Convenience: the dayIndex/puzzleId in America/Chicago. Used by the recap
 // scheduler — never by per-user routes.
 export function cstDayIndexFor(nowMs: number = Date.now()): number {

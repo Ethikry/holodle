@@ -3,6 +3,7 @@ import { env } from "../env.js";
 import { verifyInteractionSignature } from "../discord/verify.js";
 import {
   buildYesterdayRecapEmbed,
+  computeChannelStreak,
   findMostRecentUnpostedRecapPuzzle,
   listYesterdayRecapPlayers,
   postFollowup,
@@ -210,12 +211,22 @@ async function handleLaunch(payload: InteractionPayload): Promise<void> {
   if (recapPuzzleId) {
     const players = listYesterdayRecapPlayers(channelId, recapPuzzleId);
     if (players.length > 0 && tryClaimRecapPosted(channelId, recapPuzzleId)) {
-      const { embed, file } = await buildYesterdayRecapEmbed({
+      const streak = computeChannelStreak(channelId, recapPuzzleId);
+      const { embed, file, content } = await buildYesterdayRecapEmbed({
         puzzleId: recapPuzzleId,
         players,
+        streak,
       });
       try {
-        await postFollowup(applicationId, token, { embeds: [embed], files: [file] });
+        await postFollowup(applicationId, token, {
+          content,
+          embeds: [embed],
+          files: [file],
+          // Mention user IDs in the content for visibility, but suppress
+          // notifications so the recap doesn't ping the entire channel
+          // every time it fires.
+          allowed_mentions: { parse: [] },
+        });
       } catch (err) {
         console.error("[interactions] recap follow-up failed:", err);
       }

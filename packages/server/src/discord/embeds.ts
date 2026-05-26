@@ -152,17 +152,86 @@ export interface RecapPlayer {
 export interface RecapEmbedInput {
   puzzleId: string;
   players: RecapPlayer[];
+  // Channel streak count (consecutive days with settled plays through
+  // puzzleId, inclusive). 0 or omitted → streak line is skipped.
+  streak?: number;
+  // Maximum guesses allowed per puzzle — used to format the loss bucket
+  // (e.g. "X/6"). Defaults to 6 if omitted.
+  maxGuesses?: number;
   answerName?: string | null;
 }
 
 export interface RenderedRecap {
   embed: Embed;
   file: FollowupFile;
+  // Plain-text message body posted above the image. Includes the streak
+  // line + grouped mentions by score. Recipients are mentioned by id but
+  // we suppress notifications via allowed_mentions on the wire.
+  content: string;
+}
+
+const CROWN_EMOJI = "👑";
+
+function streakFlames(streak: number): string {
+  if (streak >= 100) return "🔥🔥🔥";
+  if (streak >= 10) return "🔥🔥";
+  return "🔥";
+}
+
+// Builds the Wordle-style header: optional streak line + intro, then one
+// line per (guesses-used) bucket. Lowest-guess winners get the 👑 prefix;
+// losses go under "X/N:".
+function buildRecapContent(
+  players: RecapPlayer[],
+  puzzleId: string,
+  streak: number,
+  maxGuesses: number,
+): string {
+  const puzzleNumber = displayPuzzleNumberForPuzzleId(puzzleId);
+  const lines: string[] = [];
+
+  if (streak > 0) {
+    lines.push(
+      `Your channel is on a **${streak}-day streak!** ${streakFlames(streak)} Here are the results for Holodle No. ${puzzleNumber}:`,
+    );
+  } else {
+    lines.push(`Here are the results for Holodle No. ${puzzleNumber}:`);
+  }
+
+  // Group winners by guesses_used, losses by themselves.
+  const wins = new Map<number, RecapPlayer[]>();
+  const losses: RecapPlayer[] = [];
+  for (const p of players) {
+    if (p.status === "won") {
+      const arr = wins.get(p.guessesUsed) ?? [];
+      arr.push(p);
+      wins.set(p.guessesUsed, arr);
+    } else {
+      losses.push(p);
+    }
+  }
+
+  const sortedWinCounts = Array.from(wins.keys()).sort((a, b) => a - b);
+  const lowestCount = sortedWinCounts[0];
+  for (const count of sortedWinCounts) {
+    const prefix = count === lowestCount ? `${CROWN_EMOJI} ` : "";
+    const bucket = wins.get(count) ?? [];
+    const mentions = bucket.map((p) => `<@${p.userId}>`).join(" ");
+    lines.push(`${prefix}${count}/${maxGuesses}: ${mentions}`);
+  }
+  if (losses.length > 0) {
+    const mentions = losses.map((p) => `<@${p.userId}>`).join(" ");
+    lines.push(`X/${maxGuesses}: ${mentions}`);
+  }
+
+  return lines.join("\n");
 }
 
 export async function buildYesterdayRecapEmbed({
   puzzleId,
   players,
+  streak = 0,
+  maxGuesses = 6,
   answerName,
 }: RecapEmbedInput): Promise<RenderedRecap> {
   // The recap now uses the same image renderer as Now Playing — players are
@@ -177,6 +246,9 @@ export async function buildYesterdayRecapEmbed({
     puzzleId,
     puzzleNumber,
     participants: imageParticipants,
+    // Belt-and-suspenders: the content text identifies this as a recap,
+    // but we keep the in-image subtitle too in case the content gets
+    // truncated or clients suppress it.
     subtitle: answerName ? `Answer: ${answerName}` : "Yesterday's results",
   });
 
@@ -186,5 +258,6 @@ export async function buildYesterdayRecapEmbed({
       image: { url: `attachment://${RECAP_FILENAME}` },
     },
     file: { filename: RECAP_FILENAME, data: png, contentType: "image/png" },
+    content: buildRecapContent(players, puzzleId, streak, maxGuesses),
   };
 }

@@ -8,6 +8,7 @@ import {
   type NowPlayingParticipant,
   type RecapPlayer,
 } from "../discord/embeds.js";
+import { dayIndexForPuzzleId, prevPuzzleId } from "./dailyPicker.js";
 
 // Staleness thresholds. If either is exceeded when we go to PATCH the
 // existing "Now Playing" message, we instead supersede: PATCH the old to
@@ -369,31 +370,82 @@ export function listYesterdayRecapPlayers(
   channelId: string,
   puzzleId: string,
 ): RecapPlayer[] {
+  // LEFT JOIN with user_day so we can backfill the board for legacy channel
+  // rows where guesses_json was never populated (pre-#3 recordCompletion
+  // didn't write diffs to channel_daily_participant — only status+count).
+  // The dayIndex is derived from puzzle_id directly so we don't need the
+  // launching user's tz.
+  const dayIndex = dayIndexForPuzzleId(puzzleId);
   const rows = getDb()
     .prepare(
-      `SELECT user_id, display_name, avatar_url, guesses_used, guesses_json, status
-         FROM channel_daily_participant
-        WHERE channel_id = ?
-          AND puzzle_id  = ?
-          AND status IN ('won','lost')
-        ORDER BY guesses_used ASC`,
+      `SELECT p.user_id, p.display_name, p.avatar_url,
+              p.guesses_used, p.guesses_json AS channel_json, p.status,
+              u.guesses_json AS userday_json
+         FROM channel_daily_participant p
+         LEFT JOIN user_day u
+                ON u.user_id   = p.user_id
+               AND u.day_index = ?
+        WHERE p.channel_id = ?
+          AND p.puzzle_id  = ?
+          AND p.status IN ('won','lost')
+        ORDER BY p.guesses_used ASC`,
     )
-    .all(channelId, puzzleId) as Array<{
+    .all(dayIndex, channelId, puzzleId) as Array<{
     user_id: string;
     display_name: string;
     avatar_url: string | null;
     guesses_used: number;
-    guesses_json: string;
+    channel_json: string;
+    userday_json: string | null;
     status: "won" | "lost";
   }>;
-  return rows.map((r) => ({
-    userId: r.user_id,
-    displayName: r.display_name,
-    avatarUrl: r.avatar_url,
-    guessesUsed: r.guesses_used,
-    history: parseGuesses(r.guesses_json),
-    status: r.status,
-  }));
+  return rows.map((r) => {
+    const channelHistory = parseGuesses(r.channel_json);
+    // Fall back to user_day only when the channel-side history is empty —
+    // never override a populated channel-side row.
+    const history =
+      channelHistory.length === 0 && r.userday_json
+        ? parseGuesses(r.userday_json)
+        : channelHistory;
+    return {
+      userId: r.user_id,
+      displayName: r.display_name,
+      avatarUrl: r.avatar_url,
+      guessesUsed: r.guesses_used,
+      history,
+      status: r.status,
+    };
+  });
+}
+
+// Consecutive calendar days, walking back from `throughPuzzleId`, on which
+// at least one channel member settled (won or lost). The "streak" surfaced
+// in the recap header. Returns 0 if throughPuzzleId itself has no settled
+// plays.
+export function computeChannelStreak(
+  channelId: string,
+  throughPuzzleId: string,
+): number {
+  const rows = getDb()
+    .prepare(
+      `SELECT DISTINCT puzzle_id FROM channel_daily_participant
+        WHERE channel_id = ?
+          AND status IN ('won','lost')
+          AND puzzle_id <= ?`,
+    )
+    .all(channelId, throughPuzzleId) as Array<{ puzzle_id: string }>;
+  const settled = new Set(rows.map((r) => r.puzzle_id));
+  let streak = 0;
+  let cursor = throughPuzzleId;
+  // Bounded walk so a malformed puzzle_id can't infinite-loop.
+  for (let i = 0; i < 10_000; i++) {
+    if (!settled.has(cursor)) break;
+    streak++;
+    const prev = prevPuzzleId(cursor);
+    if (prev === cursor) break;
+    cursor = prev;
+  }
+  return streak;
 }
 
 // Drives the embed-write side of every guess + every /launch click.

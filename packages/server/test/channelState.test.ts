@@ -22,12 +22,15 @@ const {
   getChannelState,
   upsertParticipant,
   listParticipants,
+  listYesterdayRecapPlayers,
   recordParticipantProgress,
   syncChannelEmbed,
   isStaleMessage,
   findMostRecentUnpostedRecapPuzzle,
   tryClaimRecapPosted,
+  computeChannelStreak,
 } = await import("../src/game/channelState.js");
+const { dayIndexForPuzzleId } = await import("../src/game/dailyPicker.js");
 
 beforeAll(() => {
   getDb();
@@ -443,5 +446,112 @@ describe("findMostRecentUnpostedRecapPuzzle", () => {
 
   it("returns null when nothing eligible exists in this channel", () => {
     expect(findMostRecentUnpostedRecapPuzzle("c2", "2026-05-25")).toBeNull();
+  });
+});
+
+describe("computeChannelStreak", () => {
+  beforeEach(() => {
+    // 4 consecutive days of settled plays in c1, ending 2026-05-20.
+    for (const puzzleId of ["2026-05-17", "2026-05-18", "2026-05-19", "2026-05-20"]) {
+      upsertParticipant({ channelId: "c1", puzzleId, userId: "u1", displayName: "u1" });
+      getDb()
+        .prepare(
+          `UPDATE channel_daily_participant SET status='won', guesses_used=3 WHERE puzzle_id=?`,
+        )
+        .run(puzzleId);
+    }
+    // Gap day with no plays at 2026-05-16. Then more settled plays earlier.
+    for (const puzzleId of ["2026-05-13", "2026-05-14", "2026-05-15"]) {
+      upsertParticipant({ channelId: "c1", puzzleId, userId: "u1", displayName: "u1" });
+      getDb()
+        .prepare(
+          `UPDATE channel_daily_participant SET status='won', guesses_used=4 WHERE puzzle_id=?`,
+        )
+        .run(puzzleId);
+    }
+  });
+
+  it("counts consecutive settled days ending at the target puzzle", () => {
+    expect(computeChannelStreak("c1", "2026-05-20")).toBe(4);
+  });
+
+  it("stops at the first gap", () => {
+    expect(computeChannelStreak("c1", "2026-05-15")).toBe(3);
+  });
+
+  it("returns 0 when the target puzzle itself has no settled plays", () => {
+    expect(computeChannelStreak("c1", "2026-05-21")).toBe(0);
+  });
+
+  it("returns 0 for a channel with no plays", () => {
+    expect(computeChannelStreak("c2", "2026-05-20")).toBe(0);
+  });
+});
+
+describe("listYesterdayRecapPlayers user_day backfill", () => {
+  it("falls back to user_day.guesses_json when channel-side json is empty", () => {
+    // Channel-side: empty guesses_json + status='won' (the bug shape from
+    // the production data we saw on 2026-05-20).
+    upsertParticipant({
+      channelId: "c1",
+      puzzleId: "2026-05-20",
+      userId: "legacy",
+      displayName: "Legacy",
+    });
+    getDb()
+      .prepare(
+        `UPDATE channel_daily_participant
+            SET status='won', guesses_used=4, guesses_json='[]'
+          WHERE user_id='legacy'`,
+      )
+      .run();
+    // user_day has a real history for the same dayIndex.
+    const dayIndex = dayIndexForPuzzleId("2026-05-20");
+    const userDayHistory = JSON.stringify([{ talentId: "t-1", marker: "from-userday" }]);
+    getDb()
+      .prepare(
+        `INSERT INTO user_day (user_id, day_index, guesses_json, status, updated_at)
+         VALUES (?, ?, ?, ?, strftime('%s','now'))`,
+      )
+      .run("legacy", dayIndex, userDayHistory, "won");
+
+    const players = listYesterdayRecapPlayers("c1", "2026-05-20");
+    expect(players).toHaveLength(1);
+    // biome-ignore lint/style/noNonNullAssertion: bounded by toHaveLength above
+    expect(players[0]!.history.length).toBe(1);
+    // biome-ignore lint/style/noNonNullAssertion: same
+    const diff = players[0]!.history[0] as unknown as Record<string, unknown>;
+    expect(diff.marker).toBe("from-userday");
+  });
+
+  it("prefers channel_daily_participant.guesses_json when it's populated", () => {
+    upsertParticipant({
+      channelId: "c1",
+      puzzleId: "2026-05-20",
+      userId: "current",
+      displayName: "Current",
+    });
+    const channelHistory = JSON.stringify([{ talentId: "t-x", marker: "from-channel" }]);
+    getDb()
+      .prepare(
+        `UPDATE channel_daily_participant
+            SET status='won', guesses_used=3, guesses_json=?
+          WHERE user_id='current'`,
+      )
+      .run(channelHistory);
+    // user_day has stale/conflicting data for the same day; should be ignored.
+    const dayIndex = dayIndexForPuzzleId("2026-05-20");
+    getDb()
+      .prepare(
+        `INSERT INTO user_day (user_id, day_index, guesses_json, status, updated_at)
+         VALUES (?, ?, ?, ?, strftime('%s','now'))`,
+      )
+      .run("current", dayIndex, JSON.stringify([{ talentId: "z", marker: "stale" }]), "won");
+
+    const players = listYesterdayRecapPlayers("c1", "2026-05-20");
+    expect(players).toHaveLength(1);
+    // biome-ignore lint/style/noNonNullAssertion: bounded
+    const diff = players[0]!.history[0] as unknown as Record<string, unknown>;
+    expect(diff.marker).toBe("from-channel");
   });
 });
