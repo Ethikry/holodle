@@ -23,6 +23,7 @@ const {
   upsertParticipant,
   listParticipants,
   listYesterdayRecapPlayers,
+  loadChannelBoards,
   recordParticipantProgress,
   syncChannelEmbed,
   isStaleMessage,
@@ -553,5 +554,76 @@ describe("listYesterdayRecapPlayers user_day backfill", () => {
     // biome-ignore lint/style/noNonNullAssertion: bounded
     const diff = players[0]!.history[0] as unknown as Record<string, unknown>;
     expect(diff.marker).toBe("from-channel");
+  });
+});
+
+describe("loadChannelBoards", () => {
+  it("returns avatar_url from channel_daily_participant", () => {
+    upsertParticipant({
+      channelId: "c1",
+      puzzleId: "2026-05-20",
+      userId: "u1",
+      displayName: "Alice",
+      avatarUrl: "https://cdn.example/avatar.png",
+    });
+    const dayIndex = dayIndexForPuzzleId("2026-05-20");
+    const players = loadChannelBoards("c1", "2026-05-20", dayIndex);
+    expect(players).toHaveLength(1);
+    // biome-ignore lint/style/noNonNullAssertion: bounded
+    expect(players[0]!.avatarUrl).toBe("https://cdn.example/avatar.png");
+  });
+
+  it("returns null avatar_url when none was ever set", () => {
+    upsertParticipant({
+      channelId: "c1",
+      puzzleId: "2026-05-20",
+      userId: "u1",
+      displayName: "Alice",
+    });
+    const players = loadChannelBoards("c1", "2026-05-20", dayIndexForPuzzleId("2026-05-20"));
+    // biome-ignore lint/style/noNonNullAssertion: bounded
+    expect(players[0]!.avatarUrl).toBeNull();
+  });
+
+  it("falls back to user_day.guesses_json when channel json is empty", () => {
+    upsertParticipant({
+      channelId: "c1",
+      puzzleId: "2026-05-20",
+      userId: "legacy",
+      displayName: "Legacy",
+      avatarUrl: "https://cdn.example/legacy.png",
+    });
+    getDb()
+      .prepare(
+        `UPDATE channel_daily_participant SET status='won', guesses_used=4, guesses_json='[]' WHERE user_id='legacy'`,
+      )
+      .run();
+    const dayIndex = dayIndexForPuzzleId("2026-05-20");
+    // Real user_day with one diff in the proper GuessDiff shape so
+    // boardRowFromDiff has something valid to map.
+    const userDayHistory = JSON.stringify([
+      {
+        talentId: "t-x",
+        generation: { value: "?", state: "wrong" },
+        branch: { value: "JP", state: "wrong" },
+        debutYear: { value: 2020, state: "wrong" },
+        archetype: { value: "?", state: "wrong" },
+        height: { value: "Med", state: "wrong" },
+        birthMonth: { value: "January", state: "wrong" },
+      },
+    ]);
+    getDb()
+      .prepare(
+        `INSERT INTO user_day (user_id, day_index, guesses_json, status, updated_at)
+         VALUES (?, ?, ?, ?, strftime('%s','now'))`,
+      )
+      .run("legacy", dayIndex, userDayHistory, "won");
+
+    const players = loadChannelBoards("c1", "2026-05-20", dayIndex);
+    expect(players).toHaveLength(1);
+    // biome-ignore lint/style/noNonNullAssertion: bounded
+    expect(players[0]!.avatarUrl).toBe("https://cdn.example/legacy.png");
+    // biome-ignore lint/style/noNonNullAssertion: bounded
+    expect(players[0]!.board.length).toBe(1);
   });
 });
