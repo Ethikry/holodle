@@ -283,6 +283,24 @@ describe("isStaleMessage", () => {
     // — so only the idle threshold drives the result.
     expect(state && isStaleMessage(state, now + 31 * 60)).toBe(true);
   });
+
+  it("is true for legacy rows where message_id is set but both timestamps are NULL", () => {
+    const now = 1_700_000_000;
+    upsertChannelToken("c1", "2026-05-19", "tok", "app-1", now);
+    // Simulate a row that pre-dates the staleness-tracking deploy: messageId
+    // is set, but timestamps were never written.
+    getDb()
+      .prepare(
+        `UPDATE channel_daily_state
+            SET message_id = ?, message_created_at = NULL, message_updated_at = NULL
+          WHERE channel_id = ? AND puzzle_id = ?`,
+      )
+      .run("legacy-msg", "c1", "2026-05-19");
+    const state = getChannelState("c1", "2026-05-19");
+    expect(state?.messageCreatedAt).toBeNull();
+    expect(state?.messageUpdatedAt).toBeNull();
+    expect(state && isStaleMessage(state, now)).toBe(true);
+  });
 });
 
 describe("syncChannelEmbed supersede flow", () => {
