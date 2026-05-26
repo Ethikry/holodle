@@ -76,11 +76,20 @@ export function getChannelState(
 // True when the existing message has been around long enough that we want
 // to post a fresh one (as a reply) instead of editing in place. Either
 // of two thresholds tips it: total age, or time since last edit.
+//
+// Legacy rows: when message_id is set but both timestamps are NULL, the
+// row predates the stale-supersede deploy and we have no way to know how
+// old the message really is. Treat as stale so the next interaction
+// supersedes it — better than leaving an indefinitely-old message
+// patchable in place.
 export function isStaleMessage(
   state: ChannelDailyState,
   nowSec: number = Math.floor(Date.now() / 1000),
 ): boolean {
   if (!state.messageId) return false;
+  if (state.messageCreatedAt === null && state.messageUpdatedAt === null) {
+    return true;
+  }
   if (state.messageCreatedAt !== null && nowSec - state.messageCreatedAt > STALE_AGE_SEC) {
     return true;
   }
