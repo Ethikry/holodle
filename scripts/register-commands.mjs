@@ -12,6 +12,14 @@
 //                           even though we don't use a bot user at runtime;
 //                           Discord accepts it for application-command CRUD)
 //
+// Production env on the Oracle Cloud box lives in ~/envs/holodle.env.sh
+// (not in ~/holodle/.env — that's nearly empty). Canonical invocation:
+//
+//   source ~/envs/holodle.env.sh && node scripts/register-commands.mjs
+//
+// For local use, fill in .env at the repo root (KEY=VALUE form, no `export`)
+// or pass the vars inline on the command line.
+//
 // Usage:
 //   node scripts/register-commands.mjs                 # upsert /holodle
 //   node scripts/register-commands.mjs --list          # show current commands

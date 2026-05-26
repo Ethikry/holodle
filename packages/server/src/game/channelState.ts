@@ -3,10 +3,17 @@ import { getDb } from "../db/client.js";
 import { patchFollowup, postFollowup } from "../discord/followups.js";
 import {
   buildNowPlayingEmbed,
+  buildSupersededContent,
   buildYesterdayRecapEmbed,
   type NowPlayingParticipant,
   type RecapPlayer,
 } from "../discord/embeds.js";
+
+// Staleness thresholds. If either is exceeded when we go to PATCH the
+// existing "Now Playing" message, we instead supersede: PATCH the old to
+// past-tense and POST a brand new message as a reply.
+const STALE_AGE_SEC = 60 * 60; // original message older than 1h
+const STALE_IDLE_SEC = 30 * 60; // last edit older than 30min
 
 // Interaction tokens are valid for 15 minutes from issuance. We persist
 // the absolute expiry so we never have to remember "when was this issued".
@@ -16,6 +23,10 @@ export interface ChannelDailyState {
   channelId: string;
   puzzleId: string;
   messageId: string | null;
+  // Epoch seconds when message_id was first written + last edited. NULL on
+  // freshly-created rows that haven't been posted yet.
+  messageCreatedAt: number | null;
+  messageUpdatedAt: number | null;
   latestToken: string;
   latestTokenAppId: string;
   latestTokenExp: number;
@@ -25,9 +36,28 @@ interface StateRow {
   channel_id: string;
   puzzle_id: string;
   message_id: string | null;
+  message_created_at: number | null;
+  message_updated_at: number | null;
   latest_token: string;
   latest_token_app_id: string;
   latest_token_exp: number;
+}
+
+const STATE_COLUMNS =
+  "channel_id, puzzle_id, message_id, message_created_at, message_updated_at, " +
+  "latest_token, latest_token_app_id, latest_token_exp";
+
+function rowToState(row: StateRow): ChannelDailyState {
+  return {
+    channelId: row.channel_id,
+    puzzleId: row.puzzle_id,
+    messageId: row.message_id,
+    messageCreatedAt: row.message_created_at,
+    messageUpdatedAt: row.message_updated_at,
+    latestToken: row.latest_token,
+    latestTokenAppId: row.latest_token_app_id,
+    latestTokenExp: row.latest_token_exp,
+  };
 }
 
 export function getChannelState(
@@ -36,19 +66,28 @@ export function getChannelState(
 ): ChannelDailyState | null {
   const row = getDb()
     .prepare(
-      `SELECT channel_id, puzzle_id, message_id, latest_token, latest_token_app_id, latest_token_exp
+      `SELECT ${STATE_COLUMNS}
          FROM channel_daily_state WHERE channel_id = ? AND puzzle_id = ?`,
     )
     .get(channelId, puzzleId) as StateRow | undefined;
-  if (!row) return null;
-  return {
-    channelId: row.channel_id,
-    puzzleId: row.puzzle_id,
-    messageId: row.message_id,
-    latestToken: row.latest_token,
-    latestTokenAppId: row.latest_token_app_id,
-    latestTokenExp: row.latest_token_exp,
-  };
+  return row ? rowToState(row) : null;
+}
+
+// True when the existing message has been around long enough that we want
+// to post a fresh one (as a reply) instead of editing in place. Either
+// of two thresholds tips it: total age, or time since last edit.
+export function isStaleMessage(
+  state: ChannelDailyState,
+  nowSec: number = Math.floor(Date.now() / 1000),
+): boolean {
+  if (!state.messageId) return false;
+  if (state.messageCreatedAt !== null && nowSec - state.messageCreatedAt > STALE_AGE_SEC) {
+    return true;
+  }
+  if (state.messageUpdatedAt !== null && nowSec - state.messageUpdatedAt > STALE_IDLE_SEC) {
+    return true;
+  }
+  return false;
 }
 
 // Refresh (or create) the row's freshest token. messageId is preserved if
@@ -75,16 +114,52 @@ export function upsertChannelToken(
   return getChannelState(channelId, puzzleId)!;
 }
 
+// Called once after a successful POST. Stamps both timestamps to "now" so
+// the staleness checks have a baseline; subsequent PATCHes only bump
+// message_updated_at via markChannelMessageUpdated.
 export function setChannelMessageId(
   channelId: string,
   puzzleId: string,
   messageId: string,
+  nowSec: number = Math.floor(Date.now() / 1000),
 ): void {
   getDb()
     .prepare(
-      `UPDATE channel_daily_state SET message_id = ? WHERE channel_id = ? AND puzzle_id = ?`,
+      `UPDATE channel_daily_state
+          SET message_id = ?, message_created_at = ?, message_updated_at = ?
+        WHERE channel_id = ? AND puzzle_id = ?`,
     )
-    .run(messageId, channelId, puzzleId);
+    .run(messageId, nowSec, nowSec, channelId, puzzleId);
+}
+
+// Bumps message_updated_at after a successful PATCH. Called by the embed
+// patch path so the 30-min idle threshold resets on every live edit.
+export function markChannelMessageUpdated(
+  channelId: string,
+  puzzleId: string,
+  nowSec: number = Math.floor(Date.now() / 1000),
+): void {
+  getDb()
+    .prepare(
+      `UPDATE channel_daily_state
+          SET message_updated_at = ?
+        WHERE channel_id = ? AND puzzle_id = ?`,
+    )
+    .run(nowSec, channelId, puzzleId);
+}
+
+// Called when the existing message is superseded by a freshly-posted one.
+// Clears message_id (and timestamps) so the next post path treats this
+// puzzle as "no message yet" and posts new (with a message_reference back
+// to the old, just-PATCHed message).
+export function clearChannelMessage(channelId: string, puzzleId: string): void {
+  getDb()
+    .prepare(
+      `UPDATE channel_daily_state
+          SET message_id = NULL, message_created_at = NULL, message_updated_at = NULL
+        WHERE channel_id = ? AND puzzle_id = ?`,
+    )
+    .run(channelId, puzzleId);
 }
 
 // Find ANY state row for this channel whose latest token is still fresh —
@@ -256,6 +331,31 @@ function parseGuesses(json: string): GuessDiff[] {
   }
 }
 
+// Returns the most-recent puzzle_id in this channel that has settled
+// (won/lost) plays AND hasn't been recapped yet AND is strictly older than
+// `todayPuzzleId`. Used by /launch to post the recap for "the previous
+// session in this channel" — not strictly literal "yesterday" — so a gap
+// of inactive days doesn't make the recap silently disappear. Returns
+// null when no eligible puzzle exists.
+export function findMostRecentUnpostedRecapPuzzle(
+  channelId: string,
+  todayPuzzleId: string,
+): string | null {
+  const row = getDb()
+    .prepare(
+      `SELECT puzzle_id FROM channel_daily_participant
+        WHERE channel_id = ?
+          AND status IN ('won','lost')
+          AND puzzle_id < ?
+          AND puzzle_id NOT IN (
+            SELECT puzzle_id FROM channel_recap_posted WHERE channel_id = ?
+          )
+        ORDER BY puzzle_id DESC LIMIT 1`,
+    )
+    .get(channelId, todayPuzzleId, channelId) as { puzzle_id: string } | undefined;
+  return row?.puzzle_id ?? null;
+}
+
 export function listYesterdayRecapPlayers(
   channelId: string,
   puzzleId: string,
@@ -287,16 +387,113 @@ export function listYesterdayRecapPlayers(
   }));
 }
 
-// Called from the guess route on EVERY guess. Persists the running history
-// against channel_daily_participant and — if a fresh interaction token still
-// exists for this channel — re-renders + patches the embed image so other
-// viewers see the new line immediately.
+// Drives the embed-write side of every guess + every /launch click.
+// Builds the participants snapshot, decides whether to PATCH the existing
+// "Now Playing" message, supersede it with a fresh reply, or POST a new
+// one outright. Safe to call without a fresh interaction token — falls back
+// to a borrowed token from another puzzle row when this puzzle has none.
 //
-// Cross-day fallback: when no channel_daily_state row exists for this puzzle
-// (the user crossed their local midnight without anyone re-/launching), we
-// borrow a fresh token from another puzzle row in the same channel and POST
-// a brand-new embed for the new puzzle. Without this, "resuming play across
-// days" would silently drop into the void.
+// `displayName` is used only to upsert the participant row if it doesn't
+// exist yet (e.g. cross-day mid-game). Pass the current player's name.
+export async function syncChannelEmbed(
+  channelId: string,
+  puzzleId: string,
+  nowSec: number = Math.floor(Date.now() / 1000),
+): Promise<void> {
+  let state = getChannelState(channelId, puzzleId);
+
+  // No row for this puzzle — bootstrap one with a borrowed fresh token if
+  // any exists for this channel (e.g. user crossed local midnight without
+  // anyone re-/launching).
+  if (!state) {
+    const fresh = findFreshChannelToken(channelId, nowSec);
+    if (!fresh) return; // nothing we can do without a valid token
+    state = upsertChannelToken(channelId, puzzleId, fresh.token, fresh.appId, nowSec);
+  }
+
+  if (state.latestTokenExp <= nowSec) return; // token expired — no-op
+
+  const participants = listParticipants(channelId, puzzleId);
+  const { embed, components, file } = await buildNowPlayingEmbed({
+    puzzleId,
+    participants,
+    applicationId: state.latestTokenAppId,
+  });
+
+  // No message yet for this puzzle → POST a new one (no reply context).
+  if (!state.messageId) {
+    try {
+      const posted = await postFollowup(
+        state.latestTokenAppId,
+        state.latestToken,
+        { embeds: [embed], components, files: [file] },
+        { wait: true },
+      );
+      if (posted) setChannelMessageId(channelId, puzzleId, posted.id, nowSec);
+    } catch (err) {
+      console.error("[channelState] syncChannelEmbed post failed:", err);
+    }
+    return;
+  }
+
+  // Message exists but it's been around too long — finalize it as a
+  // "X was playing" snapshot and post a fresh one as a reply.
+  if (isStaleMessage(state, nowSec)) {
+    const oldMessageId = state.messageId;
+    const supersededContent = buildSupersededContent(participants);
+    try {
+      // PATCH the old message: past-tense content, drop the "Play now!"
+      // button (clicking it would now hit the new message's flow anyway,
+      // but visually the old one shouldn't invite new clicks).
+      await patchFollowup(state.latestTokenAppId, state.latestToken, oldMessageId, {
+        content: supersededContent,
+        embeds: [embed],
+        components: [],
+        files: [file],
+      });
+    } catch (err) {
+      console.error("[channelState] syncChannelEmbed supersede-patch failed:", err);
+    }
+    // Even if the patch failed, proceed to post the new message — losing
+    // both is worse than the old one keeping its old text.
+    try {
+      const posted = await postFollowup(
+        state.latestTokenAppId,
+        state.latestToken,
+        {
+          embeds: [embed],
+          components,
+          files: [file],
+          message_reference: { message_id: oldMessageId, fail_if_not_exists: false },
+        },
+        { wait: true },
+      );
+      if (posted) {
+        clearChannelMessage(channelId, puzzleId);
+        setChannelMessageId(channelId, puzzleId, posted.id, nowSec);
+      }
+    } catch (err) {
+      console.error("[channelState] syncChannelEmbed supersede-post failed:", err);
+    }
+    return;
+  }
+
+  // Normal in-place edit.
+  try {
+    const ok = await patchFollowup(state.latestTokenAppId, state.latestToken, state.messageId, {
+      embeds: [embed],
+      components,
+      files: [file],
+    });
+    if (ok) markChannelMessageUpdated(channelId, puzzleId, nowSec);
+  } catch (err) {
+    console.error("[channelState] syncChannelEmbed patch failed:", err);
+  }
+}
+
+// Called from the guess route on EVERY guess. Persists the running history
+// against channel_daily_participant, then defers the embed write to
+// syncChannelEmbed.
 export async function recordParticipantProgress(
   userId: string,
   channelId: string,
@@ -322,50 +519,7 @@ export async function recordParticipantProgress(
     )
     .run(guessesUsed, guessesJson, status, channelId, puzzleId, userId);
 
-  let state = getChannelState(channelId, puzzleId);
-
-  // No row at all for this puzzle — try to bootstrap one using a fresh
-  // token from any other puzzle in this channel.
-  if (!state) {
-    const fresh = findFreshChannelToken(channelId, nowSec);
-    if (!fresh) return; // nothing we can do without a valid token
-    state = upsertChannelToken(channelId, puzzleId, fresh.token, fresh.appId, nowSec);
-  }
-
-  if (state.latestTokenExp <= nowSec) return; // token expired — no-op
-
-  const participants = listParticipants(channelId, puzzleId);
-  const { embed, components, file } = await buildNowPlayingEmbed({
-    puzzleId,
-    participants,
-    applicationId: state.latestTokenAppId,
-  });
-
-  // No message yet for this puzzle → POST a new one. Otherwise PATCH in place.
-  if (!state.messageId) {
-    try {
-      const posted = await postFollowup(
-        state.latestTokenAppId,
-        state.latestToken,
-        { embeds: [embed], components, files: [file] },
-        { wait: true },
-      );
-      if (posted) setChannelMessageId(channelId, puzzleId, posted.id);
-    } catch (err) {
-      console.error("[channelState] recordParticipantProgress post failed:", err);
-    }
-    return;
-  }
-
-  try {
-    await patchFollowup(state.latestTokenAppId, state.latestToken, state.messageId, {
-      embeds: [embed],
-      components,
-      files: [file],
-    });
-  } catch (err) {
-    console.error("[channelState] recordParticipantProgress patch failed:", err);
-  }
+  await syncChannelEmbed(channelId, puzzleId, nowSec);
 }
 
 // Used by the boards panel: every channel participant for this puzzle,

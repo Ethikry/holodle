@@ -121,6 +121,25 @@ export async function buildNowPlayingEmbed({
 
 export const LAUNCH_BUTTON_CUSTOM_ID = "launch";
 
+// Past-tense subtitle for a "Now Playing" message that's just been
+// superseded by a fresher one. Mirrors Wordle's "X and N others were
+// playing" / "X was playing" pattern.
+export function buildSupersededContent(participants: NowPlayingParticipant[]): string {
+  if (participants.length === 0) return "No one was playing";
+  // Sort by joined order (already the case from listParticipants), but
+  // promote the most-progressed player to first so the subtitle leads with
+  // whoever was actually doing something.
+  const sorted = [...participants].sort((a, b) => b.guessesUsed - a.guessesUsed);
+  // biome-ignore lint/style/noNonNullAssertion: bounded by length check above
+  const first = sorted[0]!;
+  if (sorted.length === 1) return `${first.displayName} was playing`;
+  if (sorted.length === 2) {
+    // biome-ignore lint/style/noNonNullAssertion: bounded by length check above
+    return `${first.displayName} and ${sorted[1]!.displayName} were playing`;
+  }
+  return `${first.displayName} and ${sorted.length - 1} others were playing`;
+}
+
 export interface RecapPlayer {
   userId: string;
   displayName: string;

@@ -2,21 +2,17 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { env } from "../env.js";
 import { verifyInteractionSignature } from "../discord/verify.js";
 import {
-  buildNowPlayingEmbed,
   buildYesterdayRecapEmbed,
-  getChannelState,
-  isRecapPosted,
-  listParticipants,
+  findMostRecentUnpostedRecapPuzzle,
   listYesterdayRecapPlayers,
   postFollowup,
-  setChannelMessageId,
+  syncChannelEmbed,
   tryClaimRecapPosted,
   upsertChannelToken,
   upsertParticipant,
 } from "../game/channelState.js";
 import { LAUNCH_BUTTON_CUSTOM_ID } from "../discord/embeds.js";
 import { puzzleIdFor, safeTz } from "../game/dailyPicker.js";
-import { patchFollowup } from "../discord/followups.js";
 import { getLatestUserTz } from "../db/client.js";
 
 // Discord interaction types.
@@ -25,7 +21,6 @@ const TYPE_APPLICATION_COMMAND = 2;
 const TYPE_MESSAGE_COMPONENT = 3;
 const RESPONSE_PONG = 1;
 const RESPONSE_LAUNCH_ACTIVITY = 12;
-const ONE_DAY_MS = 86_400_000;
 
 interface InteractionUser {
   id: string;
@@ -95,9 +90,6 @@ function pickAvatarUrl(p: InteractionPayload, user: InteractionUser): string {
 // (or UTC if they've never played).
 function channelPuzzleId(nowMs: number, tz: string): string {
   return puzzleIdFor(nowMs, tz);
-}
-function channelYesterdayId(nowMs: number, tz: string): string {
-  return puzzleIdFor(nowMs - ONE_DAY_MS, tz);
 }
 
 export async function interactionsRoutes(app: FastifyInstance): Promise<void> {
@@ -204,16 +196,22 @@ async function handleLaunch(payload: InteractionPayload): Promise<void> {
   const nowMs = Date.now();
   const tz = safeTz(getLatestUserTz(user.id) ?? undefined);
   const puzzleId = channelPuzzleId(nowMs, tz);
-  const yesterdayId = channelYesterdayId(nowMs, tz);
   const displayName = pickDisplayName(payload, user);
   const avatarUrl = pickAvatarUrl(payload, user);
 
-  // 1) Yesterday's recap (fire-and-forget, no message_id capture).
-  if (!isRecapPosted(channelId, yesterdayId)) {
-    const players = listYesterdayRecapPlayers(channelId, yesterdayId);
-    if (players.length > 0 && tryClaimRecapPosted(channelId, yesterdayId)) {
+  // 1) Previous-session recap (fire-and-forget, no message_id capture).
+  //
+  //    We used to recap strictly "yesterday in launcher's tz" — which silently
+  //    disappeared if no one /launched the next day (the most common case in
+  //    sparsely-played channels). Now we find the most recent puzzle in this
+  //    channel that has settled plays AND hasn't been recapped yet, regardless
+  //    of how many days back it is. Still idempotent via channel_recap_posted.
+  const recapPuzzleId = findMostRecentUnpostedRecapPuzzle(channelId, puzzleId);
+  if (recapPuzzleId) {
+    const players = listYesterdayRecapPlayers(channelId, recapPuzzleId);
+    if (players.length > 0 && tryClaimRecapPosted(channelId, recapPuzzleId)) {
       const { embed, file } = await buildYesterdayRecapEmbed({
-        puzzleId: yesterdayId,
+        puzzleId: recapPuzzleId,
         players,
       });
       try {
@@ -225,9 +223,9 @@ async function handleLaunch(payload: InteractionPayload): Promise<void> {
   }
 
   // 2) Refresh channel_daily_state with the new token before any posting —
-  //    that way recordCompletion calls from /api/guess will use the latest
-  //    one immediately.
-  const state = upsertChannelToken(channelId, puzzleId, token, applicationId);
+  //    that way recordParticipantProgress calls from /api/guess will use
+  //    the latest one immediately.
+  upsertChannelToken(channelId, puzzleId, token, applicationId);
 
   // 3) Register this user as a participant (idempotent — keeps their progress).
   upsertParticipant({
@@ -238,35 +236,14 @@ async function handleLaunch(payload: InteractionPayload): Promise<void> {
     avatarUrl,
   });
 
-  const participants = listParticipants(channelId, puzzleId);
-  const { embed, components, file } = await buildNowPlayingEmbed({
-    puzzleId,
-    participants,
-    applicationId,
-  });
-
-  if (!state.messageId) {
-    try {
-      const posted = await postFollowup(
-        applicationId,
-        token,
-        { embeds: [embed], components, files: [file] },
-        { wait: true },
-      );
-      if (posted) setChannelMessageId(channelId, puzzleId, posted.id);
-    } catch (err) {
-      console.error("[interactions] now-playing post failed:", err);
-    }
-  } else {
-    try {
-      await patchFollowup(applicationId, token, state.messageId, {
-        embeds: [embed],
-        components,
-        files: [file],
-      });
-    } catch (err) {
-      console.error("[interactions] now-playing patch failed:", err);
-    }
+  // 4) Defer the actual embed write to syncChannelEmbed so /launch goes
+  //    through the same staleness/supersede logic as /api/guess. If the
+  //    existing message has been around too long, this PATCHes the old
+  //    to past-tense and POSTs a fresh reply.
+  try {
+    await syncChannelEmbed(channelId, puzzleId);
+  } catch (err) {
+    console.error("[interactions] syncChannelEmbed failed:", err);
   }
 }
 
