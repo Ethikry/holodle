@@ -402,13 +402,20 @@ export function listYesterdayRecapPlayers(
 // one outright. Safe to call without a fresh interaction token — falls back
 // to a borrowed token from another puzzle row when this puzzle has none.
 //
-// `displayName` is used only to upsert the participant row if it doesn't
-// exist yet (e.g. cross-day mid-game). Pass the current player's name.
+// `allowSupersede` gates the stale → reply flow. We only want to post a
+// brand-new channel message when something visible actually changed on
+// someone's board — i.e. a /api/guess. /launch and "Play now!" clicks pass
+// false so a passive "open the activity" action never clutters the channel
+// with a fresh embed, even if the existing one is hours old; in that case
+// we just PATCH in place (or no-op if nothing to update).
 export async function syncChannelEmbed(
   channelId: string,
   puzzleId: string,
+  options: { allowSupersede?: boolean } = {},
   nowSec: number = Math.floor(Date.now() / 1000),
 ): Promise<void> {
+  const allowSupersede = options.allowSupersede === true;
+
   let state = getChannelState(channelId, puzzleId);
 
   // No row for this puzzle — bootstrap one with a borrowed fresh token if
@@ -446,8 +453,10 @@ export async function syncChannelEmbed(
   }
 
   // Message exists but it's been around too long — finalize it as a
-  // "X was playing" snapshot and post a fresh one as a reply.
-  if (isStaleMessage(state, nowSec)) {
+  // "X was playing" snapshot and post a fresh one as a reply. Only do
+  // this for play-triggered syncs; passive launches fall through to the
+  // in-place PATCH below.
+  if (allowSupersede && isStaleMessage(state, nowSec)) {
     const oldMessageId = state.messageId;
     const supersededContent = buildSupersededContent(participants);
     try {
@@ -528,7 +537,7 @@ export async function recordParticipantProgress(
     )
     .run(guessesUsed, guessesJson, status, channelId, puzzleId, userId);
 
-  await syncChannelEmbed(channelId, puzzleId, nowSec);
+  await syncChannelEmbed(channelId, puzzleId, { allowSupersede: true }, nowSec);
 }
 
 // Used by the boards panel: every channel participant for this puzzle,

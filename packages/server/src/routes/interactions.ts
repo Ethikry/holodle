@@ -236,10 +236,12 @@ async function handleLaunch(payload: InteractionPayload): Promise<void> {
     avatarUrl,
   });
 
-  // 4) Defer the actual embed write to syncChannelEmbed so /launch goes
-  //    through the same staleness/supersede logic as /api/guess. If the
-  //    existing message has been around too long, this PATCHes the old
-  //    to past-tense and POSTs a fresh reply.
+  // 4) Defer the actual embed write to syncChannelEmbed. We do NOT pass
+  //    allowSupersede here — a "Play now!" click (or /launch / /holodle)
+  //    is a passive open of the activity, not a board edit. Even when the
+  //    existing message is hours old, we just PATCH it in place; only an
+  //    actual guess will produce a fresh reply embed (see
+  //    recordParticipantProgress).
   try {
     await syncChannelEmbed(channelId, puzzleId);
   } catch (err) {

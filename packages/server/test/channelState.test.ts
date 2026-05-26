@@ -23,6 +23,7 @@ const {
   upsertParticipant,
   listParticipants,
   recordParticipantProgress,
+  syncChannelEmbed,
   isStaleMessage,
   findMostRecentUnpostedRecapPuzzle,
   tryClaimRecapPosted,
@@ -349,6 +350,29 @@ describe("syncChannelEmbed supersede flow", () => {
     const next = getChannelState("c1", "2026-05-19");
     expect(next?.messageId).toBe("new-msg");
     expect(next?.messageCreatedAt).toBe(now + 80 * 60);
+    fetchSpy.mockRestore();
+  });
+
+  it("does NOT supersede a stale embed when allowSupersede is false (passive launch)", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("", { status: 200 }));
+    const now = 1_700_000_000;
+    upsertChannelToken("c1", "2026-05-19", "tok-fresh", "app-1", now + 80 * 60);
+    setChannelMessageId("c1", "2026-05-19", "old-msg", now);
+
+    // 80 minutes after the original post — stale by age. But this is a
+    // /launch-style sync (allowSupersede defaults to false), so the
+    // expected behavior is in-place PATCH, not supersede.
+    await syncChannelEmbed("c1", "2026-05-19", {}, now + 80 * 60);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(init.method).toBe("PATCH");
+    expect(url).toContain("/messages/old-msg");
+    // Same message_id retained.
+    const next = getChannelState("c1", "2026-05-19");
+    expect(next?.messageId).toBe("old-msg");
     fetchSpy.mockRestore();
   });
 
