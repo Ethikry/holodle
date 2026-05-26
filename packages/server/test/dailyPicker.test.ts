@@ -18,6 +18,7 @@ function t(id: string): Talent {
     generation: "Gen 0",
     debutYear: 2020,
     archetype: "Human",
+    penlightColor: "Blue",
     heightCm: 155,
     birthMonth: "June",
     active: true,

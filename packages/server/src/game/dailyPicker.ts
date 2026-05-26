@@ -160,15 +160,22 @@ function shuffleOnce(pool: Talent[]): Talent[] {
   return shuffled;
 }
 
+// Pick the talent at position `idx` in the shuffled pool. Lets routes
+// inject an effective dayIndex (e.g. `dayIndex + endlessOffset` for the
+// test-guild /endless command) without re-deriving timezone math.
+export function pickByIndex(pool: Talent[], idx: number): Talent | null {
+  if (pool.length === 0) return null;
+  const shuffled = shuffleOnce(pool);
+  const i = ((idx % shuffled.length) + shuffled.length) % shuffled.length;
+  // biome-ignore lint/style/noNonNullAssertion: i is bounded and pool is non-empty
+  return shuffled[i]!;
+}
+
 // Per-user puzzle picker. `tz` selects whose local calendar to bucket by.
 export function pickDaily(
   pool: Talent[],
   nowMs: number = Date.now(),
   tz: string = "UTC",
 ): Talent | null {
-  if (pool.length === 0) return null;
-  const shuffled = shuffleOnce(pool);
-  const i = ((dayIndexFor(nowMs, tz) % shuffled.length) + shuffled.length) % shuffled.length;
-  // biome-ignore lint/style/noNonNullAssertion: i is bounded and pool is non-empty
-  return shuffled[i]!;
+  return pickByIndex(pool, dayIndexFor(nowMs, tz));
 }

@@ -16,21 +16,22 @@ export function getDb(): Database.Database {
   runAdditiveMigrations(db);
   // 3) Indexes last — some reference columns added in step 2.
   db.exec(INDEXES_SQL);
-  // 4) Drop stored guesses_json arrays that predate the Name → Gen swap.
-  //    Their AttrCell shape lacks `.generation`, and the client crashes
-  //    on render with "Cannot read properties of undefined (reading 'state')".
-  clearStaleGenerationDiffs(db);
+  // 4) Drop stored guesses_json arrays that predate either the Name → Gen
+  //    swap OR the DebutYear → PenlightColor swap. Their AttrCell shape is
+  //    missing one of the current columns and the client crashes on render
+  //    with "Cannot read properties of undefined (reading 'state')".
+  clearStaleDiffShapes(db);
   return db;
 }
 
 // One-time data migration: scan every user_day row, drop any whose stored
-// guesses_json contains a diff missing the `.generation` field. The row is
-// reset to a fresh playing state — the user effectively gets their guesses
-// back. Settled rows (won/lost) also get reset, which loses the win/loss
-// record for that legacy day but avoids crashing the client when the
-// history is re-rendered. Idempotent: once a row is reset, future runs
-// see an empty array and skip it.
-function clearStaleGenerationDiffs(database: Database.Database): void {
+// guesses_json contains a diff that no longer matches the current shape.
+// The row is reset to a fresh playing state — the user effectively gets
+// their guesses back. Settled rows (won/lost) also get reset, which loses
+// the win/loss record for that legacy day but avoids crashing the client
+// when the history is re-rendered. Idempotent: once a row is reset, future
+// runs see an empty array and skip it.
+function clearStaleDiffShapes(database: Database.Database): void {
   const rows = database
     .prepare("SELECT user_id, day_index, guesses_json FROM user_day")
     .all() as Array<{ user_id: string; day_index: number; guesses_json: string }>;
@@ -49,10 +50,17 @@ function clearStaleGenerationDiffs(database: Database.Database): void {
       const guesses = JSON.parse(row.guesses_json) as unknown[];
       if (Array.isArray(guesses) && guesses.length > 0) {
         const first = guesses[0] as Record<string, unknown> | null;
-        // Old shape had `.name`; new shape has `.generation`. We treat
-        // either signal — a missing `generation` OR a stray `name` field —
-        // as definitive evidence of a pre-round-2 row.
-        if (first && (!("generation" in first) || "name" in first)) {
+        // Each schema swap drops a field and adds another. We treat any of
+        // the legacy signals — `.name` (pre-Gen), missing `.generation`
+        // (pre-Gen), or missing `.penlightColor` (pre-Penlight) — as
+        // definitive evidence of a row that won't render under the current
+        // GuessDiff shape.
+        if (
+          first &&
+          (!("generation" in first) ||
+            "name" in first ||
+            !("penlightColor" in first))
+        ) {
           stale = true;
         }
       }
@@ -65,7 +73,60 @@ function clearStaleGenerationDiffs(database: Database.Database): void {
     }
   }
   if (cleared > 0) {
-    console.log(`[db] cleared ${cleared} pre-round-2 user_day row(s) with stale GuessDiff shape`);
+    console.log(`[db] cleared ${cleared} user_day row(s) with stale GuessDiff shape`);
+  }
+
+  // Same thing for channel_daily_participant.guesses_json. Stale rows here
+  // would crash the boards panel (PlayerSnapshot board state) and the
+  // Discord image renderer (column lookup throws on the missing cell).
+  const channelRows = database
+    .prepare(
+      `SELECT channel_id, puzzle_id, user_id, guesses_json
+         FROM channel_daily_participant
+        WHERE guesses_json IS NOT NULL`,
+    )
+    .all() as Array<{
+    channel_id: string;
+    puzzle_id: string;
+    user_id: string;
+    guesses_json: string | null;
+  }>;
+  const resetChannel = database.prepare(
+    `UPDATE channel_daily_participant
+        SET guesses_used = 0,
+            guesses_json = '[]',
+            status       = 'playing'
+      WHERE channel_id = ? AND puzzle_id = ? AND user_id = ?`,
+  );
+  let clearedChannel = 0;
+  for (const row of channelRows) {
+    if (!row.guesses_json) continue;
+    let stale = false;
+    try {
+      const guesses = JSON.parse(row.guesses_json) as unknown[];
+      if (Array.isArray(guesses) && guesses.length > 0) {
+        const first = guesses[0] as Record<string, unknown> | null;
+        if (
+          first &&
+          (!("generation" in first) ||
+            "name" in first ||
+            !("penlightColor" in first))
+        ) {
+          stale = true;
+        }
+      }
+    } catch {
+      stale = true;
+    }
+    if (stale) {
+      resetChannel.run(row.channel_id, row.puzzle_id, row.user_id);
+      clearedChannel++;
+    }
+  }
+  if (clearedChannel > 0) {
+    console.log(
+      `[db] cleared ${clearedChannel} channel_daily_participant row(s) with stale GuessDiff shape`,
+    );
   }
 }
 
@@ -90,12 +151,15 @@ export interface UserDayRow {
   tz: string | null;
   settledAt: number | null;
   exitEmbedPosted: boolean;
+  // Test-guild /endless counter. Added to dayIndex when picking this user's
+  // answer, so each /endless invocation rotates them to a fresh talent.
+  endlessOffset: number;
 }
 
 export function loadUserDay(userId: string, dayIndex: number): UserDayRow {
   const row = getDb()
     .prepare(
-      `SELECT guesses_json, status, channel_id, tz, settled_at, exit_embed_posted
+      `SELECT guesses_json, status, channel_id, tz, settled_at, exit_embed_posted, endless_offset
          FROM user_day WHERE user_id = ? AND day_index = ?`,
     )
     .get(userId, dayIndex) as
@@ -106,6 +170,7 @@ export function loadUserDay(userId: string, dayIndex: number): UserDayRow {
         tz: string | null;
         settled_at: number | null;
         exit_embed_posted: number;
+        endless_offset: number;
       }
     | undefined;
   if (!row) {
@@ -118,6 +183,7 @@ export function loadUserDay(userId: string, dayIndex: number): UserDayRow {
       tz: null,
       settledAt: null,
       exitEmbedPosted: false,
+      endlessOffset: 0,
     };
   }
   return {
@@ -129,6 +195,7 @@ export function loadUserDay(userId: string, dayIndex: number): UserDayRow {
     tz: row.tz,
     settledAt: row.settled_at,
     exitEmbedPosted: row.exit_embed_posted !== 0,
+    endlessOffset: row.endless_offset ?? 0,
   };
 }
 
@@ -136,8 +203,8 @@ export function saveUserDay(row: UserDayRow): void {
   getDb()
     .prepare(
       `INSERT INTO user_day
-         (user_id, day_index, guesses_json, status, updated_at, channel_id, tz, settled_at, exit_embed_posted)
-       VALUES (?, ?, ?, ?, strftime('%s','now'), ?, ?, ?, ?)
+         (user_id, day_index, guesses_json, status, updated_at, channel_id, tz, settled_at, exit_embed_posted, endless_offset)
+       VALUES (?, ?, ?, ?, strftime('%s','now'), ?, ?, ?, ?, ?)
        ON CONFLICT(user_id, day_index) DO UPDATE SET
          guesses_json      = excluded.guesses_json,
          status            = excluded.status,
@@ -147,7 +214,8 @@ export function saveUserDay(row: UserDayRow): void {
          channel_id        = COALESCE(excluded.channel_id, user_day.channel_id),
          tz                = COALESCE(excluded.tz, user_day.tz),
          settled_at        = COALESCE(excluded.settled_at, user_day.settled_at),
-         exit_embed_posted = excluded.exit_embed_posted`,
+         exit_embed_posted = excluded.exit_embed_posted,
+         endless_offset    = excluded.endless_offset`,
     )
     .run(
       row.userId,
@@ -158,7 +226,77 @@ export function saveUserDay(row: UserDayRow): void {
       row.tz,
       row.settledAt,
       row.exitEmbedPosted ? 1 : 0,
+      row.endlessOffset,
     );
+}
+
+// Test-guild only. Advances the user's endless offset for `dayIndex` by one
+// and resets the row to a fresh playing state — preserves channel_id/tz so
+// the next guess still ties back to the channel embed, but clears guesses,
+// status, settled_at, and the exit-embed flag. Returns the new offset.
+export function advanceEndless(userId: string, dayIndex: number): number {
+  const db = getDb();
+  const row = loadUserDay(userId, dayIndex);
+  const nextOffset = row.endlessOffset + 1;
+  db.prepare(
+    `INSERT INTO user_day
+       (user_id, day_index, guesses_json, status, updated_at, channel_id, tz, settled_at, exit_embed_posted, endless_offset)
+     VALUES (?, ?, '[]', 'playing', strftime('%s','now'), ?, ?, NULL, 0, ?)
+     ON CONFLICT(user_id, day_index) DO UPDATE SET
+       guesses_json      = '[]',
+       status            = 'playing',
+       updated_at        = strftime('%s','now'),
+       settled_at        = NULL,
+       exit_embed_posted = 0,
+       endless_offset    = excluded.endless_offset`,
+  ).run(userId, dayIndex, row.channelId, row.tz, nextOffset);
+  return nextOffset;
+}
+
+// Test-guild only. Resets every user_day row whose day_index falls within
+// the cross-tz window for "today" (yesterday-UTC through tomorrow-UTC, so
+// JST and Pacific players in flight at the same wall-clock moment are
+// covered). Returns the number of user_day + channel_daily_participant
+// rows wiped. Stats (user_stats) intentionally aren't touched — a hard
+// reset of streaks shouldn't be a side effect of a "let me replay today"
+// command.
+export function resetToday(todayUtcDayIndex: number): {
+  userDays: number;
+  channelRows: number;
+} {
+  const db = getDb();
+  const lo = todayUtcDayIndex - 1;
+  const hi = todayUtcDayIndex + 1;
+  const dayResult = db
+    .prepare(
+      `UPDATE user_day
+          SET guesses_json     = '[]',
+              status           = 'playing',
+              settled_at       = NULL,
+              exit_embed_posted= 0,
+              endless_offset   = 0,
+              updated_at       = strftime('%s','now')
+        WHERE day_index BETWEEN ? AND ?`,
+    )
+    .run(lo, hi);
+  // channel_daily_participant is keyed by puzzle_id (YYYY-MM-DD), not by
+  // day_index. We don't have a direct dayIndex→puzzleId mapping here; use
+  // the `updated_at` proxy on user_day to find the puzzleIds we just touched,
+  // then drop all matching channel rows. Simpler: just clear every channel
+  // participant row from the last 48h.
+  const channelResult = db
+    .prepare(
+      `UPDATE channel_daily_participant
+          SET guesses_used = 0,
+              guesses_json = '[]',
+              status       = 'playing'
+        WHERE joined_at >= strftime('%s','now') - 48*3600`,
+    )
+    .run();
+  return {
+    userDays: dayResult.changes,
+    channelRows: channelResult.changes,
+  };
 }
 
 // Returns the IANA tz this user most-recently played from, or null if no

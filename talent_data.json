@@ -7,6 +7,7 @@
     "generation": "Gen 0",
     "debutYear": 2017,
     "archetype": "Human",
+    "penlightColor": "Blue",
     "heightCm": 160,
     "birthMonth": "May",
     "active": true
@@ -19,6 +20,7 @@
     "generation": "Gen 0",
     "debutYear": 2018,
     "archetype": "Robot",
+    "penlightColor": "Pink",
     "heightCm": 154,
     "birthMonth": "May",
     "active": true
@@ -31,6 +33,7 @@
     "generation": "Gen 0",
     "debutYear": 2018,
     "archetype": "Human",
+    "penlightColor": "Light Pink",
     "heightCm": 152,
     "birthMonth": "March",
     "active": true
@@ -43,6 +46,7 @@
     "generation": "Gen 0",
     "debutYear": 2018,
     "archetype": "Human",
+    "penlightColor": "Blue",
     "heightCm": 160,
     "birthMonth": "March",
     "active": true
@@ -55,6 +59,7 @@
     "generation": "Gen 0",
     "debutYear": 2018,
     "archetype": "Human",
+    "penlightColor": "Pink",
     "heightCm": 158,
     "birthMonth": "July",
     "active": true
@@ -67,6 +72,7 @@
     "generation": "Gen 1",
     "debutYear": 2018,
     "archetype": "Elf",
+    "penlightColor": "Light Green",
     "heightCm": 162,
     "birthMonth": "February",
     "active": true
@@ -79,6 +85,7 @@
     "generation": "Gen 1",
     "debutYear": 2018,
     "archetype": "Human",
+    "penlightColor": "Red",
     "heightCm": 154,
     "birthMonth": "August",
     "active": true
@@ -88,9 +95,10 @@
     "name": "Shirakami Fubuki",
     "avatarUrl": "/avatars/shirakami-fubuki.webp",
     "branch": "JP",
-    "generation": "GAMERS",
+    "generation": ["Gen 1", "GAMERS"],
     "debutYear": 2018,
     "archetype": "Animal",
+    "penlightColor": "White",
     "heightCm": 155,
     "birthMonth": "October",
     "active": true
@@ -103,6 +111,7 @@
     "generation": "Gen 1",
     "debutYear": 2018,
     "archetype": "Human",
+    "penlightColor": "Orange",
     "heightCm": 152,
     "birthMonth": "July",
     "active": true
@@ -115,6 +124,7 @@
     "generation": "Gen 1",
     "debutYear": 2018,
     "archetype": "Vampire",
+    "penlightColor": "Yellow",
     "heightCm": 154,
     "birthMonth": "October",
     "active": false
@@ -127,6 +137,7 @@
     "generation": "Gen 2",
     "debutYear": 2018,
     "archetype": "Human",
+    "penlightColor": "Light Pink",
     "heightCm": 148,
     "birthMonth": "December",
     "active": false
@@ -139,6 +150,7 @@
     "generation": "Gen 2",
     "debutYear": 2018,
     "archetype": "Human",
+    "penlightColor": "Purple",
     "heightCm": 145,
     "birthMonth": "December",
     "active": false
@@ -151,6 +163,7 @@
     "generation": "Gen 2",
     "debutYear": 2018,
     "archetype": "Oni",
+    "penlightColor": "Red",
     "heightCm": 152,
     "birthMonth": "December",
     "active": true
@@ -163,6 +176,7 @@
     "generation": "Gen 2",
     "debutYear": 2018,
     "archetype": "Demon",
+    "penlightColor": "Pink",
     "heightCm": 165,
     "birthMonth": "February",
     "active": true
@@ -175,6 +189,7 @@
     "generation": "Gen 2",
     "debutYear": 2018,
     "archetype": "Bird",
+    "penlightColor": "Yellow",
     "heightCm": 154,
     "birthMonth": "July",
     "active": true
@@ -187,6 +202,7 @@
     "generation": "GAMERS",
     "debutYear": 2018,
     "archetype": "Animal",
+    "penlightColor": "Green",
     "heightCm": 160,
     "birthMonth": "August",
     "active": true
@@ -199,6 +215,7 @@
     "generation": "GAMERS",
     "debutYear": 2019,
     "archetype": "Animal",
+    "penlightColor": "Purple",
     "heightCm": 152,
     "birthMonth": "February",
     "active": true
@@ -211,6 +228,7 @@
     "generation": "GAMERS",
     "debutYear": 2019,
     "archetype": "Animal",
+    "penlightColor": "Yellow",
     "heightCm": 156,
     "birthMonth": "October",
     "active": true
@@ -223,6 +241,7 @@
     "generation": "Gen 3",
     "debutYear": 2019,
     "archetype": "Animal",
+    "penlightColor": "Light Blue",
     "heightCm": 153,
     "birthMonth": "January",
     "active": true
@@ -235,6 +254,7 @@
     "generation": "Gen 3",
     "debutYear": 2019,
     "archetype": "Elf",
+    "penlightColor": "Orange",
     "heightCm": 158,
     "birthMonth": "April",
     "active": true
@@ -247,6 +267,7 @@
     "generation": "Gen 3",
     "debutYear": 2019,
     "archetype": "Human",
+    "penlightColor": "White",
     "heightCm": 158,
     "birthMonth": "November",
     "active": true
@@ -259,6 +280,7 @@
     "generation": "Gen 3",
     "debutYear": 2019,
     "archetype": "Human",
+    "penlightColor": "Red",
     "heightCm": 150,
     "birthMonth": "July",
     "active": true
@@ -271,6 +293,7 @@
     "generation": "Gen 3",
     "debutYear": 2019,
     "archetype": "Human",
+    "penlightColor": "Violet",
     "heightCm": 143,
     "birthMonth": "January",
     "active": false
@@ -283,6 +306,7 @@
     "generation": "Gen 4",
     "debutYear": 2019,
     "archetype": "Angel",
+    "penlightColor": "Light Blue",
     "heightCm": 149,
     "birthMonth": "April",
     "active": false
@@ -295,6 +319,7 @@
     "generation": "Gen 4",
     "debutYear": 2019,
     "archetype": "Animal",
+    "penlightColor": "Yellow",
     "heightCm": 151,
     "birthMonth": "June",
     "active": true
@@ -307,6 +332,7 @@
     "generation": "Gen 4",
     "debutYear": 2020,
     "archetype": "Devil",
+    "penlightColor": "Violet",
     "heightCm": 150,
     "birthMonth": "August",
     "active": true
@@ -319,6 +345,7 @@
     "generation": "Gen 4",
     "debutYear": 2020,
     "archetype": "Human",
+    "penlightColor": "Light Pink",
     "heightCm": 140,
     "birthMonth": "October",
     "active": true
@@ -331,6 +358,7 @@
     "generation": "Gen 4",
     "debutYear": 2019,
     "archetype": "Dragon",
+    "penlightColor": "Orange",
     "heightCm": 180,
     "birthMonth": "June",
     "active": false
@@ -343,6 +371,7 @@
     "generation": "Gen 5",
     "debutYear": 2020,
     "archetype": "Elf",
+    "penlightColor": "Light Blue",
     "heightCm": 158,
     "birthMonth": "November",
     "active": true
@@ -355,6 +384,7 @@
     "generation": "Gen 5",
     "debutYear": 2020,
     "archetype": "Human",
+    "penlightColor": "Orange",
     "heightCm": 159,
     "birthMonth": "March",
     "active": true
@@ -367,6 +397,7 @@
     "generation": "Gen 5",
     "debutYear": 2020,
     "archetype": "Animal",
+    "penlightColor": "White",
     "heightCm": 166,
     "birthMonth": "September",
     "active": true
@@ -379,11 +410,12 @@
     "generation": "Gen 5",
     "debutYear": 2020,
     "archetype": "Human",
+    "penlightColor": "Red",
     "heightCm": 153,
     "birthMonth": "January",
     "active": true
   },
-    {
+  {
     "id": "mano-aloe",
     "name": "Mano Aloe",
     "avatarUrl": "/avatars/mano-aloe.webp",
@@ -391,6 +423,7 @@
     "generation": "Gen 5",
     "debutYear": 2020,
     "archetype": "Succubus",
+    "penlightColor": null,
     "heightCm": 150,
     "birthMonth": "October",
     "active": false
@@ -403,6 +436,7 @@
     "generation": "holoX",
     "debutYear": 2021,
     "archetype": "Alien",
+    "penlightColor": "Purple",
     "heightCm": 139,
     "birthMonth": "May",
     "active": true
@@ -415,6 +449,7 @@
     "generation": "holoX",
     "debutYear": 2021,
     "archetype": "Bird",
+    "penlightColor": "Red",
     "heightCm": 161,
     "birthMonth": "June",
     "active": true
@@ -427,6 +462,7 @@
     "generation": "holoX",
     "debutYear": 2021,
     "archetype": "Animal",
+    "penlightColor": "Light Pink",
     "heightCm": 153,
     "birthMonth": "March",
     "active": true
@@ -439,6 +475,7 @@
     "generation": "holoX",
     "debutYear": 2021,
     "archetype": "Animal",
+    "penlightColor": "Red",
     "heightCm": 148,
     "birthMonth": "May",
     "active": true
@@ -451,6 +488,7 @@
     "generation": "holoX",
     "debutYear": 2021,
     "archetype": "Human",
+    "penlightColor": "Light Green",
     "heightCm": 156,
     "birthMonth": "June",
     "active": true
@@ -463,6 +501,7 @@
     "generation": "Gen 1",
     "debutYear": 2020,
     "archetype": "Animal",
+    "penlightColor": "Light Pink",
     "heightCm": 153,
     "birthMonth": "January",
     "active": true
@@ -475,6 +514,7 @@
     "generation": "Gen 1",
     "debutYear": 2020,
     "archetype": "Human",
+    "penlightColor": "Purple",
     "heightCm": 165,
     "birthMonth": "February",
     "active": true
@@ -487,6 +527,7 @@
     "generation": "Gen 1",
     "debutYear": 2020,
     "archetype": "Alien",
+    "penlightColor": "Green",
     "heightCm": 150,
     "birthMonth": "July",
     "active": true
@@ -499,6 +540,7 @@
     "generation": "Gen 2",
     "debutYear": 2020,
     "archetype": "Zombie",
+    "penlightColor": "Red",
     "heightCm": 162,
     "birthMonth": "October",
     "active": true
@@ -511,6 +553,7 @@
     "generation": "Gen 2",
     "debutYear": 2020,
     "archetype": "Dagger",
+    "penlightColor": "Yellow",
     "heightCm": 147,
     "birthMonth": "March",
     "active": true
@@ -523,6 +566,7 @@
     "generation": "Gen 2",
     "debutYear": 2020,
     "archetype": "Bird",
+    "penlightColor": "Blue",
     "heightCm": 172,
     "birthMonth": "September",
     "active": true
@@ -535,6 +579,7 @@
     "generation": "Gen 3",
     "debutYear": 2022,
     "archetype": "Human",
+    "penlightColor": "White",
     "heightCm": 155,
     "birthMonth": "November",
     "active": true
@@ -547,6 +592,7 @@
     "generation": "Gen 3",
     "debutYear": 2022,
     "archetype": "Human",
+    "penlightColor": "Red",
     "heightCm": 173,
     "birthMonth": "August",
     "active": true
@@ -559,6 +605,7 @@
     "generation": "Gen 3",
     "debutYear": 2022,
     "archetype": "Human",
+    "penlightColor": "Light Blue",
     "heightCm": 150,
     "birthMonth": "December",
     "active": true
@@ -571,6 +618,7 @@
     "generation": "Myth",
     "debutYear": 2020,
     "archetype": "Reaper",
+    "penlightColor": "Light Pink",
     "heightCm": 167,
     "birthMonth": "April",
     "active": true
@@ -583,6 +631,7 @@
     "generation": "Myth",
     "debutYear": 2020,
     "archetype": "Bird",
+    "penlightColor": "Orange",
     "heightCm": 165,
     "birthMonth": "July",
     "active": true
@@ -595,6 +644,7 @@
     "generation": "Myth",
     "debutYear": 2020,
     "archetype": "Human",
+    "penlightColor": "Violet",
     "heightCm": 157,
     "birthMonth": "May",
     "active": true
@@ -607,6 +657,7 @@
     "generation": "Myth",
     "debutYear": 2020,
     "archetype": "Human",
+    "penlightColor": "Yellow",
     "heightCm": 150,
     "birthMonth": "January",
     "active": false
@@ -619,6 +670,7 @@
     "generation": "Myth",
     "debutYear": 2020,
     "archetype": "Animal",
+    "penlightColor": "Blue",
     "heightCm": 141,
     "birthMonth": "June",
     "active": false
@@ -631,6 +683,7 @@
     "generation": "Project: HOPE",
     "debutYear": 2021,
     "archetype": "Nephilim",
+    "penlightColor": "Pink",
     "heightCm": 162,
     "birthMonth": "March",
     "active": true
@@ -643,6 +696,7 @@
     "generation": "Council",
     "debutYear": 2021,
     "archetype": "Alien",
+    "penlightColor": null,
     "heightCm": 169,
     "birthMonth": "June",
     "active": false
@@ -655,6 +709,7 @@
     "generation": "Promise",
     "debutYear": 2021,
     "archetype": "Kirin",
+    "penlightColor": "Light Green",
     "heightCm": 164,
     "birthMonth": "March",
     "active": false
@@ -667,6 +722,7 @@
     "generation": "Promise",
     "debutYear": 2021,
     "archetype": "Helicopter",
+    "penlightColor": "Blue",
     "heightCm": 168,
     "birthMonth": "March",
     "active": true
@@ -679,6 +735,7 @@
     "generation": "Promise",
     "debutYear": 2021,
     "archetype": "Bird",
+    "penlightColor": "Light Green",
     "heightCm": 156,
     "birthMonth": "August",
     "active": false
@@ -691,6 +748,7 @@
     "generation": "Promise",
     "debutYear": 2021,
     "archetype": "Animal",
+    "penlightColor": "Red",
     "heightCm": 149,
     "birthMonth": "February",
     "active": true
@@ -703,6 +761,7 @@
     "generation": "Advent",
     "debutYear": 2023,
     "archetype": "Human",
+    "penlightColor": "White",
     "heightCm": 163,
     "birthMonth": "May",
     "active": true
@@ -715,6 +774,7 @@
     "generation": "Advent",
     "debutYear": 2023,
     "archetype": "Rock",
+    "penlightColor": "Purple",
     "heightCm": 140,
     "birthMonth": "April",
     "active": true
@@ -726,7 +786,8 @@
     "branch": "EN",
     "generation": "Advent",
     "debutYear": 2023,
-    "archetype": "Bird",
+    "archetype": ["Bird", "Demon"],
+    "penlightColor": "Blue",
     "heightCm": 175,
     "birthMonth": "November",
     "active": true
@@ -739,6 +800,7 @@
     "generation": "Advent",
     "debutYear": 2023,
     "archetype": "Animal",
+    "penlightColor": "Light Blue",
     "heightCm": 155,
     "birthMonth": "February",
     "active": true
@@ -751,6 +813,7 @@
     "generation": "Advent",
     "debutYear": 2023,
     "archetype": "Animal",
+    "penlightColor": "Light Pink",
     "heightCm": 155,
     "birthMonth": "February",
     "active": true
@@ -763,6 +826,7 @@
     "generation": "Justice",
     "debutYear": 2024,
     "archetype": "Human",
+    "penlightColor": "Red",
     "heightCm": 171,
     "birthMonth": "April",
     "active": true
@@ -775,6 +839,7 @@
     "generation": "Justice",
     "debutYear": 2024,
     "archetype": "Human",
+    "penlightColor": "Orange",
     "heightCm": 153,
     "birthMonth": "October",
     "active": true
@@ -787,6 +852,7 @@
     "generation": "Justice",
     "debutYear": 2024,
     "archetype": "Robot",
+    "penlightColor": "Green",
     "heightCm": 162,
     "birthMonth": "November",
     "active": true
@@ -799,6 +865,7 @@
     "generation": "Justice",
     "debutYear": 2024,
     "archetype": "Animal",
+    "penlightColor": "Pink",
     "heightCm": 155,
     "birthMonth": "May",
     "active": true
@@ -811,6 +878,7 @@
     "generation": "ReGLOSS",
     "debutYear": 2023,
     "archetype": "Human",
+    "penlightColor": "Yellow",
     "heightCm": 153,
     "birthMonth": "April",
     "active": true
@@ -823,6 +891,7 @@
     "generation": "ReGLOSS",
     "debutYear": 2023,
     "archetype": "Human",
+    "penlightColor": "Pink",
     "heightCm": 162,
     "birthMonth": "May",
     "active": true
@@ -835,6 +904,7 @@
     "generation": "ReGLOSS",
     "debutYear": 2023,
     "archetype": "Human",
+    "penlightColor": "Green",
     "heightCm": 159,
     "birthMonth": "February",
     "active": true
@@ -847,6 +917,7 @@
     "generation": "ReGLOSS",
     "debutYear": 2023,
     "archetype": "Human",
+    "penlightColor": "Purple",
     "heightCm": 155,
     "birthMonth": "June",
     "active": true
@@ -859,6 +930,7 @@
     "generation": "ReGLOSS",
     "debutYear": 2023,
     "archetype": "Human",
+    "penlightColor": "Blue",
     "heightCm": 171,
     "birthMonth": "February",
     "active": false
@@ -871,6 +943,7 @@
     "generation": "FLOW GLOW",
     "debutYear": 2024,
     "archetype": "Human",
+    "penlightColor": "Pink",
     "heightCm": 160,
     "birthMonth": "May",
     "active": true
@@ -883,6 +956,7 @@
     "generation": "FLOW GLOW",
     "debutYear": 2024,
     "archetype": "Human",
+    "penlightColor": "Red",
     "heightCm": 172,
     "birthMonth": "July",
     "active": true
@@ -895,6 +969,7 @@
     "generation": "FLOW GLOW",
     "debutYear": 2024,
     "archetype": "Human",
+    "penlightColor": "Light Blue",
     "heightCm": 145,
     "birthMonth": "June",
     "active": true
@@ -907,6 +982,7 @@
     "generation": "FLOW GLOW",
     "debutYear": 2024,
     "archetype": "Human",
+    "penlightColor": "Light Green",
     "heightCm": 168,
     "birthMonth": "July",
     "active": true
@@ -919,6 +995,7 @@
     "generation": "FLOW GLOW",
     "debutYear": 2024,
     "archetype": "Human",
+    "penlightColor": "Light Pink",
     "heightCm": 161,
     "birthMonth": "August",
     "active": true

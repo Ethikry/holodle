@@ -22,6 +22,11 @@ CREATE TABLE IF NOT EXISTS user_day (
   tz                TEXT,
   settled_at        INTEGER,
   exit_embed_posted INTEGER NOT NULL DEFAULT 0,
+  -- Counts how many times this user has invoked /endless on this day_index.
+  -- The active answer is picked at (dayIndex + endlessOffset), so each call
+  -- advances them to the next shuffled-pool position. Always 0 in normal
+  -- play; only the test-guild /endless command mutates it.
+  endless_offset    INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (user_id, day_index)
 );
 
@@ -113,5 +118,10 @@ export const ADDITIVE_MIGRATIONS: Array<{ table: string; column: string; ddl: st
     table: "channel_daily_state",
     column: "message_updated_at",
     ddl: "ALTER TABLE channel_daily_state ADD COLUMN message_updated_at INTEGER",
+  },
+  {
+    table: "user_day",
+    column: "endless_offset",
+    ddl: "ALTER TABLE user_day ADD COLUMN endless_offset INTEGER NOT NULL DEFAULT 0",
   },
 ];

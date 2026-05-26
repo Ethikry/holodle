@@ -41,10 +41,30 @@ function exactCell<V>(value: V, equal: boolean): AttrCell<V> {
   return { value, state: equal ? "equal" : "wrong" };
 }
 
-function debutYearCell(guess: number, target: number): AttrCell<number> {
-  if (guess === target) return { value: guess, state: "equal" };
-  // No "near" state; off-by-one is just a miss with a directional arrow.
-  return { value: guess, state: target > guess ? "higher" : "lower" };
+function asList(v: string | string[]): string[] {
+  return Array.isArray(v) ? v : [v];
+}
+
+// Multi-valued exact match: matches when the guess's value set intersects
+// the target's value set. The cell value carries the guess's value(s),
+// joined for display so the pill shows "Gen 1 / GAMERS" for Fubuki rather
+// than dropping one of the labels.
+function multiCell(guess: string | string[], target: string | string[]): AttrCell<string> {
+  const guessSet = asList(guess);
+  const targetSet = new Set(asList(target));
+  const equal = guessSet.some((g) => targetSet.has(g));
+  return { value: guessSet.join(" / "), state: equal ? "equal" : "wrong" };
+}
+
+function penlightColorCell(
+  guess: string | null,
+  target: string | null,
+): AttrCell<string> {
+  // null/None means "no assigned color" — two such talents only match each
+  // other; a None guess against a colored target (or vice versa) is wrong.
+  const guessLabel = guess ?? "None";
+  const equal = (guess ?? "None") === (target ?? "None");
+  return { value: guessLabel, state: equal ? "equal" : "wrong" };
 }
 
 function birthMonthCell(guess: Month, target: Month): AttrCell<Month> {
@@ -60,10 +80,10 @@ function birthMonthCell(guess: Month, target: Month): AttrCell<Month> {
 export function compareGuess(guess: Talent, target: Talent): GuessDiff {
   return {
     talentId: guess.id,
-    generation: exactCell(guess.generation, guess.generation === target.generation),
+    generation: multiCell(guess.generation, target.generation),
     branch: exactCell(guess.branch, guess.branch === target.branch),
-    debutYear: debutYearCell(guess.debutYear, target.debutYear),
-    archetype: exactCell(guess.archetype, guess.archetype === target.archetype),
+    penlightColor: penlightColorCell(guess.penlightColor, target.penlightColor),
+    archetype: multiCell(guess.archetype, target.archetype),
     height: exactCell(heightBucket(guess.heightCm), heightBucket(guess.heightCm) === heightBucket(target.heightCm)),
     birthMonth: birthMonthCell(guess.birthMonth, target.birthMonth),
   };

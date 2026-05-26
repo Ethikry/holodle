@@ -5,7 +5,7 @@ import { MAX_GUESSES, boardRowFromDiff } from "@holodle/shared";
 import { requireUser } from "../auth/requireUser.js";
 import { loadUserDay, saveUserDay, settleDay } from "../db/client.js";
 import { compareGuess } from "../game/compare.js";
-import { dayIndexFor, pickDaily, puzzleIdFor, safeTz } from "../game/dailyPicker.js";
+import { dayIndexFor, pickByIndex, puzzleIdFor, safeTz } from "../game/dailyPicker.js";
 import { updateProgress } from "../game/instance.js";
 import { getRegistry } from "../game/talents.js";
 import { recordParticipantProgress } from "../game/channelState.js";
@@ -44,14 +44,16 @@ export async function guessRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const now = Date.now();
-    const answer = pickDaily(reg.activePool, now, tz);
+    const dayIndex = dayIndexFor(now, tz);
+    const row = loadUserDay(user.id, dayIndex);
+    // endlessOffset is 0 in normal play; /endless in the test guild bumps
+    // it so each invocation rotates this user to a fresh talent without
+    // waiting on the calendar.
+    const answer = pickByIndex(reg.activePool, dayIndex + row.endlessOffset);
     if (!answer) {
       reply.code(503);
       return { error: "No active talents available" };
     }
-
-    const dayIndex = dayIndexFor(now, tz);
-    const row = loadUserDay(user.id, dayIndex);
 
     if (row.status !== "playing") {
       reply.code(409);

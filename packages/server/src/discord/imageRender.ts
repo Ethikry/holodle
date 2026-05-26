@@ -321,7 +321,7 @@ function cellRenderAt(diff: GuessDiff | undefined, col: number): CellRender {
   const cells = [
     diff.generation,
     diff.branch,
-    diff.debutYear,
+    diff.penlightColor,
     diff.archetype,
     diff.height,
     diff.birthMonth,

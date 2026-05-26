@@ -25,10 +25,19 @@ export interface Talent {
   name: string;
   avatarUrl: string;
   branch: Branch;
-  // Free-form (covers "Gen 0", "GAMERS", "Promise", "Regloss", etc.).
-  generation: string;
+  // Free-form (covers "Gen 0", "GAMERS", "Promise", "Regloss", etc.). May
+  // be an array for talents that legitimately belong to multiple groups
+  // (e.g. Fubuki: Gen 1 + GAMERS). A guess counts as a match when the
+  // guess and target sets overlap by at least one value.
+  generation: string | string[];
+  // Retained alongside `penlightColor` so we can revert to year-based
+  // matching without re-collecting data. Not used for diffing today.
   debutYear: number;
-  archetype: string;
+  // Same multi-value semantics as `generation` — Nerissa is Bird + Demon.
+  archetype: string | string[];
+  // Penlight color from hololive 7th fes. May be null for talents who never
+  // had an assigned color (e.g. Sana, Aloe).
+  penlightColor: string | null;
   heightCm: number;
   birthMonth: Month;
   active: boolean;
@@ -57,9 +66,10 @@ export interface AttrCell<V> {
 export interface GuessDiff {
   talentId: string;
   // "Gen" column. Echoed so the client can render it without a second lookup.
+  // For multi-group talents the value is a joined display string ("Gen 1 / GAMERS").
   generation: AttrCell<string>;
   branch: AttrCell<Branch>;
-  debutYear: AttrCell<number>;
+  penlightColor: AttrCell<string>;
   archetype: AttrCell<string>;
   height: AttrCell<HeightBucket>;
   birthMonth: AttrCell<Month>;
@@ -70,14 +80,17 @@ export interface GuessDiff {
 export const BOARD_COLUMNS: ReadonlyArray<keyof Omit<GuessDiff, "talentId">> = [
   "generation",
   "branch",
-  "debutYear",
+  "penlightColor",
   "archetype",
   "height",
   "birthMonth",
 ];
 
 export function boardRowFromDiff(diff: GuessDiff): CellState[] {
-  return BOARD_COLUMNS.map((k) => diff[k].state);
+  // Defensive: legacy rows persisted under the prior schema (e.g. `debutYear`
+  // before the penlight-color swap) may be missing a cell entirely. Render
+  // those slots as a plain "wrong" rather than throwing.
+  return BOARD_COLUMNS.map((k) => diff[k]?.state ?? "wrong");
 }
 
 export type GameStatus = "playing" | "won" | "lost";

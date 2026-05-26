@@ -5,7 +5,7 @@ const COLUMN_HEADERS: Array<{ label: string; align?: string }> = [
   { label: "Talent" },
   { label: "Gen" },
   { label: "Branch" },
-  { label: "Debut Year" },
+  { label: "Penlight" },
   { label: "Archetype" },
   { label: "Height" },
   { label: "Birth Month" },
