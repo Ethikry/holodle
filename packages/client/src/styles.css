@@ -239,23 +239,25 @@ html.theme-irys {
     padding-bottom: env(safe-area-inset-bottom);
     position: relative;
   }
-  /* Decorative bg pattern: three overlapping dot grids at different
-     scales create an irregular constellation-like scatter rather than
-     a uniform lattice. Tracks the theme via --holo-accent. Fixed so
-     it doesn't scroll. Opacities are tuned to be visible enough to
-     read as "texture" without competing with the foreground content. */
+  /* Decorative bg pattern: a single repeating 80px tile containing two
+     four-point sparkles + two dots in a balanced diamond layout. Tiles
+     read as deliberate idol-poster decoration (not random noise) while
+     still being subtle. The pattern tracks --holo-accent because the
+     SVG is used as a CSS mask over a theme-coloured background — the
+     accent shows wherever the mask is opaque. */
   body::before {
     content: "";
     position: fixed;
     inset: 0;
     pointer-events: none;
     z-index: 0;
-    background-image:
-      radial-gradient(circle, rgb(var(--holo-accent) / 0.22) 1px, transparent 1.5px),
-      radial-gradient(circle, rgb(var(--holo-accent) / 0.14) 1.5px, transparent 2.5px),
-      radial-gradient(circle, rgb(var(--holo-accent) / 0.10) 1px, transparent 1.5px);
-    background-size: 56px 56px, 96px 96px, 32px 32px;
-    background-position: 8px 12px, 40px 48px, 16px 24px;
+    background-color: rgb(var(--holo-accent) / 0.18);
+    -webkit-mask-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Cg fill='white'%3E%3Cpath d='M20 12 l1.2 4.8 l4.8 1.2 l-4.8 1.2 l-1.2 4.8 l-1.2 -4.8 l-4.8 -1.2 l4.8 -1.2 z'/%3E%3Cpath d='M60 52 l1.2 4.8 l4.8 1.2 l-4.8 1.2 l-1.2 4.8 l-1.2 -4.8 l-4.8 -1.2 l4.8 -1.2 z'/%3E%3Ccircle cx='60' cy='18' r='1.2'/%3E%3Ccircle cx='20' cy='58' r='1.2'/%3E%3C/g%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Cg fill='white'%3E%3Cpath d='M20 12 l1.2 4.8 l4.8 1.2 l-4.8 1.2 l-1.2 4.8 l-1.2 -4.8 l-4.8 -1.2 l4.8 -1.2 z'/%3E%3Cpath d='M60 52 l1.2 4.8 l4.8 1.2 l-4.8 1.2 l-1.2 4.8 l-1.2 -4.8 l-4.8 -1.2 l4.8 -1.2 z'/%3E%3Ccircle cx='60' cy='18' r='1.2'/%3E%3Ccircle cx='20' cy='58' r='1.2'/%3E%3C/g%3E%3C/svg%3E");
+    -webkit-mask-size: 80px 80px;
+    mask-size: 80px 80px;
+    -webkit-mask-repeat: repeat;
+    mask-repeat: repeat;
   }
   /* Anything above the bg pattern needs explicit stacking context. */
   #root {
@@ -311,6 +313,14 @@ html.theme-irys {
   to   { background-position: 200% 50%; }
 }
 
+/* Header wordmark breathing: the background-clip-text gradient stops
+   drift slowly between accent-on-top and accent-on-bottom over 12s.
+   Almost imperceptible — adds life without distracting from content. */
+@keyframes wordmarkBreathe {
+  0%, 100% { background-position: 50% 0%; }
+  50%      { background-position: 50% 100%; }
+}
+
 /* Respect the OS-level "reduce motion" preference: every named animation
    collapses to a single zero-duration frame so the surfaces still appear
    in their final state, just without the motion. */
@@ -325,7 +335,8 @@ html.theme-irys {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
   }
-  [style*="shimmer"] {
+  [style*="shimmer"],
+  [style*="wordmarkBreathe"] {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
   }
