@@ -31,12 +31,13 @@ const MONTH_ABBR: Record<Month, string> = {
   December: "Dec",
 };
 
-// One row of the guess grid. 7 columns: avatar + 6 attribute cells.
-// The CSS-grid template is defined on the parent GuessGrid so header labels
-// line up with the cells below. When `isLatest` is true, the six attribute
-// cells flip in left-to-right via `animate-cellPop` with a staggered
-// per-column delay — gives the just-landed guess a tactile "grading"
-// reveal. Older rows render static.
+// One row of the guess grid. 6 columns: avatar + 5 attribute cells
+// (group / penlight / archetype / height / month). The CSS-grid template
+// is defined on the parent GuessGrid so header labels line up with the
+// cells below. When `isLatest` is true, the attribute cells flip in
+// left-to-right via `animate-cellPop` with a staggered per-column delay
+// — gives the just-landed guess a tactile "grading" reveal. Older rows
+// render static.
 const CELL_STAGGER_MS = 90;
 
 export function GuessRow({
@@ -58,7 +59,7 @@ export function GuessRow({
   return (
     <div
       role="row"
-      className="grid grid-cols-[48px_repeat(6,minmax(0,1fr))] items-center gap-1 sm:grid-cols-[72px_repeat(6,minmax(0,1fr))] sm:gap-2"
+      className="grid grid-cols-[48px_1.6fr_repeat(4,minmax(0,1fr))] items-center gap-1 sm:grid-cols-[72px_1.6fr_repeat(4,minmax(0,1fr))] sm:gap-2"
     >
       <div role="cell" className="flex items-center justify-center">
         <div className="card flex h-10 w-10 items-center justify-center overflow-hidden border border-holo-accent/30 sm:h-14 sm:w-14">
@@ -74,21 +75,18 @@ export function GuessRow({
         </div>
       </div>
       <div role="cell" className={cellClass} style={cellStyle(0)}>
-        <AttributePill cell={diff.generation} />
+        <AttributePill cell={diff.group} />
       </div>
       <div role="cell" className={cellClass} style={cellStyle(1)}>
-        <AttributePill cell={diff.branch} />
-      </div>
-      <div role="cell" className={cellClass} style={cellStyle(2)}>
         <AttributePill cell={diff.penlightColor} />
       </div>
-      <div role="cell" className={cellClass} style={cellStyle(3)}>
+      <div role="cell" className={cellClass} style={cellStyle(2)}>
         <AttributePill cell={diff.archetype} />
       </div>
-      <div role="cell" className={cellClass} style={cellStyle(4)}>
+      <div role="cell" className={cellClass} style={cellStyle(3)}>
         <AttributePill cell={{ ...diff.height, value: BUCKET_LABEL[diff.height.value] }} />
       </div>
-      <div role="cell" className={cellClass} style={cellStyle(5)}>
+      <div role="cell" className={cellClass} style={cellStyle(4)}>
         <AttributePill cell={{ ...diff.birthMonth, value: MONTH_ABBR[diff.birthMonth.value] }} />
       </div>
     </div>

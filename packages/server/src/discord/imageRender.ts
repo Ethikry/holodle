@@ -14,13 +14,15 @@ const TILE_BORDER = "#3a3b40";
 const CELL_EMPTY = "#1f2024";
 const CELL_USED = "#3a3b40";
 const CELL_EQUAL = "#3aa55d";
-const CELL_DIR = "#c89b3f";
+const CELL_PARTIAL = "#c89b3f";
 const CELL_BORDER = "#1c1c1f";
 
 const TITLE_INK = "#ffffff";
 const SUBTEXT = "#b5b8bf";
 
-const GRID_COLS = 6;
+// Five attribute columns: group / penlight / archetype / height / month.
+// Six guess rows. Stays in sync with BOARD_COLUMNS in @holodle/shared.
+const GRID_COLS = 5;
 const GRID_ROWS = 6;
 
 // ---------- Public types -------------------------------------------------
@@ -319,8 +321,7 @@ interface CellRender {
 function cellRenderAt(diff: GuessDiff | undefined, col: number): CellRender {
   if (!diff) return { fill: CELL_EMPTY };
   const cells = [
-    diff.generation,
-    diff.branch,
+    diff.group,
     diff.penlightColor,
     diff.archetype,
     diff.height,
@@ -329,8 +330,7 @@ function cellRenderAt(diff: GuessDiff | undefined, col: number): CellRender {
   const c = cells[col];
   if (!c) return { fill: CELL_USED };
   if (c.state === "equal") return { fill: CELL_EQUAL };
-  if (c.state === "higher") return { fill: CELL_DIR, glyph: "↑" };
-  if (c.state === "lower") return { fill: CELL_DIR, glyph: "↓" };
+  if (c.state === "partial") return { fill: CELL_PARTIAL };
   return { fill: CELL_USED };
 }
 

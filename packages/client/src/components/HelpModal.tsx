@@ -69,8 +69,12 @@ export function HelpModal(): JSX.Element | null {
             <span>Exact match.</span>
           </li>
           <li className="flex items-center gap-2">
+            <span className="cell-partial w-24 shrink-0">Yellow</span>
+            <span>Group only: branch or generation matches, but not both.</span>
+          </li>
+          <li className="flex items-center gap-2">
             <span className="cell-wrong w-24 shrink-0">Red</span>
-            <span>No match. ↑ / ↓ point toward the target for birth month.</span>
+            <span>No match.</span>
           </li>
         </ul>
         <p className="mt-3 text-xs text-holo-muted">

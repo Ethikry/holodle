@@ -50,16 +50,18 @@ function clearStaleDiffShapes(database: Database.Database): void {
       const guesses = JSON.parse(row.guesses_json) as unknown[];
       if (Array.isArray(guesses) && guesses.length > 0) {
         const first = guesses[0] as Record<string, unknown> | null;
-        // Each schema swap drops a field and adds another. We treat any of
-        // the legacy signals — `.name` (pre-Gen), missing `.generation`
-        // (pre-Gen), or missing `.penlightColor` (pre-Penlight) — as
-        // definitive evidence of a row that won't render under the current
-        // GuessDiff shape.
+        // Each schema swap drops a field and adds another. We treat any
+        // of the legacy signals — `.name` (pre-Gen), stray `.generation`
+        // or `.branch` (pre-merged-group), or missing `.penlightColor` /
+        // `.group` — as definitive evidence of a row that won't render
+        // under the current GuessDiff shape.
         if (
           first &&
-          (!("generation" in first) ||
-            "name" in first ||
-            !("penlightColor" in first))
+          ("name" in first ||
+            "generation" in first ||
+            "branch" in first ||
+            !("penlightColor" in first) ||
+            !("group" in first))
         ) {
           stale = true;
         }
@@ -108,9 +110,11 @@ function clearStaleDiffShapes(database: Database.Database): void {
         const first = guesses[0] as Record<string, unknown> | null;
         if (
           first &&
-          (!("generation" in first) ||
-            "name" in first ||
-            !("penlightColor" in first))
+          ("name" in first ||
+            "generation" in first ||
+            "branch" in first ||
+            !("penlightColor" in first) ||
+            !("group" in first))
         ) {
           stale = true;
         }

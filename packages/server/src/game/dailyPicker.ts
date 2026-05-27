@@ -247,15 +247,69 @@ function shuffleOnce(pool: Talent[]): Talent[] {
   return shuffled;
 }
 
-// Pick the talent at position `idx` in the shuffled pool. Lets routes
-// inject an effective dayIndex (e.g. `dayIndex + endlessOffset` for the
-// test-guild /endless command) without re-deriving timezone math.
+// Rolling no-repeat window. Any talent that was the answer for one of
+// the previous `NO_REPEAT_WINDOW` dayIndexes is excluded from today's
+// candidate set. Pure / deterministic — no DB needed since each day's
+// answer is a function of the dayIndex alone.
+export const NO_REPEAT_WINDOW = 30;
+
+// Memo across all pools — we key by the pool reference (the same way
+// shuffleOnce does) plus the integer day. The memo grows linearly with
+// the largest dayIndex queried; in practice that's bounded by how often
+// pickForDayIndex is called.
+const dayPickMemo = new WeakMap<Talent[], Map<number, Talent | null>>();
+
+function getPoolMemo(pool: Talent[]): Map<number, Talent | null> {
+  let m = dayPickMemo.get(pool);
+  if (!m) {
+    m = new Map();
+    dayPickMemo.set(pool, m);
+  }
+  return m;
+}
+
+// Pick the talent for the given dayIndex while honouring the 30-day
+// no-repeat rule. The algorithm walks the seeded-shuffle list starting
+// at `idx mod N` and advances past any talent that was the answer for
+// any of the previous NO_REPEAT_WINDOW dayIndexes. With ~64 active
+// talents and a 30-day exclusion window, the walk is always short.
+//
+// The function recurses into the prior days' picks but memoizes each
+// result, so total work is O(NO_REPEAT_WINDOW) per uncached day. Server
+// restarts simply repopulate the memo on demand; the function is pure
+// so the answer for a given dayIndex never changes.
 export function pickByIndex(pool: Talent[], idx: number): Talent | null {
   if (pool.length === 0) return null;
+  const memo = getPoolMemo(pool);
+  if (memo.has(idx)) return memo.get(idx) ?? null;
+
+  // Recent-window lookup is recursive but memoized; build the set of
+  // recently-picked talent ids first.
+  const recent = new Set<string>();
+  for (let d = idx - 1; d >= idx - NO_REPEAT_WINDOW && d >= 0; d--) {
+    const prior = pickByIndex(pool, d);
+    if (prior) recent.add(prior.id);
+  }
+
   const shuffled = shuffleOnce(pool);
-  const i = ((idx % shuffled.length) + shuffled.length) % shuffled.length;
-  // biome-ignore lint/style/noNonNullAssertion: i is bounded and pool is non-empty
-  return shuffled[i]!;
+  const start = ((idx % shuffled.length) + shuffled.length) % shuffled.length;
+  let chosen: Talent | null = null;
+  for (let step = 0; step < shuffled.length; step++) {
+    const candidate = shuffled[(start + step) % shuffled.length];
+    if (candidate && !recent.has(candidate.id)) {
+      chosen = candidate;
+      break;
+    }
+  }
+  // Fallback: NO_REPEAT_WINDOW ≥ pool.length means every talent has been
+  // used recently. Returning the canonical pick keeps the picker
+  // total-functional; in practice this branch is unreachable for any
+  // pool larger than NO_REPEAT_WINDOW.
+  if (!chosen) {
+    chosen = shuffled[start] ?? null;
+  }
+  memo.set(idx, chosen);
+  return chosen;
 }
 
 // Per-user puzzle picker. `tz` selects whose local calendar to bucket by.

@@ -51,12 +51,14 @@ export interface TalentSummary {
   avatarUrl: string;
 }
 
-// No "near" / orange state. Every cell is strictly equal-or-wrong; the
-// directional columns (debut year, birth month) distinguish the direction
-// of a miss via "higher" (target > guess, renders ↑) and "lower" (target <
-// guess, renders ↓). Birth month uses linear calendar order (Jan < Dec, no
-// wrap).
-export type CellState = "equal" | "wrong" | "higher" | "lower";
+// Three-state cells:
+//   - "equal":   exact full match
+//   - "partial": only used by the combined group column today — exactly
+//                one of (branch, generation) matches. Renders yellow.
+//   - "wrong":   no match.
+// The prior "higher" / "lower" directional states (used for debut year +
+// birth month arrows) have been retired; birth month is now equal-or-wrong.
+export type CellState = "equal" | "wrong" | "partial";
 
 export interface AttrCell<V> {
   value: V;
@@ -65,10 +67,14 @@ export interface AttrCell<V> {
 
 export interface GuessDiff {
   talentId: string;
-  // "Gen" column. Echoed so the client can render it without a second lookup.
-  // For multi-group talents the value is a joined display string ("Gen 1 / GAMERS").
-  generation: AttrCell<string>;
-  branch: AttrCell<Branch>;
+  // Combined "branch + generation" column. The displayed value is the
+  // formatted string ("JP Gen 1", "EN Gen 1 (Myth)", "JP Gen 1 / GAMERS"
+  // for multi-group talents). State semantics:
+  //   - "equal":   both branch AND generation match (any-of-array for
+  //                multi-group talents like Fubuki).
+  //   - "partial": exactly one of branch / generation matches.
+  //   - "wrong":   neither matches.
+  group: AttrCell<string>;
   penlightColor: AttrCell<string>;
   archetype: AttrCell<string>;
   height: AttrCell<HeightBucket>;
@@ -78,8 +84,7 @@ export interface GuessDiff {
 // Column order for board rows derived from a GuessDiff. Defined as a shared
 // constant so both client and server agree on the order of cell states.
 export const BOARD_COLUMNS: ReadonlyArray<keyof Omit<GuessDiff, "talentId">> = [
-  "generation",
-  "branch",
+  "group",
   "penlightColor",
   "archetype",
   "height",
@@ -119,10 +124,11 @@ export interface UserStats {
   winRate: number; // 0..1
 }
 
-// A single guess row reduced to its 6 cell-state colors. Values are stripped
-// so we never leak what talent another player guessed — only whether each
-// attribute matched. Used by the boards panel so spectators can see every
-// player's progress as a colored grid.
+// A single guess row reduced to its 5 cell-state colors (one per
+// BOARD_COLUMNS entry). Values are stripped so we never leak what talent
+// another player guessed — only whether each attribute matched. Used by
+// the boards panel so spectators can see every player's progress as a
+// colored grid.
 export type BoardRow = CellState[];
 
 // Socket.IO event payloads
@@ -132,11 +138,11 @@ export interface PlayerSnapshot {
   avatarUrl: string | null;
   guessesUsed: number;
   status: GameStatus;
-  // Each row is a 6-tuple of CellStates (one per attribute column). Length
-  // equals guessesUsed; older snapshots from completed players are loaded
-  // from the DB on socket connect. We intentionally do NOT broadcast the
-  // full GuessDiff (with talent ids + attribute values) — only cell colors
-  // — so spectators can't see what talents other players guessed.
+  // Each row is a 5-tuple of CellStates (one per BOARD_COLUMNS entry).
+  // Length equals guessesUsed; older snapshots from completed players are
+  // loaded from the DB on socket connect. We intentionally do NOT broadcast
+  // the full GuessDiff (with talent ids + attribute values) — only cell
+  // colors — so spectators can't see what talents other players guessed.
   board: BoardRow[];
 }
 
