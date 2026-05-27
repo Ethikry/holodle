@@ -35,7 +35,14 @@ export function GuessGrid(): JSX.Element {
         </div>
         <div className="space-y-2">
           {history.map((diff, i) => (
-            <GuessRow key={`${diff.talentId}-${i}`} diff={diff} talents={talents} />
+            <GuessRow
+              key={`${diff.talentId}-${i}`}
+              diff={diff}
+              talents={talents}
+              // Only the most-recent row animates its cells in. Older
+              // rows are static so re-renders don't restart the pop.
+              isLatest={i === history.length - 1}
+            />
           ))}
         </div>
       </div>

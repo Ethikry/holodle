@@ -86,7 +86,7 @@ export const useGame = create<GameState & GameActions>((set) => ({
   stats: { streak: 0, best: 0, played: 0, winRate: 0 },
   players: new Map(),
 
-  prefs: { recapPingMuted: false },
+  prefs: { recapPingMuted: false, theme: "warm-pastel" },
 
   helpOpen: false,
   recapOpen: false,
@@ -109,16 +109,20 @@ export const useGame = create<GameState & GameActions>((set) => ({
     }),
   appendGuess: (diff, status, answer) =>
     set((s) => {
-      // Auto-open the post-completion overlay the moment a guess settles
-      // the game. We only flip recapOpen on the playing → terminal
-      // transition so a reload of an already-settled day doesn't pop the
-      // overlay every refresh — the user can re-open via "View recap".
+      // Open the post-completion overlay when a guess settles the game,
+      // but defer it by ~1.4s so the final row's cell-reveal animation
+      // has time to land first. Only schedule on the playing → terminal
+      // transition so a reload of an already-settled day doesn't pop
+      // the overlay every refresh — the user can re-open via "View
+      // recap" any time.
       const justSettled = s.status === "playing" && status !== "playing";
+      if (justSettled) {
+        window.setTimeout(() => set({ recapOpen: true }), 1400);
+      }
       return {
         history: [...s.history, diff],
         status,
         answer: answer ?? s.answer,
-        recapOpen: justSettled ? true : s.recapOpen,
       };
     }),
   setStats: (stats) => set({ stats }),

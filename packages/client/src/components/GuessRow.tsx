@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import type { GuessDiff, Month, TalentSummary, HeightBucket } from "@holodle/shared";
 import { AttributePill } from "./AttributePill.js";
 
@@ -32,15 +33,28 @@ const MONTH_ABBR: Record<Month, string> = {
 
 // One row of the guess grid. 7 columns: avatar + 6 attribute cells.
 // The CSS-grid template is defined on the parent GuessGrid so header labels
-// line up with the cells below.
+// line up with the cells below. When `isLatest` is true, the six attribute
+// cells flip in left-to-right via `animate-cellPop` with a staggered
+// per-column delay — gives the just-landed guess a tactile "grading"
+// reveal. Older rows render static.
+const CELL_STAGGER_MS = 90;
+
 export function GuessRow({
   diff,
   talents,
+  isLatest = false,
 }: {
   diff: GuessDiff;
   talents: TalentSummary[];
+  isLatest?: boolean;
 }): JSX.Element {
   const talent = talents.find((t) => t.id === diff.talentId);
+  // The avatar cell doesn't carry attribute info so it doesn't animate;
+  // the six attribute cells share one cellClass + per-column delay.
+  const cellClass = isLatest ? "animate-cellPop" : undefined;
+  const cellStyle = (col: number): CSSProperties | undefined =>
+    isLatest ? { animationDelay: `${col * CELL_STAGGER_MS}ms` } : undefined;
+
   return (
     <div
       role="row"
@@ -59,22 +73,22 @@ export function GuessRow({
           )}
         </div>
       </div>
-      <div role="cell">
+      <div role="cell" className={cellClass} style={cellStyle(0)}>
         <AttributePill cell={diff.generation} />
       </div>
-      <div role="cell">
+      <div role="cell" className={cellClass} style={cellStyle(1)}>
         <AttributePill cell={diff.branch} />
       </div>
-      <div role="cell">
+      <div role="cell" className={cellClass} style={cellStyle(2)}>
         <AttributePill cell={diff.penlightColor} />
       </div>
-      <div role="cell">
+      <div role="cell" className={cellClass} style={cellStyle(3)}>
         <AttributePill cell={diff.archetype} />
       </div>
-      <div role="cell">
+      <div role="cell" className={cellClass} style={cellStyle(4)}>
         <AttributePill cell={{ ...diff.height, value: BUCKET_LABEL[diff.height.value] }} />
       </div>
-      <div role="cell">
+      <div role="cell" className={cellClass} style={cellStyle(5)}>
         <AttributePill cell={{ ...diff.birthMonth, value: MONTH_ABBR[diff.birthMonth.value] }} />
       </div>
     </div>

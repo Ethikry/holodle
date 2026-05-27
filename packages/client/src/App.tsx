@@ -13,6 +13,7 @@ import { connectSocket } from "./net/socket.js";
 import { useGame } from "./state/game.js";
 
 import type { TalentSummary } from "@holodle/shared";
+import { applyTheme } from "./themes.js";
 import { Header } from "./components/Header.js";
 import { StatusBanner } from "./components/StatusBanner.js";
 import { StatsRow } from "./components/StatsRow.js";
@@ -119,7 +120,12 @@ export function App(): JSX.Element {
         if (cancelled) return;
         setDaily(daily);
         setStats(stats);
-        if (prefs) setPrefs(prefs);
+        if (prefs) {
+          setPrefs(prefs);
+          // Apply the persisted theme as soon as it's known so the
+          // palette doesn't flash from the default to the user's pick.
+          applyTheme(prefs.theme);
+        }
       } catch (err) {
         errs.push(describe(err));
       }

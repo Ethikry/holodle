@@ -315,19 +315,31 @@ export function getLatestUserTz(userId: string): string | null {
 
 export interface UserPrefs {
   recapPingMuted: boolean;
+  // Stable theme id (see client/src/themes.ts). Validated against the
+  // allowlist at the route boundary; this layer just round-trips the
+  // string so unknown ids from a future client never crash the server.
+  theme: string;
 }
 
-const DEFAULT_USER_PREFS: UserPrefs = { recapPingMuted: false };
+const DEFAULT_USER_PREFS: UserPrefs = {
+  recapPingMuted: false,
+  theme: "warm-pastel",
+};
 
 // Returns the user's preferences row, falling back to DEFAULT_USER_PREFS
 // when no row exists. Never throws — a missing row is the normal state
 // for the vast majority of users who haven't touched the settings toggle.
 export function getUserPrefs(userId: string): UserPrefs {
   const row = getDb()
-    .prepare(`SELECT recap_ping_muted FROM user_prefs WHERE user_id = ?`)
-    .get(userId) as { recap_ping_muted: number } | undefined;
+    .prepare(
+      `SELECT recap_ping_muted, theme FROM user_prefs WHERE user_id = ?`,
+    )
+    .get(userId) as { recap_ping_muted: number; theme: string } | undefined;
   if (!row) return { ...DEFAULT_USER_PREFS };
-  return { recapPingMuted: row.recap_ping_muted !== 0 };
+  return {
+    recapPingMuted: row.recap_ping_muted !== 0,
+    theme: row.theme || DEFAULT_USER_PREFS.theme,
+  };
 }
 
 // UPSERT the prefs row. Touches updated_at on every write so we have a
@@ -335,13 +347,14 @@ export function getUserPrefs(userId: string): UserPrefs {
 export function setUserPrefs(userId: string, prefs: UserPrefs): void {
   getDb()
     .prepare(
-      `INSERT INTO user_prefs (user_id, recap_ping_muted, updated_at)
-       VALUES (?, ?, strftime('%s','now'))
+      `INSERT INTO user_prefs (user_id, recap_ping_muted, theme, updated_at)
+       VALUES (?, ?, ?, strftime('%s','now'))
        ON CONFLICT(user_id) DO UPDATE SET
          recap_ping_muted = excluded.recap_ping_muted,
+         theme            = excluded.theme,
          updated_at       = excluded.updated_at`,
     )
-    .run(userId, prefs.recapPingMuted ? 1 : 0);
+    .run(userId, prefs.recapPingMuted ? 1 : 0, prefs.theme);
 }
 
 // Returns the subset of `userIds` whose recap_ping_muted flag is set.

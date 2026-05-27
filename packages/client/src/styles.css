@@ -2,6 +2,120 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Theme palettes ─────────────────────────────────────────────────
+   Every theme defines the same set of --holo-* custom properties.
+   Each value is a SPACE-SEPARATED RGB triplet (e.g. "250 245 238") so
+   tailwind.config.ts can wrap them in `rgb(var(--holo-x) / <alpha>)`
+   and combine with the `/60` style opacity modifier.
+
+   THEME_IDS in src/themes.ts and the server's Zod allowlist
+   (packages/server/src/routes/prefs.ts) must stay in sync with this
+   list.
+   ─────────────────────────────────────────────────────────────────── */
+
+/* warm-pastel — default. Cream surfaces, sage matches, coral misses. */
+:root,
+html.theme-warm-pastel {
+  --holo-bg: 250 245 238;
+  --holo-card: 255 255 255;
+  --holo-ink: 59 58 54;
+  --holo-accent: 217 155 138;
+  --holo-ok: 94 138 74;
+  --holo-ok-bg: 230 239 219;
+  --holo-ok-bd: 182 210 156;
+  --holo-bad: 196 114 103;
+  --holo-bad-bg: 246 224 219;
+  --holo-bad-bd: 224 182 174;
+  --holo-muted: 140 132 120;
+  --holo-card-shadow: 0 1px 2px rgba(80, 70, 50, 0.05),
+    0 2px 6px rgba(80, 70, 50, 0.06);
+}
+
+/* suisei — midnight stage with comet-blue accent. */
+html.theme-suisei {
+  --holo-bg: 12 21 53;
+  --holo-card: 26 38 87;
+  --holo-ink: 238 241 255;
+  --holo-accent: 90 167 255;
+  --holo-ok: 111 224 192;
+  --holo-ok-bg: 29 58 74;
+  --holo-ok-bd: 78 198 163;
+  --holo-bad: 255 138 166;
+  --holo-bad-bg: 58 29 44;
+  --holo-bad-bd: 217 106 138;
+  --holo-muted: 159 176 214;
+  --holo-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.4),
+    0 4px 12px rgba(20, 28, 70, 0.5);
+}
+
+/* calliope — reaper magenta on near-black. */
+html.theme-calliope {
+  --holo-bg: 17 10 20;
+  --holo-card: 33 22 31;
+  --holo-ink: 241 228 238;
+  --holo-accent: 230 57 143;
+  --holo-ok: 201 163 255;
+  --holo-ok-bg: 42 27 58;
+  --holo-ok-bd: 139 109 209;
+  --holo-bad: 255 92 92;
+  --holo-bad-bg: 50 20 22;
+  --holo-bad-bd: 192 69 74;
+  --holo-muted: 160 138 161;
+  --holo-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.5),
+    0 6px 18px rgba(50, 0, 30, 0.55);
+}
+
+/* fauna — forest. Warm beige, sage, oat. */
+html.theme-fauna {
+  --holo-bg: 244 236 220;
+  --holo-card: 251 246 234;
+  --holo-ink: 58 52 36;
+  --holo-accent: 121 163 107;
+  --holo-ok: 79 128 71;
+  --holo-ok-bg: 223 237 208;
+  --holo-ok-bd: 152 193 129;
+  --holo-bad: 161 100 71;
+  --holo-bad-bg: 241 220 203;
+  --holo-bad-bd: 211 168 132;
+  --holo-muted: 132 122 93;
+  --holo-card-shadow: 0 1px 2px rgba(60, 50, 30, 0.05),
+    0 2px 8px rgba(60, 50, 30, 0.07);
+}
+
+/* gura — pale-teal ocean, soft yellow accent. */
+html.theme-gura {
+  --holo-bg: 230 244 245;
+  --holo-card: 255 255 255;
+  --holo-ink: 15 58 82;
+  --holo-accent: 244 207 94;
+  --holo-ok: 47 138 160;
+  --holo-ok-bg: 214 236 241;
+  --holo-ok-bd: 143 194 207;
+  --holo-bad: 214 90 125;
+  --holo-bad-bg: 249 217 225;
+  --holo-bad-bd: 232 158 175;
+  --holo-muted: 85 122 135;
+  --holo-card-shadow: 0 1px 2px rgba(15, 58, 82, 0.05),
+    0 4px 10px rgba(15, 58, 82, 0.08);
+}
+
+/* marine — pirate crimson and gold. */
+html.theme-marine {
+  --holo-bg: 42 10 18;
+  --holo-card: 64 23 36;
+  --holo-ink: 247 229 200;
+  --holo-accent: 232 190 90;
+  --holo-ok: 200 224 138;
+  --holo-ok-bg: 58 37 23;
+  --holo-ok-bd: 151 178 101;
+  --holo-bad: 255 128 121;
+  --holo-bad-bg: 80 26 35;
+  --holo-bad-bd: 196 98 88;
+  --holo-muted: 194 164 138;
+  --holo-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.4),
+    0 6px 14px rgba(60, 0, 10, 0.5);
+}
+
 @layer base {
   html,
   body,
@@ -17,15 +131,17 @@
 }
 
 @layer components {
-  /* Guess-grid cells. Match the Holodle Classic reference: uniformly-sized
-     rounded rectangles with a 2px state-colored border and a lightly-tinted
-     fill. Single line, no wrapping, centered text. On narrow viewports
-     (Discord mobile) we tighten padding + font so the 6 attribute columns
-     fit on a ~400px wide iframe without overflow/clipping. Truncate with
-     an ellipsis as a backstop for any value that still doesn't fit. */
+  /* Guess-grid cells. Uniformly-sized rounded rectangles with a 2px
+     state-coloured border and a lightly-tinted fill. We allow wrapping
+     (no whitespace-nowrap, no ellipsis) so long values like "Helicopter"
+     or "Nephilim" lay out on two lines on mobile rather than truncating.
+     Short values stay one-line because no break point exists; the row
+     keeps a balanced height because the parent grid applies items-center
+     and each cell stretches via w-full. */
   .cell {
-    @apply inline-flex w-full items-center justify-center overflow-hidden whitespace-nowrap rounded-lg border-2 px-1 py-1 text-[11px] font-semibold sm:rounded-xl sm:px-3 sm:py-2 sm:text-sm;
-    text-overflow: ellipsis;
+    @apply inline-flex w-full items-center justify-center break-words rounded-lg border-2 px-1 py-1 text-[11px] font-semibold leading-tight sm:rounded-xl sm:px-3 sm:py-2 sm:text-sm;
+    white-space: normal;
+    text-align: center;
   }
   .cell-equal {
     @apply cell bg-holo-okBg/60 text-holo-ok border-holo-okBd;
@@ -35,5 +151,20 @@
   }
   .card {
     @apply rounded-2xl bg-holo-card shadow-card;
+  }
+}
+
+/* Respect the OS-level "reduce motion" preference: every named animation
+   collapses to a single zero-duration frame so the surfaces still appear
+   in their final state, just without the motion. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-cellPop,
+  .animate-overlayEnter,
+  .animate-modalEnter,
+  .animate-tileEnter,
+  .animate-pulseGlow,
+  .animate-bounce {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
   }
 }

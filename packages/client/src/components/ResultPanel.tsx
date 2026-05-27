@@ -10,8 +10,8 @@ export function ResultPanel(): JSX.Element | null {
     const name = answer?.name ?? "the talent";
     return (
       <div className="mx-4 my-4 rounded-2xl border-2 border-holo-okBd bg-holo-okBg/40 px-6 py-6 text-center">
-        <div className="text-3xl">🎊</div>
-        <p className="mt-2 text-xl font-bold text-holo-ok">Yatta! ✨</p>
+        <div className="text-3xl animate-bounce">🎊</div>
+        <p className="mt-2 text-xl font-bold text-holo-ok animate-pulseGlow">Yatta! ✨</p>
         {answer && <div className="mt-2"><AnswerAvatar answer={answer} /></div>}
         <p className="mt-2 text-sm">
           You found <span className="font-bold">{name}</span> in {guesses} guess
