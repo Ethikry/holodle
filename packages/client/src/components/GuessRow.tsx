@@ -59,7 +59,7 @@ export function GuessRow({
   return (
     <div
       role="row"
-      className="grid grid-cols-[48px_1.6fr_repeat(4,minmax(0,1fr))] items-center gap-1 sm:grid-cols-[72px_1.6fr_repeat(4,minmax(0,1fr))] sm:gap-2"
+      className="grid grid-cols-[48px_repeat(5,minmax(0,1fr))] items-center gap-1 sm:grid-cols-[72px_repeat(5,minmax(0,1fr))] sm:gap-2"
     >
       <div role="cell" className="flex items-center justify-center">
         <div className="card flex h-10 w-10 items-center justify-center overflow-hidden border border-holo-accent/30 sm:h-14 sm:w-14">

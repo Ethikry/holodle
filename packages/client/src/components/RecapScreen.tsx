@@ -175,7 +175,7 @@ export function RecapScreen(): JSX.Element | null {
           </button>
         </div>
 
-        <div className="mt-4 text-center">
+        <div className="mt-4 rounded-2xl border-2 border-holo-accent/50 bg-holo-accent/10 px-6 py-6 text-center">
           {won && <div className="text-3xl animate-bounce">🎊</div>}
           <p
             className={`mt-1 text-2xl font-bold ${heroTitleClass} ${

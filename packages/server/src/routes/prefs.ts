@@ -11,14 +11,21 @@ import { getUserPrefs, setUserPrefs } from "../db/client.js";
 //                     below — keep in sync with client/src/themes.ts.
 
 // The set MUST match the set declared in packages/client/src/themes.ts.
-// Adding a theme requires touching both.
+// Adding a theme requires touching both. Order is purely cosmetic here,
+// but mirrors the picker order in themes.ts for readability.
 export const KNOWN_THEME_IDS = [
-  "warm-pastel",
-  "suisei",
-  "calliope",
-  "fauna",
-  "gura",
+  "sky",
+  "fubuki",
   "marine",
+  "suisei",
+  "korone",
+  "kanade",
+  "su",
+  "calliope",
+  "gura",
+  "fauna",
+  "irys",
+  "zeta",
 ] as const;
 
 const ThemeIdSchema = z.enum(KNOWN_THEME_IDS);

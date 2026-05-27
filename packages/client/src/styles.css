@@ -8,98 +8,104 @@
    tailwind.config.ts can wrap them in `rgb(var(--holo-x) / <alpha>)`
    and combine with the `/60` style opacity modifier.
 
-   THEME_IDS in src/themes.ts and the server's Zod allowlist
+   THEMES in src/themes.ts and the server's Zod allowlist
    (packages/server/src/routes/prefs.ts) must stay in sync with this
    list.
+
+   Default (the unscoped :root block) is "sky" — the original light
+   blue-grey palette from before the talent themes shipped. Every
+   theme also gets a matching `html.theme-<id>` block so the runtime
+   picker can switch palettes without rebuilding.
    ─────────────────────────────────────────────────────────────────── */
 
-/* warm-pastel — default. Cream surfaces, sage matches, coral misses. */
+/* sky — DEFAULT. Light blue-grey base with a sky-blue accent.
+   The original holodle palette before the talent-themed system. */
 :root,
-html.theme-warm-pastel {
-  --holo-bg: 250 245 238;
+html.theme-sky {
+  --holo-bg: 238 243 251;
   --holo-card: 255 255 255;
-  --holo-ink: 59 58 54;
-  --holo-accent: 217 155 138;
-  --holo-ok: 94 138 74;
-  --holo-ok-bg: 230 239 219;
-  --holo-ok-bd: 182 210 156;
-  --holo-bad: 196 114 103;
-  --holo-bad-bg: 246 224 219;
-  --holo-bad-bd: 224 182 174;
-  --holo-muted: 140 132 120;
-  --holo-card-shadow: 0 1px 2px rgba(80, 70, 50, 0.05),
-    0 2px 6px rgba(80, 70, 50, 0.06);
+  --holo-ink: 29 41 68;
+  --holo-accent: 34 184 230;
+  --holo-ok: 22 163 74;
+  --holo-ok-bg: 220 252 231;
+  --holo-ok-bd: 134 239 172;
+  --holo-bad: 220 38 38;
+  --holo-bad-bg: 254 226 226;
+  --holo-bad-bd: 252 165 165;
+  --holo-muted: 100 116 139;
+  --holo-card-shadow: 0 1px 2px rgba(30, 60, 110, 0.05),
+    0 2px 8px rgba(30, 60, 110, 0.07);
 }
 
-/* suisei — midnight stage with comet-blue accent. */
-html.theme-suisei {
-  --holo-bg: 12 21 53;
-  --holo-card: 26 38 87;
-  --holo-ink: 238 241 255;
-  --holo-accent: 90 167 255;
-  --holo-ok: 111 224 192;
-  --holo-ok-bg: 29 58 74;
-  --holo-ok-bd: 78 198 163;
-  --holo-bad: 255 138 166;
-  --holo-bad-bg: 58 29 44;
-  --holo-bad-bd: 217 106 138;
-  --holo-muted: 159 176 214;
-  --holo-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.4),
-    0 4px 12px rgba(20, 28, 70, 0.5);
+/* fubuki — foxy turquoise + forest green. Cool analogous. */
+html.theme-fubuki {
+  --holo-bg: 235 250 248;
+  --holo-card: 255 255 255;
+  --holo-ink: 20 60 80;
+  --holo-accent: 79 200 196;
+  --holo-ok: 92 168 110;
+  --holo-ok-bg: 222 240 222;
+  --holo-ok-bd: 152 200 158;
+  --holo-bad: 226 102 110;
+  --holo-bad-bg: 250 220 222;
+  --holo-bad-bd: 232 158 165;
+  --holo-muted: 108 132 144;
+  --holo-card-shadow: 0 1px 2px rgba(20, 90, 100, 0.05),
+    0 3px 10px rgba(40, 160, 170, 0.10);
 }
 
-/* calliope — reaper magenta on near-black. */
-html.theme-calliope {
-  --holo-bg: 17 10 20;
-  --holo-card: 33 22 31;
-  --holo-ink: 241 228 238;
-  --holo-accent: 230 57 143;
-  --holo-ok: 201 163 255;
-  --holo-ok-bg: 42 27 58;
-  --holo-ok-bd: 139 109 209;
-  --holo-bad: 255 92 92;
-  --holo-bad-bg: 50 20 22;
-  --holo-bad-bd: 192 69 74;
-  --holo-muted: 160 138 161;
+/* kanade — peach coral + cream. Warm analogous. */
+html.theme-kanade {
+  --holo-bg: 254 240 232;
+  --holo-card: 255 252 248;
+  --holo-ink: 80 30 50;
+  --holo-accent: 237 110 131;
+  --holo-ok: 138 180 100;
+  --holo-ok-bg: 232 245 215;
+  --holo-ok-bd: 174 210 142;
+  --holo-bad: 220 70 90;
+  --holo-bad-bg: 252 220 225;
+  --holo-bad-bd: 234 158 170;
+  --holo-muted: 152 110 122;
+  --holo-card-shadow: 0 1px 2px rgba(110, 40, 70, 0.05),
+    0 3px 10px rgba(220, 100, 130, 0.10);
+}
+
+/* su — icy glacial blue + crystalline mint. Cool, clean. */
+html.theme-su {
+  --holo-bg: 238 248 252;
+  --holo-card: 255 255 255;
+  --holo-ink: 20 50 90;
+  --holo-accent: 86 180 220;
+  --holo-ok: 88 175 162;
+  --holo-ok-bg: 218 240 232;
+  --holo-ok-bd: 152 205 187;
+  --holo-bad: 232 105 138;
+  --holo-bad-bg: 250 220 230;
+  --holo-bad-bd: 236 165 184;
+  --holo-muted: 105 130 158;
+  --holo-card-shadow: 0 1px 2px rgba(30, 70, 110, 0.05),
+    0 3px 10px rgba(70, 160, 210, 0.10);
+}
+
+/* zeta — lilac purple + silver on deep night. Dark, cool. */
+html.theme-zeta {
+  --holo-bg: 28 18 42;
+  --holo-card: 50 32 70;
+  --holo-ink: 240 232 248;
+  --holo-accent: 175 130 220;
+  --holo-ok: 138 200 158;
+  --holo-ok-bg: 42 50 70;
+  --holo-ok-bd: 100 168 122;
+  --holo-bad: 238 120 165;
+  --holo-bad-bg: 70 28 50;
+  --holo-bad-bd: 200 95 140;
+  --holo-muted: 168 152 200;
   --holo-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.5),
-    0 6px 18px rgba(50, 0, 30, 0.55);
+    0 6px 18px rgba(60, 30, 90, 0.5);
 }
 
-/* fauna — forest. Warm beige, sage, oat. */
-html.theme-fauna {
-  --holo-bg: 244 236 220;
-  --holo-card: 251 246 234;
-  --holo-ink: 58 52 36;
-  --holo-accent: 121 163 107;
-  --holo-ok: 79 128 71;
-  --holo-ok-bg: 223 237 208;
-  --holo-ok-bd: 152 193 129;
-  --holo-bad: 161 100 71;
-  --holo-bad-bg: 241 220 203;
-  --holo-bad-bd: 211 168 132;
-  --holo-muted: 132 122 93;
-  --holo-card-shadow: 0 1px 2px rgba(60, 50, 30, 0.05),
-    0 2px 8px rgba(60, 50, 30, 0.07);
-}
-
-/* gura — pale-teal ocean, soft yellow accent. */
-html.theme-gura {
-  --holo-bg: 230 244 245;
-  --holo-card: 255 255 255;
-  --holo-ink: 15 58 82;
-  --holo-accent: 244 207 94;
-  --holo-ok: 47 138 160;
-  --holo-ok-bg: 214 236 241;
-  --holo-ok-bd: 143 194 207;
-  --holo-bad: 214 90 125;
-  --holo-bad-bg: 249 217 225;
-  --holo-bad-bd: 232 158 175;
-  --holo-muted: 85 122 135;
-  --holo-card-shadow: 0 1px 2px rgba(15, 58, 82, 0.05),
-    0 4px 10px rgba(15, 58, 82, 0.08);
-}
-
-/* marine — pirate crimson and gold. */
+/* marine — pirate burgundy and treasure gold. Dark, warm analogous. */
 html.theme-marine {
   --holo-bg: 42 10 18;
   --holo-card: 64 23 36;
@@ -116,6 +122,108 @@ html.theme-marine {
     0 6px 14px rgba(60, 0, 10, 0.5);
 }
 
+/* suisei — midnight stage with comet blue + magenta accent. Triadic. */
+html.theme-suisei {
+  --holo-bg: 12 21 53;
+  --holo-card: 26 38 87;
+  --holo-ink: 238 241 255;
+  --holo-accent: 90 167 255;
+  --holo-ok: 111 224 192;
+  --holo-ok-bg: 29 58 74;
+  --holo-ok-bd: 78 198 163;
+  --holo-bad: 217 105 197;
+  --holo-bad-bg: 58 29 56;
+  --holo-bad-bd: 178 90 168;
+  --holo-muted: 159 176 214;
+  --holo-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.4),
+    0 4px 12px rgba(20, 28, 70, 0.5);
+}
+
+/* korone — donut brown + golden yellow. Warm, cozy analogous. */
+html.theme-korone {
+  --holo-bg: 253 245 230;
+  --holo-card: 255 255 255;
+  --holo-ink: 58 37 16;
+  --holo-accent: 201 123 58;
+  --holo-ok: 132 175 87;
+  --holo-ok-bg: 234 244 213;
+  --holo-ok-bd: 178 213 132;
+  --holo-bad: 213 70 60;
+  --holo-bad-bg: 250 224 219;
+  --holo-bad-bd: 232 142 128;
+  --holo-muted: 128 100 70;
+  --holo-card-shadow: 0 1px 2px rgba(90, 60, 30, 0.06),
+    0 3px 10px rgba(180, 110, 50, 0.10);
+}
+
+/* calliope — reaper magenta + lavender on near-black. Split-comp. */
+html.theme-calliope {
+  --holo-bg: 17 10 20;
+  --holo-card: 33 22 31;
+  --holo-ink: 241 228 238;
+  --holo-accent: 230 57 143;
+  --holo-ok: 201 163 255;
+  --holo-ok-bg: 42 27 58;
+  --holo-ok-bd: 139 109 209;
+  --holo-bad: 255 92 92;
+  --holo-bad-bg: 50 20 22;
+  --holo-bad-bd: 192 69 74;
+  --holo-muted: 160 138 161;
+  --holo-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.5),
+    0 6px 18px rgba(50, 0, 30, 0.55);
+}
+
+/* gura — pale ocean teal + trident gold. Complementary. */
+html.theme-gura {
+  --holo-bg: 230 244 245;
+  --holo-card: 255 255 255;
+  --holo-ink: 15 58 82;
+  --holo-accent: 47 138 160;
+  --holo-ok: 16 163 127;
+  --holo-ok-bg: 214 240 226;
+  --holo-ok-bd: 110 200 169;
+  --holo-bad: 214 90 125;
+  --holo-bad-bg: 249 217 225;
+  --holo-bad-bd: 232 158 175;
+  --holo-muted: 85 122 135;
+  --holo-card-shadow: 0 1px 2px rgba(15, 58, 82, 0.05),
+    0 4px 10px rgba(15, 58, 82, 0.08);
+}
+
+/* fauna — sapling green + leaf gold on warm cream. Analogous. */
+html.theme-fauna {
+  --holo-bg: 244 236 220;
+  --holo-card: 251 246 234;
+  --holo-ink: 58 52 36;
+  --holo-accent: 121 163 107;
+  --holo-ok: 79 128 71;
+  --holo-ok-bg: 223 237 208;
+  --holo-ok-bd: 152 193 129;
+  --holo-bad: 178 100 62;
+  --holo-bad-bg: 241 220 203;
+  --holo-bad-bd: 211 168 132;
+  --holo-muted: 132 122 93;
+  --holo-card-shadow: 0 1px 2px rgba(60, 50, 30, 0.05),
+    0 2px 8px rgba(60, 50, 30, 0.07);
+}
+
+/* irys — nephilim crimson + halo violet. Dark, split-complementary. */
+html.theme-irys {
+  --holo-bg: 26 10 31;
+  --holo-card: 46 24 56;
+  --holo-ink: 245 232 208;
+  --holo-accent: 225 29 72;
+  --holo-ok: 139 92 246;
+  --holo-ok-bg: 50 32 78;
+  --holo-ok-bd: 167 139 250;
+  --holo-bad: 251 113 133;
+  --holo-bad-bg: 70 20 36;
+  --holo-bad-bd: 220 80 110;
+  --holo-muted: 178 150 200;
+  --holo-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.5),
+    0 6px 18px rgba(60, 0, 50, 0.55);
+}
+
 @layer base {
   html,
   body,
@@ -123,10 +231,36 @@ html.theme-marine {
     height: 100%;
   }
   body {
-    @apply bg-holo-bg text-holo-ink font-display antialiased;
+    @apply bg-holo-bg text-holo-ink font-body antialiased;
     /* Respect the iOS notch / Android camera cutout when embedded as an activity. */
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
+    position: relative;
+  }
+  /* Subtle dotted lattice on the body — gives the flat bg a bit of
+     "paper" texture without competing with content. Tracks the theme
+     because it uses --holo-accent. Fixed so it doesn't scroll. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image:
+      radial-gradient(rgb(var(--holo-accent) / 0.10) 1px, transparent 1px),
+      radial-gradient(rgb(var(--holo-accent) / 0.06) 1px, transparent 1px);
+    background-size: 28px 28px, 56px 56px;
+    background-position: 0 0, 14px 14px;
+    opacity: 0.55;
+  }
+  /* Anything above the bg pattern needs explicit stacking context. */
+  #root {
+    position: relative;
+    z-index: 1;
+  }
+  /* Display-font family for headings/wordmark. */
+  h1, h2, h3 {
+    @apply font-display;
   }
 }
 
@@ -139,7 +273,7 @@ html.theme-marine {
      keeps a balanced height because the parent grid applies items-center
      and each cell stretches via w-full. */
   .cell {
-    @apply inline-flex w-full items-center justify-center break-words rounded-lg border-2 px-1 py-1 text-[11px] font-semibold leading-tight sm:rounded-xl sm:px-3 sm:py-2 sm:text-sm;
+    @apply inline-flex w-full items-center justify-center break-words rounded-xl border-2 px-1 py-1 text-[11px] font-semibold leading-tight sm:rounded-2xl sm:px-3 sm:py-2 sm:text-sm;
     white-space: normal;
     text-align: center;
   }
@@ -156,9 +290,28 @@ html.theme-marine {
   .cell-partial {
     @apply cell border-amber-500/70 bg-amber-300/40 text-amber-700;
   }
+  /* Softer, more idol-poster card shape. The radius is intentionally
+     generous so the UI doesn't look like a Wordle clone. */
   .card {
-    @apply rounded-2xl bg-holo-card shadow-card;
+    @apply bg-holo-card shadow-card;
+    border-radius: 1.75rem;
   }
+}
+
+/* ─── Decorative keyframes ─────────────────────────────────────────── */
+
+/* Holographic shimmer for the wordmark — the background-clip-text
+   gradient slides slowly across the letters. */
+@keyframes shimmer {
+  from { background-position: 0% 50%; }
+  to   { background-position: 200% 50%; }
+}
+
+/* Decorative ✨ around the wordmark — gentle twinkle (opacity + tiny
+   scale). Staggered per-sparkle via inline animation-delay. */
+@keyframes twinkle {
+  0%, 100% { opacity: 0.35; transform: scale(0.85) rotate(-4deg); }
+  50%      { opacity: 1;    transform: scale(1.08) rotate(4deg); }
 }
 
 /* Respect the OS-level "reduce motion" preference: every named animation
@@ -170,7 +323,9 @@ html.theme-marine {
   .animate-modalEnter,
   .animate-tileEnter,
   .animate-pulseGlow,
-  .animate-bounce {
+  .animate-bounce,
+  .animate-shimmer,
+  .animate-twinkle {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
   }

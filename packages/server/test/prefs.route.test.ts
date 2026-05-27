@@ -35,7 +35,7 @@ describe("GET /api/prefs", () => {
       headers: authFor("first-load-user"),
     });
     expect(r.statusCode).toBe(200);
-    expect(r.json()).toEqual({ recapPingMuted: false, theme: "warm-pastel" });
+    expect(r.json()).toEqual({ recapPingMuted: false, theme: "sky" });
   });
 
   it("rejects unauthenticated requests with 401", async () => {
@@ -54,14 +54,14 @@ describe("PATCH /api/prefs", () => {
       payload: { recapPingMuted: true },
     });
     expect(patch.statusCode).toBe(200);
-    expect(patch.json()).toEqual({ recapPingMuted: true, theme: "warm-pastel" });
+    expect(patch.json()).toEqual({ recapPingMuted: true, theme: "sky" });
 
     const get = await app.inject({
       method: "GET",
       url: "/api/prefs",
       headers: userHeaders,
     });
-    expect(get.json()).toEqual({ recapPingMuted: true, theme: "warm-pastel" });
+    expect(get.json()).toEqual({ recapPingMuted: true, theme: "sky" });
   });
 
   it("toggles back to false on a second PATCH", async () => {
@@ -78,7 +78,7 @@ describe("PATCH /api/prefs", () => {
       headers: userHeaders,
       payload: { recapPingMuted: false },
     });
-    expect(second.json()).toEqual({ recapPingMuted: false, theme: "warm-pastel" });
+    expect(second.json()).toEqual({ recapPingMuted: false, theme: "sky" });
   });
 
   it("rejects body validation errors with 400", async () => {
@@ -113,7 +113,7 @@ describe("PATCH /api/prefs", () => {
       url: "/api/prefs",
       headers: authFor("isolated-b"),
     });
-    expect(otherUser.json()).toEqual({ recapPingMuted: false, theme: "warm-pastel" });
+    expect(otherUser.json()).toEqual({ recapPingMuted: false, theme: "sky" });
   });
 });
 

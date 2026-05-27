@@ -204,13 +204,13 @@ export function App(): JSX.Element {
   return (
     <div className="flex min-h-full">
       <PlayerBoardSidebar />
-      <main className="mx-auto flex min-h-full max-w-3xl flex-1 flex-col">
+      <main className="mx-auto flex min-h-full max-w-4xl flex-1 flex-col gap-1 sm:gap-2">
         <Header />
         <StatusBanner />
         <StatsRow />
         <ResultPanel />
         {emptyCatalog ? (
-          <div className="mx-4 my-6 rounded-2xl border border-dashed border-holo-muted/40 p-6 text-center text-sm text-holo-muted">
+          <div className="mx-4 my-6 rounded-[1.5rem] border border-dashed border-holo-muted/40 p-6 text-center text-sm text-holo-muted">
             No talents loaded yet. Edit <code>talent_data.json</code> at the repo root to add some.
           </div>
         ) : (
@@ -223,7 +223,7 @@ export function App(): JSX.Element {
           </div>
         )}
         <footer className="mt-auto py-6 text-center text-xs text-holo-muted">
-          Holodle — Fan-made game. Not affiliated with Cover Corp.
+          holodle — fan-made game. not affiliated with Cover Corp.
         </footer>
         <HelpModal />
       </main>
