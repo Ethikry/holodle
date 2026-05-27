@@ -25,15 +25,20 @@ export function Header(): JSX.Element {
       <h1
         className="font-display text-5xl font-semibold tracking-tight sm:text-7xl"
         style={{
-          // Static two-stop gradient: accent at the top fading into ink
-          // at the bottom. Reads as a single colour at a glance but has
-          // a touch of depth up close. No animation.
+          // Three-stop vertical gradient (accent → ink → accent) sized
+          // to 200% of the text height so the background can scroll
+          // through it. The `wordmarkBreathe` keyframe shifts the
+          // gradient position over 12s, so the wordmark slowly drifts
+          // between accent-heavy on top and accent-heavy on bottom.
+          // Almost imperceptible — adds life without distraction.
           background:
-            "linear-gradient(180deg, rgb(var(--holo-accent)) 0%, rgb(var(--holo-ink)) 100%)",
+            "linear-gradient(180deg, rgb(var(--holo-accent)) 0%, rgb(var(--holo-ink)) 50%, rgb(var(--holo-accent)) 100%)",
+          backgroundSize: "100% 200%",
           WebkitBackgroundClip: "text",
           backgroundClip: "text",
           WebkitTextFillColor: "transparent",
           color: "transparent",
+          animation: "wordmarkBreathe 12s ease-in-out infinite",
         }}
       >
         holodle
