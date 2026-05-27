@@ -34,9 +34,27 @@ export function AttributePill<V extends string | number>({
     );
   }
   const arrow = arrowFor(cell.state);
+  const raw = String(cell.value);
+  // Multi-value cells (Fubuki: "Gen 1 / GAMERS", Nerissa: "Bird / Demon")
+  // overflow the single-line pill at mobile widths. Detect the " / "
+  // separator the server emits and stack the parts vertically with tighter
+  // type so each label stays visible without ellipsis truncation.
+  const parts = raw.includes(" / ") ? raw.split(" / ") : null;
+  if (parts) {
+    return (
+      <span className={`${classFor(cell.state)} !flex-col !whitespace-normal !leading-tight !text-[9px] sm:!text-[11px]`}>
+        {parts.map((p, i) => (
+          <span key={i} className="block">
+            {p}
+          </span>
+        ))}
+        {arrow && <span className="ml-1">{arrow}</span>}
+      </span>
+    );
+  }
   return (
     <span className={classFor(cell.state)}>
-      {String(cell.value)}
+      {raw}
       {arrow && <span className="ml-1">{arrow}</span>}
     </span>
   );
