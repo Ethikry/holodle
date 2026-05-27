@@ -51,7 +51,7 @@ export const THEMES: readonly Theme[] = [
     id: "kanade",
     label: "Cadence",
     attribution: "Otonose Kanade",
-    swatch: ["#fef0e8", "#ed6e83", "#8ab464"],
+    swatch: ["#fef0e8", "#ed6e83", "#daa23c"],
   },
   {
     id: "su",
@@ -87,7 +87,7 @@ export const THEMES: readonly Theme[] = [
     id: "zeta",
     label: "Agent",
     attribution: "Vestia Zeta",
-    swatch: ["#1c122a", "#af82dc", "#ee78a5"],
+    swatch: ["#f6f0fc", "#9864c8", "#dc5a82"],
   },
 ];
 
