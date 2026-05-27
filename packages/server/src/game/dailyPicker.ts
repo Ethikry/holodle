@@ -320,3 +320,122 @@ export function pickDaily(
 ): Talent | null {
   return pickByIndex(pool, dayIndexFor(nowMs, tz));
 }
+
+// ─── Weighted-random picker backed by daily_pick_log ──────────────────
+//
+// `pickByIndex` above is a pure shuffle-walk and remains in use for the
+// /endless test command. For normal play we want:
+//
+//   1. Idempotency per dayIndex (so /api/daily and /api/guess agree).
+//   2. The same 30-day no-repeat exclusion.
+//   3. Weighted random selection biased toward LESS-frequently-picked
+//      talents — newly added catalog members (count 0) win most rolls
+//      until their tally catches up; over the long run, picks even out.
+//
+// The picker takes a tiny `PickLogDeps` shape rather than a concrete
+// better-sqlite3 handle so tests can inject a pure in-memory fake. The
+// production wiring in routes/daily.ts + routes/guess.ts passes the
+// real DB-backed helpers from db/client.ts.
+
+export interface PickLogDeps {
+  // Existing entry for this dayIndex, if any. Idempotency anchor.
+  getEntry(dayIndex: number): string | null;
+  // Ids picked within [dayIndex - window, dayIndex).
+  getRecent(dayIndex: number, windowDays: number): Set<string>;
+  // Most-recent N picks, newest first. Used by the small-pool fallback.
+  getRecentOrdered(dayIndex: number, limit: number): Array<{ dayIndex: number; talentId: string }>;
+  // talentId → all-time count of picks. Missing keys = 0.
+  getCounts(): Map<string, number>;
+  // INSERT OR IGNORE the chosen pick. Returns true if it wrote a row.
+  insert(dayIndex: number, talentId: string): boolean;
+}
+
+// Compute weighted random index `i` such that `weights[i]` is more
+// likely to win. Pure — given the same rng + same weights, returns the
+// same index. Internal helper, exported only for the test suite.
+export function weightedPick(weights: number[], rng: () => number): number {
+  let total = 0;
+  for (const w of weights) total += w;
+  if (total <= 0) return 0;
+  const r = rng() * total;
+  let acc = 0;
+  for (let i = 0; i < weights.length; i++) {
+    acc += weights[i]!;
+    if (r < acc) return i;
+  }
+  // Floating-point cushion: if rounding pushed `r` past `total`, just
+  // return the last index.
+  return weights.length - 1;
+}
+
+// Pick today's talent with the weighted-random algorithm and persist
+// the result. Idempotent — if `deps.getEntry(dayIndex)` returns an id
+// already in `pool`, that talent is returned and no insert happens.
+//
+// Algorithm:
+//   1. If the log already has dayIndex, return that talent.
+//   2. recent = the 30-day window of past picks.
+//   3. eligible = pool filtered down by `recent`.
+//   4. If eligible is empty (pool ≤ NO_REPEAT_WINDOW edge case), fall
+//      back to the LEAST recently-picked member of the full pool.
+//   5. weight[t] = 1 / (count[t.id] + 1); never-picked talents get 1.0,
+//      picked once → 0.5, twice → 0.33 …
+//   6. Draw weighted-random index seeded by dayIndex (so a given dayIndex
+//      + log state always picks the same talent — same answer for both
+//      /api/daily and /api/guess in the same day).
+//   7. INSERT OR IGNORE into the log and return.
+export function pickAndLogDaily(
+  pool: Talent[],
+  dayIndex: number,
+  deps: PickLogDeps,
+): Talent | null {
+  if (pool.length === 0) return null;
+
+  const existing = deps.getEntry(dayIndex);
+  if (existing) {
+    const found = pool.find((t) => t.id === existing);
+    // If the pool was edited and the previously-recorded talent is gone,
+    // fall through to a fresh pick rather than returning null. The log
+    // row sticks around (a small bit of historical noise) but the day
+    // still gets a valid answer.
+    if (found) return found;
+  }
+
+  const recent = deps.getRecent(dayIndex, NO_REPEAT_WINDOW);
+  const counts = deps.getCounts();
+
+  let eligible = pool.filter((t) => !recent.has(t.id));
+
+  // Small-pool fallback: every talent is in the recent window. Pick the
+  // one that hasn't been seen the longest (= NOT in the most-recent
+  // ordered list, or appears latest in it).
+  if (eligible.length === 0) {
+    const ordered = deps.getRecentOrdered(dayIndex, NO_REPEAT_WINDOW);
+    // Build id → mostRecentDayIndex map; whichever pool member is missing
+    // (impossible if pool ⊆ recent) or has the smallest dayIndex wins.
+    const lastSeen = new Map<string, number>();
+    for (const r of ordered) {
+      if (!lastSeen.has(r.talentId)) lastSeen.set(r.talentId, r.dayIndex);
+    }
+    let bestIdx = 0;
+    let bestSeen = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < pool.length; i++) {
+      const seen = lastSeen.get(pool[i]!.id) ?? -Infinity;
+      if (seen < bestSeen) {
+        bestSeen = seen;
+        bestIdx = i;
+      }
+    }
+    eligible = [pool[bestIdx]!];
+  }
+
+  const weights = eligible.map((t) => 1 / ((counts.get(t.id) ?? 0) + 1));
+  // Seed is dayIndex XOR a fixed constant so we don't reuse the shuffle
+  // seed; the constant is committed and immutable.
+  const rng = mulberry32((dayIndex ^ 0x9e3779b1) >>> 0);
+  const pickIdx = weightedPick(weights, rng);
+  const chosen = eligible[pickIdx] ?? eligible[0]!;
+
+  deps.insert(dayIndex, chosen.id);
+  return chosen;
+}

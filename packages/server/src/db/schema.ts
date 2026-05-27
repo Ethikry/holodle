@@ -95,6 +95,18 @@ CREATE TABLE IF NOT EXISTS channel_daily_participant (
   tz           TEXT,
   PRIMARY KEY (channel_id, puzzle_id, user_id)
 );
+
+-- Per-day puzzle answer log. One row per dayIndex. Drives the weighted
+-- random picker in dailyPicker.ts: the picker reads this table to (a)
+-- skip talents picked within the 30-day window and (b) bias selection
+-- toward talents with the lowest historical count. First write wins —
+-- once a dayIndex has a row, subsequent calls are idempotent and just
+-- return the stored talent.
+CREATE TABLE IF NOT EXISTS daily_pick_log (
+  day_index  INTEGER PRIMARY KEY,
+  talent_id  TEXT NOT NULL,
+  logged_at  INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+);
 `;
 
 export const INDEXES_SQL = `
@@ -102,6 +114,8 @@ CREATE INDEX IF NOT EXISTS idx_user_day_day ON user_day(day_index);
 CREATE INDEX IF NOT EXISTS idx_user_day_settled ON user_day(settled_at);
 CREATE INDEX IF NOT EXISTS idx_channel_participant_channel_puzzle
   ON channel_daily_participant(channel_id, puzzle_id);
+-- Count-by-talent lookups for the weighted picker.
+CREATE INDEX IF NOT EXISTS idx_pick_log_talent ON daily_pick_log(talent_id);
 `;
 
 // Additive columns that need ALTER TABLE on databases predating round-2.

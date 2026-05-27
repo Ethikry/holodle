@@ -3,13 +3,16 @@ import type { Talent } from "@holodle/shared";
 import {
   EPOCH_UTC_MS,
   NO_REPEAT_WINDOW,
+  type PickLogDeps,
   cstDayIndexFor,
   dayIndexFor,
+  pickAndLogDaily,
   pickByIndex,
   pickDaily,
   puzzleEndUtcSecs,
   puzzleIdFor,
   safeTz,
+  weightedPick,
 } from "../src/game/dailyPicker.js";
 
 function t(id: string): Talent {
@@ -252,5 +255,179 @@ describe("puzzleEndUtcSecs", () => {
 
   it("malformed puzzleId returns +Infinity (gate stays closed)", () => {
     expect(puzzleEndUtcSecs("not-a-date", "UTC")).toBe(Number.POSITIVE_INFINITY);
+  });
+});
+
+// ─── pickAndLogDaily (weighted random + 30-day window) ───────────────
+
+// Pure in-memory fake of PickLogDeps. Mirrors the real DB shape but
+// lives in two Maps so the picker is testable without touching SQLite.
+function makeFakeLog(seedRows: Array<{ dayIndex: number; talentId: string }> = []): {
+  deps: PickLogDeps;
+  entries: Map<number, string>; // dayIndex → talentId
+  inserts: number;
+} {
+  const entries = new Map<number, string>();
+  for (const r of seedRows) entries.set(r.dayIndex, r.talentId);
+  let inserts = 0;
+  const deps: PickLogDeps = {
+    getEntry(dayIndex) {
+      return entries.get(dayIndex) ?? null;
+    },
+    getRecent(dayIndex, windowDays) {
+      const set = new Set<string>();
+      for (const [d, id] of entries) {
+        if (d < dayIndex && d >= dayIndex - windowDays) set.add(id);
+      }
+      return set;
+    },
+    getRecentOrdered(dayIndex, limit) {
+      const rows: Array<{ dayIndex: number; talentId: string }> = [];
+      for (const [d, id] of entries) {
+        if (d < dayIndex) rows.push({ dayIndex: d, talentId: id });
+      }
+      rows.sort((a, b) => b.dayIndex - a.dayIndex);
+      return rows.slice(0, limit);
+    },
+    getCounts() {
+      const m = new Map<string, number>();
+      for (const id of entries.values()) m.set(id, (m.get(id) ?? 0) + 1);
+      return m;
+    },
+    insert(dayIndex, talentId) {
+      if (entries.has(dayIndex)) return false;
+      entries.set(dayIndex, talentId);
+      inserts++;
+      return true;
+    },
+  };
+  return {
+    deps,
+    entries,
+    get inserts() {
+      return inserts;
+    },
+  } as { deps: PickLogDeps; entries: Map<number, string>; inserts: number };
+}
+
+describe("weightedPick", () => {
+  it("with all-equal weights picks each index roughly equally", () => {
+    // Burn a few RNG draws and assert every bucket appears.
+    const counts = [0, 0, 0, 0];
+    let s = 42;
+    const rng = (): number => {
+      // Tiny linear-congruential — independent of mulberry32 so this
+      // test doesn't depend on internals.
+      s = (1103515245 * s + 12345) & 0x7fffffff;
+      return s / 0x7fffffff;
+    };
+    for (let i = 0; i < 4000; i++) counts[weightedPick([1, 1, 1, 1], rng)]!++;
+    for (const c of counts) expect(c).toBeGreaterThan(800); // ~25% each, generous floor
+  });
+
+  it("biases toward higher weights", () => {
+    let s = 7;
+    const rng = (): number => {
+      s = (1664525 * s + 1013904223) >>> 0;
+      return s / 0x100000000;
+    };
+    const counts = [0, 0];
+    // weight A = 4, B = 1 → A wins ~80% of the time.
+    for (let i = 0; i < 1000; i++) counts[weightedPick([4, 1], rng)]!++;
+    expect(counts[0]!).toBeGreaterThan(700);
+    expect(counts[1]!).toBeLessThan(300);
+  });
+});
+
+describe("pickAndLogDaily", () => {
+  const pool = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j",
+    "k", "l", "m", "n", "o", "p", "q", "r", "s", "t",
+    "u", "v", "w", "x", "y", "z", "aa", "bb", "cc", "dd",
+    "ee", "ff", "gg", "hh", "ii", "jj"].map(t);
+
+  it("returns null for an empty pool", () => {
+    const fake = makeFakeLog();
+    expect(pickAndLogDaily([], 100, fake.deps)).toBeNull();
+  });
+
+  it("is idempotent — re-calling for the same day returns the logged talent and doesn't re-insert", () => {
+    const fake = makeFakeLog();
+    const first = pickAndLogDaily(pool, 100, fake.deps);
+    expect(first).not.toBeNull();
+    const insertsAfterFirst = fake.inserts;
+    const second = pickAndLogDaily(pool, 100, fake.deps);
+    expect(second?.id).toBe(first?.id);
+    // No second insert.
+    expect(fake.inserts).toBe(insertsAfterFirst);
+  });
+
+  it("never picks a talent that's inside the 30-day window", () => {
+    // Pre-seed: talent "a" was picked on day 100.
+    const fake = makeFakeLog([{ dayIndex: 100, talentId: "a" }]);
+    for (let d = 101; d < 101 + NO_REPEAT_WINDOW; d++) {
+      const pick = pickAndLogDaily(pool, d, fake.deps);
+      expect(pick?.id).not.toBe("a");
+    }
+    // 31 days after day 100, "a" is eligible again.
+    const pick = pickAndLogDaily(pool, 100 + NO_REPEAT_WINDOW + 1, fake.deps);
+    // Not asserting it IS "a" — just that nothing now forbids it.
+    expect(pick).not.toBeNull();
+  });
+
+  it("is deterministic — same log state + dayIndex → same pick", () => {
+    const fakeA = makeFakeLog();
+    const fakeB = makeFakeLog();
+    expect(pickAndLogDaily(pool, 12345, fakeA.deps)?.id).toBe(
+      pickAndLogDaily(pool, 12345, fakeB.deps)?.id,
+    );
+  });
+
+  it("biases picks toward less-frequently-picked talents", () => {
+    // Heavily seed talents a..d with counts 100 each, and e..jj with 0
+    // (never picked). Pick across a long horizon and assert the
+    // never-picked group dominates. We pick across many WIDE-APART
+    // dayIndexes (with no recent-window collisions to muddy the count)
+    // and reset the recent set between draws so the weighting alone
+    // decides the outcome.
+    const heavy = ["a", "b", "c", "d"];
+    const seeded: Array<{ dayIndex: number; talentId: string }> = [];
+    let sd = -10_000;
+    for (const id of heavy) {
+      for (let i = 0; i < 100; i++) {
+        seeded.push({ dayIndex: sd++, talentId: id }); // way in the past, outside any window
+      }
+    }
+    const fake = makeFakeLog(seeded);
+    const heavySet = new Set(heavy);
+    let heavyHits = 0;
+    let lightHits = 0;
+    // 200 trials, each 50 days apart so the just-picked talent rarely
+    // collides into the next trial's recent window.
+    for (let i = 0; i < 200; i++) {
+      const day = 100_000 + i * 50;
+      const pick = pickAndLogDaily(pool, day, fake.deps);
+      if (!pick) continue;
+      if (heavySet.has(pick.id)) heavyHits++;
+      else lightHits++;
+    }
+    // With weights ~1/101 for heavy vs 1.0 for light, the light group
+    // (32 of 36 pool members) should crush the heavy four. A relaxed
+    // floor of 10× ensures the test is stable under any RNG seed drift.
+    expect(lightHits).toBeGreaterThan(heavyHits * 10);
+  });
+
+  it("small-pool fallback picks the least-recently-seen talent when every member is in the window", () => {
+    // 4-talent pool, 4 recent picks → every member is excluded by the
+    // window. The picker should still return a talent (not null) and
+    // it should be the one picked LONGEST ago.
+    const tinyPool = ["a", "b", "c", "d"].map(t);
+    const fake = makeFakeLog([
+      { dayIndex: 96, talentId: "a" }, // oldest → should win the fallback
+      { dayIndex: 97, talentId: "b" },
+      { dayIndex: 98, talentId: "c" },
+      { dayIndex: 99, talentId: "d" },
+    ]);
+    const pick = pickAndLogDaily(tinyPool, 100, fake.deps);
+    expect(pick?.id).toBe("a");
   });
 });

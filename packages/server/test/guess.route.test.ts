@@ -15,10 +15,37 @@ const fixturesDir = resolve(fileURLToPath(import.meta.url), "..", "fixtures");
 const TALENTS = join(fixturesDir, "talents.json");
 
 const { buildApp } = await import("../src/app.js");
-const { pickDaily } = await import("../src/game/dailyPicker.js");
+const { dayIndexFor, pickAndLogDaily } = await import("../src/game/dailyPicker.js");
+const {
+  getPickLogCounts,
+  getPickLogEntry,
+  getPickLogRecent,
+  getPickLogRecentOrdered,
+  insertPickLog,
+} = await import("../src/db/client.js");
 const { getRegistry } = await import("../src/game/talents.js");
 
 const app = await buildApp({ talentsJsonPath: TALENTS, serveClient: false, log: false });
+
+// Mirrors the deps wiring in routes/{daily,guess}.ts. Calling this from
+// the test will either return the already-logged answer for today OR
+// pick one + write it, after which the route will see the same row.
+const pickLogDeps = {
+  getEntry: getPickLogEntry,
+  getRecent: getPickLogRecent,
+  getRecentOrdered: getPickLogRecentOrdered,
+  getCounts: getPickLogCounts,
+  insert: insertPickLog,
+};
+
+// Determine today's answer the same way the route will: ask the
+// weighted-random picker for the current dayIndex (in UTC, matching the
+// route default when no tz header is present). First call seeds the
+// log; subsequent calls — including the one inside the route — read it.
+function pickDaily(activePool: ReturnType<typeof getRegistry>["activePool"]) {
+  const dayIndex = dayIndexFor(Date.now(), "UTC");
+  return pickAndLogDaily(activePool, dayIndex, pickLogDeps);
+}
 
 afterAll(async () => {
   await app.close();

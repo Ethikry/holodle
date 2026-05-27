@@ -3,9 +3,35 @@ import { z } from "zod";
 import type { GuessResponse } from "@holodle/shared";
 import { MAX_GUESSES, boardRowFromDiff } from "@holodle/shared";
 import { requireUser } from "../auth/requireUser.js";
-import { loadUserDay, saveUserDay, settleDay } from "../db/client.js";
+import {
+  getPickLogCounts,
+  getPickLogEntry,
+  getPickLogRecent,
+  getPickLogRecentOrdered,
+  insertPickLog,
+  loadUserDay,
+  saveUserDay,
+  settleDay,
+} from "../db/client.js";
 import { compareGuess } from "../game/compare.js";
-import { dayIndexFor, pickByIndex, puzzleIdFor, safeTz } from "../game/dailyPicker.js";
+import {
+  dayIndexFor,
+  pickAndLogDaily,
+  pickByIndex,
+  puzzleIdFor,
+  safeTz,
+} from "../game/dailyPicker.js";
+
+// DB-backed deps for the weighted picker. Identical shape to the
+// version in routes/daily.ts; both routes target the same log so the
+// daily fetch and the first guess see the same answer.
+const pickLogDeps = {
+  getEntry: getPickLogEntry,
+  getRecent: getPickLogRecent,
+  getRecentOrdered: getPickLogRecentOrdered,
+  getCounts: getPickLogCounts,
+  insert: insertPickLog,
+};
 import { updateProgress } from "../game/instance.js";
 import { getRegistry } from "../game/talents.js";
 import { recordParticipantProgress } from "../game/channelState.js";
@@ -48,8 +74,13 @@ export async function guessRoutes(app: FastifyInstance): Promise<void> {
     const row = loadUserDay(user.id, dayIndex);
     // endlessOffset is 0 in normal play; /endless in the test guild bumps
     // it so each invocation rotates this user to a fresh talent without
-    // waiting on the calendar.
-    const answer = pickByIndex(reg.activePool, dayIndex + row.endlessOffset);
+    // waiting on the calendar. Normal play uses the weighted-random
+    // log-backed picker; /endless stays on the pure shuffle picker so it
+    // doesn't pollute the log with day-indexes the natural sequence will
+    // hit later (see comment in routes/daily.ts).
+    const answer = row.endlessOffset > 0
+      ? pickByIndex(reg.activePool, dayIndex + row.endlessOffset)
+      : pickAndLogDaily(reg.activePool, dayIndex, pickLogDeps);
     if (!answer) {
       reply.code(503);
       return { error: "No active talents available" };

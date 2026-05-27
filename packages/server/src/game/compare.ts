@@ -80,12 +80,20 @@ function normalizeGen(gen: string): string {
   return GEN_NORMALIZE[gen] ?? gen;
 }
 
-// Formatted combined value: "JP Gen 1", "EN Gen 1 (Myth)", or for
-// multi-group talents "JP Gen 1 / GAMERS" — branch shown once, gen
-// labels joined with " / ".
+// Formatted combined value rendered across TWO lines: branch on the
+// first line, generation(s) on the second. Returning a "\n"-separated
+// string lets the rendering layer (a `.cell` with `white-space:
+// pre-line`) split the visual without the React layer needing to know
+// about the structure. Multi-group talents (e.g. Fubuki: JP / [Gen 1,
+// GAMERS]) join their gen labels with " / " inside line 2 — branch
+// stays on its own line so the partial-match state can highlight either
+// half of the value independently. Examples:
+//   "JP\nGen 1"
+//   "EN\nGen 1 (Myth)"
+//   "JP\nGen 1 / GAMERS"
 export function displayGroup(branch: Branch, generation: string | string[]): string {
   const gens = asList(generation).map(displayGen);
-  return `${branch} ${gens.join(" / ")}`;
+  return `${branch}\n${gens.join(" / ")}`;
 }
 
 // Combined branch + generation cell. Three states:

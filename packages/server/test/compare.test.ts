@@ -34,27 +34,31 @@ describe("heightBucket", () => {
 });
 
 describe("displayGroup label formatting", () => {
-  it("formats numbered gens as 'BRANCH Gen N'", () => {
-    expect(displayGroup("JP", "Gen 0")).toBe("JP Gen 0");
-    expect(displayGroup("JP", "Gen 5")).toBe("JP Gen 5");
-    expect(displayGroup("ID", "Gen 3")).toBe("ID Gen 3");
+  // Branch goes on line 1, generation on line 2 (separated by "\n"). The
+  // cell CSS uses `white-space: pre-line` so the literal newline becomes
+  // a hard break in the rendered chip — this makes partial-match state
+  // (only branch OR only gen matches) visually obvious.
+  it("formats numbered gens as 'BRANCH\\nGen N'", () => {
+    expect(displayGroup("JP", "Gen 0")).toBe("JP\nGen 0");
+    expect(displayGroup("JP", "Gen 5")).toBe("JP\nGen 5");
+    expect(displayGroup("ID", "Gen 3")).toBe("ID\nGen 3");
   });
   it("synthesizes numbered gens for un-numbered cohorts with the original name in parens", () => {
-    expect(displayGroup("JP", "holoX")).toBe("JP Gen 6 (holoX)");
-    expect(displayGroup("EN", "Myth")).toBe("EN Gen 1 (Myth)");
-    expect(displayGroup("EN", "Promise")).toBe("EN Gen 2 (Promise)");
-    expect(displayGroup("EN", "Council")).toBe("EN Gen 2 (Promise)");
-    expect(displayGroup("EN", "Advent")).toBe("EN Gen 3 (Advent)");
-    expect(displayGroup("EN", "Justice")).toBe("EN Gen 4 (Justice)");
-    expect(displayGroup("DEV_IS", "ReGLOSS")).toBe("DEV_IS Gen 1 (ReGLOSS)");
-    expect(displayGroup("DEV_IS", "FLOW GLOW")).toBe("DEV_IS Gen 2 (FLOWGLOW)");
+    expect(displayGroup("JP", "holoX")).toBe("JP\nGen 6 (holoX)");
+    expect(displayGroup("EN", "Myth")).toBe("EN\nGen 1 (Myth)");
+    expect(displayGroup("EN", "Promise")).toBe("EN\nGen 2 (Promise)");
+    expect(displayGroup("EN", "Council")).toBe("EN\nGen 2 (Promise)");
+    expect(displayGroup("EN", "Advent")).toBe("EN\nGen 3 (Advent)");
+    expect(displayGroup("EN", "Justice")).toBe("EN\nGen 4 (Justice)");
+    expect(displayGroup("DEV_IS", "ReGLOSS")).toBe("DEV_IS\nGen 1 (ReGLOSS)");
+    expect(displayGroup("DEV_IS", "FLOW GLOW")).toBe("DEV_IS\nGen 2 (FLOWGLOW)");
   });
   it("falls through unknown gens unchanged (no mapping required for GAMERS, Project: HOPE)", () => {
-    expect(displayGroup("JP", "GAMERS")).toBe("JP GAMERS");
-    expect(displayGroup("EN", "Project: HOPE")).toBe("EN Project: HOPE");
+    expect(displayGroup("JP", "GAMERS")).toBe("JP\nGAMERS");
+    expect(displayGroup("EN", "Project: HOPE")).toBe("EN\nProject: HOPE");
   });
-  it("joins multi-group talents with ' / ' (branch shown once)", () => {
-    expect(displayGroup("JP", ["Gen 1", "GAMERS"])).toBe("JP Gen 1 / GAMERS");
+  it("joins multi-group talents with ' / ' inside the gen line (branch alone on line 1)", () => {
+    expect(displayGroup("JP", ["Gen 1", "GAMERS"])).toBe("JP\nGen 1 / GAMERS");
   });
 });
 
@@ -106,7 +110,7 @@ describe("compareGuess", () => {
     const target = t({ branch: "JP", generation: "Gen 3" });
     const diff = compareGuess(t({ branch: "JP", generation: "Gen 4" }), target);
     expect(diff.group.state).toBe("partial");
-    expect(diff.group.value).toBe("JP Gen 4");
+    expect(diff.group.value).toBe("JP\nGen 4");
   });
 
   it("group: partial when only generation matches across branches", () => {
@@ -114,7 +118,7 @@ describe("compareGuess", () => {
     const target = t({ branch: "JP", generation: "Gen 1" });
     const diff = compareGuess(t({ branch: "ID", generation: "Gen 1" }), target);
     expect(diff.group.state).toBe("partial");
-    expect(diff.group.value).toBe("ID Gen 1");
+    expect(diff.group.value).toBe("ID\nGen 1");
   });
 
   it("group: wrong when neither matches", () => {
@@ -134,7 +138,7 @@ describe("compareGuess", () => {
     expect(compareGuess(mio, fubuki).group.state).toBe("equal");
     // Reverse direction (guessing Fubuki against an Aki target) — same.
     expect(compareGuess(fubuki, aki).group.state).toBe("equal");
-    expect(compareGuess(fubuki, aki).group.value).toBe("JP Gen 1 / GAMERS");
+    expect(compareGuess(fubuki, aki).group.value).toBe("JP\nGen 1 / GAMERS");
   });
 
   it("group: Council ↔ Promise are treated as the same cohort", () => {
