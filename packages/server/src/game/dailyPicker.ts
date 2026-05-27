@@ -108,6 +108,93 @@ export function dayIndexForPuzzleId(puzzleId: string): number {
   return Math.floor((ms - EPOCH_UTC_MS) / 86_400_000);
 }
 
+// UTC milliseconds equivalent of `atUtcMs` re-expressed on the wall clock
+// of `tz`. Returns the difference (tzClock − UTC) in ms. Positive for
+// timezones east of UTC, negative for west. Uses the existing en-CA
+// numeric/2-digit pattern so we can parse the parts without locale
+// guessing. DST is automatic because we re-derive offset at the supplied
+// instant.
+function tzOffsetMs(tz: string, atUtcMs: number): number {
+  const f = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const parts = f.formatToParts(new Date(atUtcMs));
+  const get = (t: string): number =>
+    Number.parseInt(parts.find((p) => p.type === t)?.value ?? "0", 10);
+  // Date.UTC of the locally-rendered Y/M/D h/m/s → the UTC instant a clock
+  // showing those wall-time digits in UTC would represent. The difference
+  // from the supplied UTC instant IS the tz offset.
+  let hour = get("hour");
+  // Intl can emit hour=24 at midnight under some locales; normalise to 00
+  // on the next day so the math is consistent.
+  if (hour === 24) hour = 0;
+  const localAsUtcMs = Date.UTC(
+    get("year"),
+    get("month") - 1,
+    get("day"),
+    hour,
+    get("minute"),
+    get("second"),
+  );
+  return localAsUtcMs - atUtcMs;
+}
+
+// Returns the UTC second at which `puzzleId` (a YYYY-MM-DD string) ENDS in
+// the supplied tz — i.e. local midnight at the start of (puzzleDay + 1) in
+// that tz. Drives the recap-safety gate: a puzzle for which any participant
+// hasn't yet crossed this moment is still "today" for that participant and
+// the recap is premature.
+//
+// `tz` of null/undefined or any invalid IANA name falls back to UTC-12,
+// the most conservative ceiling — guarantees nobody is recapped mid-day
+// even on a hypothetical UTC-12 calendar. DST transitions are handled by
+// iterating once: the offset at our initial estimate may differ from the
+// offset at the true midnight (e.g. when DST falls back across midnight),
+// so we recompute at the corrected instant.
+export function puzzleEndUtcSecs(puzzleId: string, tz: string | null | undefined): number {
+  const parts = puzzleId.split("-");
+  const y = Number.parseInt(parts[0] ?? "", 10);
+  const m = Number.parseInt(parts[1] ?? "", 10);
+  const d = Number.parseInt(parts[2] ?? "", 10);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) {
+    // Malformed puzzleId — fall through to a "never safe" answer so the
+    // gate keeps the recap pending rather than firing prematurely.
+    return Number.POSITIVE_INFINITY;
+  }
+  // Midnight UTC at the start of (puzzleDay + 1). The reference point we
+  // shift by tz offset.
+  const nextDayUtcMs = Date.UTC(y, m - 1, d + 1);
+
+  // tz was null/undefined or didn't survive safeTz validation → use the
+  // UTC-12 ceiling (12h west of UTC, the latest plausible local midnight).
+  const isUnknown = !tz || (safeTz(tz) === "UTC" && tz !== "UTC");
+  if (isUnknown) {
+    return Math.floor((nextDayUtcMs + 12 * 3600 * 1000) / 1000);
+  }
+  const safeTzName = safeTz(tz);
+
+  // First pass: estimate the offset at the next-day UTC midnight itself.
+  // utcInstant + tzOffsetAt(utcInstant) ≈ localMidnight, so
+  // utcInstant ≈ localMidnight − tzOffset.
+  const firstOffset = tzOffsetMs(safeTzName, nextDayUtcMs);
+  let utcInstant = nextDayUtcMs - firstOffset;
+  // Second pass: re-estimate offset at the corrected instant to absorb DST
+  // crossings (rare; on a fall-back, offset shifts by 1h precisely at
+  // local 02:00, which is well past our target midnight, so usually no-op).
+  const secondOffset = tzOffsetMs(safeTzName, utcInstant);
+  if (secondOffset !== firstOffset) {
+    utcInstant = nextDayUtcMs - secondOffset;
+  }
+  return Math.floor(utcInstant / 1000);
+}
+
 // "YYYY-MM-DD" → "YYYY-MM-DD" the previous calendar day. Pure date math
 // (no tz). Used by computeChannelStreak to walk backward.
 export function prevPuzzleId(puzzleId: string): string {

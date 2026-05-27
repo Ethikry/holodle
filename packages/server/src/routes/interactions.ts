@@ -234,7 +234,7 @@ async function handleLaunch(payload: InteractionPayload): Promise<void> {
     const players = listYesterdayRecapPlayers(channelId, recapPuzzleId);
     if (players.length > 0 && tryClaimRecapPosted(channelId, recapPuzzleId)) {
       const streak = computeChannelStreak(channelId, recapPuzzleId);
-      const { embed, file, content } = await buildYesterdayRecapEmbed({
+      const { embed, file, content, components } = await buildYesterdayRecapEmbed({
         puzzleId: recapPuzzleId,
         players,
         streak,
@@ -244,6 +244,7 @@ async function handleLaunch(payload: InteractionPayload): Promise<void> {
           content,
           embeds: [embed],
           files: [file],
+          components,
           // Mention user IDs in the content for visibility, but suppress
           // notifications so the recap doesn't ping the entire channel
           // every time it fires.
@@ -260,13 +261,16 @@ async function handleLaunch(payload: InteractionPayload): Promise<void> {
   //    the latest one immediately.
   upsertChannelToken(channelId, puzzleId, token, applicationId);
 
-  // 3) Register this user as a participant (idempotent — keeps their progress).
+  // 3) Register this user as a participant (idempotent — keeps their
+  //    progress). Pass through the user's most-recent tz so the recap
+  //    eligibility gate has a non-null value to work with for this row.
   upsertParticipant({
     channelId,
     puzzleId,
     userId: user.id,
     displayName,
     avatarUrl,
+    tz,
   });
 
   // 4) Defer the actual embed write to syncChannelEmbed. We do NOT pass
