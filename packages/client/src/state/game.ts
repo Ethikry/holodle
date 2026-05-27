@@ -10,6 +10,7 @@ import type {
   UserStats,
 } from "@holodle/shared";
 import { MAX_GUESSES } from "@holodle/shared";
+import type { UserPrefs } from "../net/api.js";
 
 interface GameState {
   // Identity / session
@@ -34,8 +35,15 @@ interface GameState {
   // Multiplayer presence
   players: Map<string, PlayerSnapshot>;
 
+  // Per-user preferences. Fetched at bootstrap; mirrors the server shape.
+  prefs: UserPrefs;
+
   // UI
   helpOpen: boolean;
+  // Full-screen post-completion stats overlay. Auto-opens when a guess
+  // transitions the user to a terminal status (won/lost) within this
+  // session; manually re-openable via the "View recap" button.
+  recapOpen: boolean;
   loading: boolean;
   error: string | null;
 }
@@ -56,6 +64,8 @@ interface GameActions {
   updateProgress: (p: PlayerProgressEvent) => void;
   removePlayer: (userId: string) => void;
   setHelpOpen: (open: boolean) => void;
+  setRecapOpen: (open: boolean) => void;
+  setPrefs: (prefs: UserPrefs) => void;
   setLoading: (loading: boolean) => void;
   setError: (err: string | null) => void;
 }
@@ -76,7 +86,10 @@ export const useGame = create<GameState & GameActions>((set) => ({
   stats: { streak: 0, best: 0, played: 0, winRate: 0 },
   players: new Map(),
 
+  prefs: { recapPingMuted: false },
+
   helpOpen: false,
+  recapOpen: false,
   // Start as `true` so the first paint shows the LoadingScreen rather than
   // a half-populated UI. The App.tsx bootstrap effect flips this to false
   // once talents + session + daily + stats + socket are all wired up.
@@ -95,11 +108,19 @@ export const useGame = create<GameState & GameActions>((set) => ({
       // answer is not in DailyState — only revealed by /api/guess on settle.
     }),
   appendGuess: (diff, status, answer) =>
-    set((s) => ({
-      history: [...s.history, diff],
-      status,
-      answer: answer ?? s.answer,
-    })),
+    set((s) => {
+      // Auto-open the post-completion overlay the moment a guess settles
+      // the game. We only flip recapOpen on the playing → terminal
+      // transition so a reload of an already-settled day doesn't pop the
+      // overlay every refresh — the user can re-open via "View recap".
+      const justSettled = s.status === "playing" && status !== "playing";
+      return {
+        history: [...s.history, diff],
+        status,
+        answer: answer ?? s.answer,
+        recapOpen: justSettled ? true : s.recapOpen,
+      };
+    }),
   setStats: (stats) => set({ stats }),
   upsertPlayer: (p) =>
     set((s) => {
@@ -140,6 +161,8 @@ export const useGame = create<GameState & GameActions>((set) => ({
       return { players: next };
     }),
   setHelpOpen: (helpOpen) => set({ helpOpen }),
+  setRecapOpen: (recapOpen) => set({ recapOpen }),
+  setPrefs: (prefs) => set({ prefs }),
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),
 }));

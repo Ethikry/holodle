@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { MAX_GUESSES } from "@holodle/shared";
 import { getDevSession, getDiscordSession, isEmbeddedInDiscord } from "./sdk/discord.js";
-import { LOCAL_TZ, fetchDaily, fetchStats, fetchTalents, submitGuess } from "./net/api.js";
+import {
+  LOCAL_TZ,
+  fetchDaily,
+  fetchPrefs,
+  fetchStats,
+  fetchTalents,
+  submitGuess,
+} from "./net/api.js";
 import { connectSocket } from "./net/socket.js";
 import { useGame } from "./state/game.js";
 
@@ -15,6 +22,7 @@ import { TalentAutocomplete } from "./components/TalentAutocomplete.js";
 import { PlayerBoardSidebar } from "./components/PlayerBoardSidebar.js";
 import { HelpModal } from "./components/HelpModal.js";
 import { LoadingScreen } from "./components/LoadingScreen.js";
+import { RecapScreen } from "./components/RecapScreen.js";
 
 function preloadAvatars(talents: TalentSummary[]): void {
   for (const t of talents) {
@@ -42,6 +50,7 @@ export function App(): JSX.Element {
     setDaily,
     appendGuess,
     setStats,
+    setPrefs,
     upsertPlayer,
     setSnapshot,
     updateProgress,
@@ -98,15 +107,19 @@ export function App(): JSX.Element {
         selfUserId: session.user.id,
       });
 
-      // 3. Per-user daily state + stats.
+      // 3. Per-user daily state + stats + prefs. Prefs is best-effort —
+      //    a failure here defaults to the unmuted state in the store and
+      //    doesn't block bootstrap.
       try {
-        const [daily, stats] = await Promise.all([
+        const [daily, stats, prefs] = await Promise.all([
           fetchDaily(session.accessToken),
           fetchStats(session.accessToken),
+          fetchPrefs(session.accessToken).catch(() => null),
         ]);
         if (cancelled) return;
         setDaily(daily);
         setStats(stats);
+        if (prefs) setPrefs(prefs);
       } catch (err) {
         errs.push(describe(err));
       }
@@ -208,6 +221,7 @@ export function App(): JSX.Element {
         </footer>
         <HelpModal />
       </main>
+      <RecapScreen />
     </div>
   );
 }

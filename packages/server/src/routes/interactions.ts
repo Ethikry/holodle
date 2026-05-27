@@ -14,7 +14,12 @@ import {
 } from "../game/channelState.js";
 import { LAUNCH_BUTTON_CUSTOM_ID } from "../discord/embeds.js";
 import { dayIndexFor, puzzleIdFor, safeTz } from "../game/dailyPicker.js";
-import { advanceEndless, getLatestUserTz, resetToday } from "../db/client.js";
+import {
+  advanceEndless,
+  getLatestUserTz,
+  getMutedRecapUserIds,
+  resetToday,
+} from "../db/client.js";
 
 // Discord guild whose members may invoke the testing-only commands
 // (/endless, /reset-today). Outside this guild the commands aren't even
@@ -234,10 +239,15 @@ async function handleLaunch(payload: InteractionPayload): Promise<void> {
     const players = listYesterdayRecapPlayers(channelId, recapPuzzleId);
     if (players.length > 0 && tryClaimRecapPosted(channelId, recapPuzzleId)) {
       const streak = computeChannelStreak(channelId, recapPuzzleId);
+      // Per-user opt-out: pull the subset of recapped players whose
+      // recap_ping_muted flag is set. They'll render as plain (escaped)
+      // displayName text instead of `<@id>` chips.
+      const mutedUserIds = getMutedRecapUserIds(players.map((p) => p.userId));
       const { embed, file, content, components } = await buildYesterdayRecapEmbed({
         puzzleId: recapPuzzleId,
         players,
         streak,
+        mutedUserIds,
       });
       try {
         await postFollowup(applicationId, token, {

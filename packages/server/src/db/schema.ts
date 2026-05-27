@@ -67,6 +67,16 @@ CREATE TABLE IF NOT EXISTS channel_recap_posted (
   PRIMARY KEY (channel_id, puzzle_id)
 );
 
+-- Per-user preferences. One row per user_id. New columns should land here
+-- with sensible DEFAULTs so we don't need an additive migration for every
+-- pref we add. recap_ping_muted=1 causes the daily recap to render this
+-- user's display name as plain text instead of a <@id> mention chip.
+CREATE TABLE IF NOT EXISTS user_prefs (
+  user_id          TEXT PRIMARY KEY,
+  recap_ping_muted INTEGER NOT NULL DEFAULT 0,
+  updated_at       INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+);
+
 CREATE TABLE IF NOT EXISTS channel_daily_participant (
   channel_id   TEXT NOT NULL,
   puzzle_id    TEXT NOT NULL,

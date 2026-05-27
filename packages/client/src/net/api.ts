@@ -74,3 +74,27 @@ export async function submitGuess(
 export async function fetchStats(accessToken: string): Promise<UserStats> {
   return ok<UserStats>(await fetch("/api/stats", { headers: authHeaders(accessToken) }));
 }
+
+// Per-user preferences. The shape here mirrors `UserPrefs` on the server
+// (packages/server/src/db/client.ts) — keep them in sync when adding
+// fields. The recap-ping toggle is the only field today.
+export interface UserPrefs {
+  recapPingMuted: boolean;
+}
+
+export async function fetchPrefs(accessToken: string): Promise<UserPrefs> {
+  return ok<UserPrefs>(await fetch("/api/prefs", { headers: authHeaders(accessToken) }));
+}
+
+export async function patchPrefs(
+  accessToken: string,
+  prefs: UserPrefs,
+): Promise<UserPrefs> {
+  return ok<UserPrefs>(
+    await fetch("/api/prefs", {
+      method: "PATCH",
+      headers: authHeaders(accessToken),
+      body: JSON.stringify(prefs),
+    }),
+  );
+}
