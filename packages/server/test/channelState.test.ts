@@ -43,6 +43,7 @@ beforeEach(() => {
   db.exec("DELETE FROM channel_daily_participant");
   db.exec("DELETE FROM channel_recap_posted");
   db.exec("DELETE FROM user_day");
+  db.exec("DELETE FROM user_prefs");
 });
 
 afterAll(() => {
@@ -725,6 +726,54 @@ describe("listYesterdayRecapPlayers user_day backfill", () => {
     // biome-ignore lint/style/noNonNullAssertion: bounded
     const diff = players[0]!.history[0] as unknown as Record<string, unknown>;
     expect(diff.marker).toBe("from-channel");
+  });
+});
+
+// End-to-end check that getMutedRecapUserIds + buildYesterdayRecapEmbed
+// land at the right per-user mention shape. Goes through the same code
+// path the interactions handler uses on /launch.
+describe("Recap rendering with muted users (integration)", () => {
+  it("renders muted users as plain text and unmuted users as <@id>", async () => {
+    const { getMutedRecapUserIds, setUserPrefs } = await import(
+      "../src/db/client.js"
+    );
+    const { buildYesterdayRecapEmbed } = await import("../src/discord/embeds.js");
+
+    // Seed two settled players in the same channel/puzzle. Mute one.
+    upsertParticipant({
+      channelId: "c-recap",
+      puzzleId: "2026-05-26",
+      userId: "u-muted",
+      displayName: "Quiet One",
+    });
+    upsertParticipant({
+      channelId: "c-recap",
+      puzzleId: "2026-05-26",
+      userId: "u-loud",
+      displayName: "Loud One",
+    });
+    getDb()
+      .prepare(
+        `UPDATE channel_daily_participant
+            SET status='won', guesses_used=3
+          WHERE channel_id='c-recap'`,
+      )
+      .run();
+    setUserPrefs("u-muted", { recapPingMuted: true });
+
+    const players = listYesterdayRecapPlayers("c-recap", "2026-05-26");
+    const mutedUserIds = getMutedRecapUserIds(players.map((p) => p.userId));
+    expect(mutedUserIds.has("u-muted")).toBe(true);
+    expect(mutedUserIds.has("u-loud")).toBe(false);
+
+    const { content } = await buildYesterdayRecapEmbed({
+      puzzleId: "2026-05-26",
+      players,
+      mutedUserIds,
+    });
+    expect(content).toContain("Quiet One");
+    expect(content).not.toContain("<@u-muted>");
+    expect(content).toContain("<@u-loud>");
   });
 });
 

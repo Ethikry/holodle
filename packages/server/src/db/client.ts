@@ -313,6 +313,53 @@ export function getLatestUserTz(userId: string): string | null {
   return row?.tz ?? null;
 }
 
+export interface UserPrefs {
+  recapPingMuted: boolean;
+}
+
+const DEFAULT_USER_PREFS: UserPrefs = { recapPingMuted: false };
+
+// Returns the user's preferences row, falling back to DEFAULT_USER_PREFS
+// when no row exists. Never throws — a missing row is the normal state
+// for the vast majority of users who haven't touched the settings toggle.
+export function getUserPrefs(userId: string): UserPrefs {
+  const row = getDb()
+    .prepare(`SELECT recap_ping_muted FROM user_prefs WHERE user_id = ?`)
+    .get(userId) as { recap_ping_muted: number } | undefined;
+  if (!row) return { ...DEFAULT_USER_PREFS };
+  return { recapPingMuted: row.recap_ping_muted !== 0 };
+}
+
+// UPSERT the prefs row. Touches updated_at on every write so we have a
+// "last interacted with settings" signal if we ever want it.
+export function setUserPrefs(userId: string, prefs: UserPrefs): void {
+  getDb()
+    .prepare(
+      `INSERT INTO user_prefs (user_id, recap_ping_muted, updated_at)
+       VALUES (?, ?, strftime('%s','now'))
+       ON CONFLICT(user_id) DO UPDATE SET
+         recap_ping_muted = excluded.recap_ping_muted,
+         updated_at       = excluded.updated_at`,
+    )
+    .run(userId, prefs.recapPingMuted ? 1 : 0);
+}
+
+// Returns the subset of `userIds` whose recap_ping_muted flag is set.
+// Used at recap-build time to decide which mentions should render as
+// plain text vs as `<@id>` chips. Empty input → empty set, no query.
+export function getMutedRecapUserIds(userIds: string[]): Set<string> {
+  if (userIds.length === 0) return new Set();
+  const placeholders = userIds.map(() => "?").join(",");
+  const rows = getDb()
+    .prepare(
+      `SELECT user_id FROM user_prefs
+        WHERE recap_ping_muted = 1
+          AND user_id IN (${placeholders})`,
+    )
+    .all(...userIds) as Array<{ user_id: string }>;
+  return new Set(rows.map((r) => r.user_id));
+}
+
 export function markExitEmbedPosted(userId: string, dayIndex: number): void {
   getDb()
     .prepare(

@@ -159,6 +159,9 @@ export interface RecapEmbedInput {
   // (e.g. "X/6"). Defaults to 6 if omitted.
   maxGuesses?: number;
   answerName?: string | null;
+  // Users who opted out of being rendered as a `<@id>` mention chip. Their
+  // line appears with their displayName as plain text instead.
+  mutedUserIds?: ReadonlySet<string>;
 }
 
 export interface RenderedRecap {
@@ -176,6 +179,17 @@ export interface RenderedRecap {
 
 const CROWN_EMOJI = "👑";
 
+// Defangs a user-controlled display name so it can't render as a different
+// mention or markdown link when emitted as plain text in the recap. We
+// only escape the characters Discord parses as the START of a mention or
+// channel link — `@`, `#`, `<` — and leave everything else alone so the
+// name stays human-readable. Zero-width spaces are sufficient to break
+// the parser without visibly distorting the name.
+const ZERO_WIDTH = "​";
+export function escapeDiscordMention(name: string): string {
+  return name.replace(/[@#<]/g, (c) => `${ZERO_WIDTH}${c}`);
+}
+
 function streakFlames(streak: number): string {
   if (streak >= 100) return "🔥🔥🔥";
   if (streak >= 10) return "🔥🔥";
@@ -184,13 +198,20 @@ function streakFlames(streak: number): string {
 
 // Builds the Wordle-style header: optional streak line + intro, then one
 // line per (guesses-used) bucket. Lowest-guess winners get the 👑 prefix;
-// losses go under "X/N:".
+// losses go under "X/N:". Users whose `userId` appears in `mutedUserIds`
+// render as their plain (escaped) displayName instead of a `<@id>` chip —
+// the opt-out path for the in-app "show me as a mention chip" toggle.
 function buildRecapContent(
   players: RecapPlayer[],
   puzzleId: string,
   streak: number,
   maxGuesses: number,
+  mutedUserIds: ReadonlySet<string> = new Set(),
 ): string {
+  const renderMention = (p: RecapPlayer): string =>
+    mutedUserIds.has(p.userId)
+      ? escapeDiscordMention(p.displayName)
+      : `<@${p.userId}>`;
   const puzzleNumber = displayPuzzleNumberForPuzzleId(puzzleId);
   const lines: string[] = [];
 
@@ -220,11 +241,11 @@ function buildRecapContent(
   for (const count of sortedWinCounts) {
     const prefix = count === lowestCount ? `${CROWN_EMOJI} ` : "";
     const bucket = wins.get(count) ?? [];
-    const mentions = bucket.map((p) => `<@${p.userId}>`).join(" ");
+    const mentions = bucket.map(renderMention).join(" ");
     lines.push(`${prefix}${count}/${maxGuesses}: ${mentions}`);
   }
   if (losses.length > 0) {
-    const mentions = losses.map((p) => `<@${p.userId}>`).join(" ");
+    const mentions = losses.map(renderMention).join(" ");
     lines.push(`X/${maxGuesses}: ${mentions}`);
   }
 
@@ -237,6 +258,7 @@ export async function buildYesterdayRecapEmbed({
   streak = 0,
   maxGuesses = 6,
   answerName,
+  mutedUserIds,
 }: RecapEmbedInput): Promise<RenderedRecap> {
   // The recap now uses the same image renderer as Now Playing — players are
   // already settled (won/lost), so each tile shows their final board.
@@ -272,7 +294,7 @@ export async function buildYesterdayRecapEmbed({
       image: { url: `attachment://${RECAP_FILENAME}` },
     },
     file: { filename: RECAP_FILENAME, data: png, contentType: "image/png" },
-    content: buildRecapContent(players, puzzleId, streak, maxGuesses),
+    content: buildRecapContent(players, puzzleId, streak, maxGuesses, mutedUserIds),
     components,
   };
 }
