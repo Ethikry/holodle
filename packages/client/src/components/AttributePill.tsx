@@ -33,10 +33,29 @@ export function AttributePill<V extends string | number>({
     );
   }
   const raw = String(cell.value);
-  // Multi-value cells (Fubuki "JP Gen 1 / GAMERS", Nerissa "Bird / Demon")
+  // Hard line breaks come from the server via "\n" — currently only the
+  // Generation cell emits these (branch on line 1, gen on line 2). When
+  // present, take that as the visual structure and stack the lines so
+  // the partial-match colour highlight reads as "this whole pill is half
+  // right" rather than mashing branch + gen into one ambiguous string.
+  // Multi-group talents (Fubuki: "JP\nGen 1 / GAMERS") still show their
+  // " / "-joined gens inside the second line — they don't get a third
+  // row.
+  if (raw.includes("\n")) {
+    const lines = raw.split("\n");
+    return (
+      <span className={`${classFor(cell.state)} !flex-col !whitespace-normal !leading-tight !text-[10px] sm:!text-xs`}>
+        {lines.map((p, i) => (
+          <span key={i} className="block">
+            {p}
+          </span>
+        ))}
+      </span>
+    );
+  }
+  // Non-newline multi-value cells (Nerissa archetype "Bird / Demon")
   // overflow the single-line pill at mobile widths. Detect the " / "
-  // separator the server emits and stack the parts vertically with
-  // tighter type so each label stays visible.
+  // separator the server emits and stack the parts vertically.
   const parts = raw.includes(" / ") ? raw.split(" / ") : null;
   if (parts) {
     return (

@@ -3,7 +3,7 @@ import { GuessRow } from "./GuessRow.js";
 
 const COLUMN_HEADERS: Array<{ label: string; align?: string }> = [
   { label: "Talent" },
-  { label: "Group" },
+  { label: "Generation" },
   { label: "Penlight" },
   { label: "Archetype" },
   { label: "Height" },

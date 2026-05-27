@@ -473,6 +473,78 @@ export interface SettledRow {
   tz: string | null;
 }
 
+// ─── Daily pick log ──────────────────────────────────────────────────
+//
+// Backs the weighted random picker (game/dailyPicker.ts::pickAndLogDaily).
+// One row per dayIndex; talent_id is the answer for that day. The picker
+// is idempotent — first call writes the row, subsequent calls read it.
+
+// Look up the answer recorded for `dayIndex`, or null if none yet.
+export function getPickLogEntry(dayIndex: number): string | null {
+  const row = getDb()
+    .prepare(`SELECT talent_id FROM daily_pick_log WHERE day_index = ?`)
+    .get(dayIndex) as { talent_id: string } | undefined;
+  return row?.talent_id ?? null;
+}
+
+// Returns the set of talent ids picked in the (open) window
+// (dayIndex - windowDays, dayIndex). Used to honour the rolling 30-day
+// no-repeat rule. Bounded by the window size; never returns null.
+export function getPickLogRecent(dayIndex: number, windowDays: number): Set<string> {
+  const rows = getDb()
+    .prepare(
+      `SELECT talent_id FROM daily_pick_log
+        WHERE day_index < ? AND day_index >= ?`,
+    )
+    .all(dayIndex, dayIndex - windowDays) as Array<{ talent_id: string }>;
+  return new Set(rows.map((r) => r.talent_id));
+}
+
+// Returns the day_index → talent_id map for the most-recent `limit`
+// entries, ordered newest first. Used as the small-pool fallback when
+// every active talent has been picked recently — the picker re-selects
+// the LEAST recently-picked among them.
+export function getPickLogRecentOrdered(
+  dayIndex: number,
+  limit: number,
+): Array<{ dayIndex: number; talentId: string }> {
+  const rows = getDb()
+    .prepare(
+      `SELECT day_index, talent_id FROM daily_pick_log
+        WHERE day_index < ?
+        ORDER BY day_index DESC
+        LIMIT ?`,
+    )
+    .all(dayIndex, limit) as Array<{ day_index: number; talent_id: string }>;
+  return rows.map((r) => ({ dayIndex: r.day_index, talentId: r.talent_id }));
+}
+
+// Returns a Map of talentId → total count of times it has been picked.
+// Talents never picked are absent from the map (treated as count 0 by
+// the picker, which is the design intent — fresh talents win weighting).
+export function getPickLogCounts(): Map<string, number> {
+  const rows = getDb()
+    .prepare(`SELECT talent_id, COUNT(*) AS c FROM daily_pick_log GROUP BY talent_id`)
+    .all() as Array<{ talent_id: string; c: number }>;
+  const m = new Map<string, number>();
+  for (const r of rows) m.set(r.talent_id, r.c);
+  return m;
+}
+
+// Record this dayIndex → talentId pairing. INSERT OR IGNORE so a race
+// between concurrent /api/daily + /api/guess on the same day produces
+// exactly one row, not an exception. Returns true if this call wrote
+// the row (false means another caller beat us to it).
+export function insertPickLog(dayIndex: number, talentId: string): boolean {
+  const result = getDb()
+    .prepare(
+      `INSERT OR IGNORE INTO daily_pick_log (day_index, talent_id)
+       VALUES (?, ?)`,
+    )
+    .run(dayIndex, talentId);
+  return result.changes === 1;
+}
+
 export function settledRowsBetween(startSec: number, endSec: number): SettledRow[] {
   const rows = getDb()
     .prepare(

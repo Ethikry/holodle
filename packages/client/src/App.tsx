@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { MAX_GUESSES } from "@holodle/shared";
 import { getDevSession, getDiscordSession, isEmbeddedInDiscord } from "./sdk/discord.js";
 import {
@@ -24,6 +24,18 @@ import { PlayerBoardSidebar } from "./components/PlayerBoardSidebar.js";
 import { HelpModal } from "./components/HelpModal.js";
 import { LoadingScreen } from "./components/LoadingScreen.js";
 import { RecapScreen } from "./components/RecapScreen.js";
+import { WelcomeOverlay } from "./components/WelcomeOverlay.js";
+
+// One-time first-launch flag. Read once at mount; the overlay clears
+// it on dismiss. Bracketed in a try/catch because localStorage can
+// throw in privacy-mode iframes.
+function readWelcomed(): boolean {
+  try {
+    return localStorage.getItem("holodle-welcomed") === "1";
+  } catch {
+    return false;
+  }
+}
 
 function preloadAvatars(talents: TalentSummary[]): void {
   for (const t of talents) {
@@ -59,6 +71,10 @@ export function App(): JSX.Element {
     setError,
     setLoading,
   } = useGame();
+
+  // Show the welcome overlay on first ever launch. Initialized from
+  // localStorage so a reload after dismissal doesn't re-pop it.
+  const [showWelcome, setShowWelcome] = useState<boolean>(() => !readWelcomed());
 
   // Bootstrap: load the public talent catalog first (no auth required), then
   // try to establish a Discord session. The catalog load is independent so a
@@ -228,6 +244,7 @@ export function App(): JSX.Element {
         <HelpModal />
       </main>
       <RecapScreen />
+      {showWelcome && <WelcomeOverlay onDismiss={() => setShowWelcome(false)} />}
     </div>
   );
 }

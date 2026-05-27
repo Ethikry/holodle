@@ -237,32 +237,6 @@ html.theme-irys {
     /* Respect the iOS notch / Android camera cutout when embedded as an activity. */
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
-    position: relative;
-  }
-  /* Decorative bg pattern: a single repeating 80px tile containing two
-     four-point sparkles + two dots in a balanced diamond layout. Tiles
-     read as deliberate idol-poster decoration (not random noise) while
-     still being subtle. The pattern tracks --holo-accent because the
-     SVG is used as a CSS mask over a theme-coloured background — the
-     accent shows wherever the mask is opaque. */
-  body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 0;
-    background-color: rgb(var(--holo-accent) / 0.18);
-    -webkit-mask-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Cg fill='white'%3E%3Cpath d='M20 12 l1.2 4.8 l4.8 1.2 l-4.8 1.2 l-1.2 4.8 l-1.2 -4.8 l-4.8 -1.2 l4.8 -1.2 z'/%3E%3Cpath d='M60 52 l1.2 4.8 l4.8 1.2 l-4.8 1.2 l-1.2 4.8 l-1.2 -4.8 l-4.8 -1.2 l4.8 -1.2 z'/%3E%3Ccircle cx='60' cy='18' r='1.2'/%3E%3Ccircle cx='20' cy='58' r='1.2'/%3E%3C/g%3E%3C/svg%3E");
-    mask-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Cg fill='white'%3E%3Cpath d='M20 12 l1.2 4.8 l4.8 1.2 l-4.8 1.2 l-1.2 4.8 l-1.2 -4.8 l-4.8 -1.2 l4.8 -1.2 z'/%3E%3Cpath d='M60 52 l1.2 4.8 l4.8 1.2 l-4.8 1.2 l-1.2 4.8 l-1.2 -4.8 l-4.8 -1.2 l4.8 -1.2 z'/%3E%3Ccircle cx='60' cy='18' r='1.2'/%3E%3Ccircle cx='20' cy='58' r='1.2'/%3E%3C/g%3E%3C/svg%3E");
-    -webkit-mask-size: 80px 80px;
-    mask-size: 80px 80px;
-    -webkit-mask-repeat: repeat;
-    mask-repeat: repeat;
-  }
-  /* Anything above the bg pattern needs explicit stacking context. */
-  #root {
-    position: relative;
-    z-index: 1;
   }
   /* Display-font family for headings/wordmark. */
   h1, h2, h3 {
@@ -280,7 +254,10 @@ html.theme-irys {
      and each cell stretches via w-full. */
   .cell {
     @apply inline-flex w-full items-center justify-center break-words rounded-xl border-2 px-1 py-1 text-[11px] font-semibold leading-tight sm:rounded-2xl sm:px-3 sm:py-2 sm:text-sm;
-    white-space: normal;
+    /* `pre-line` honours hard "\n" line breaks in the value (e.g. the
+       Generation cell renders branch on line 1 and gen on line 2) while
+       still allowing soft wrapping of long words. */
+    white-space: pre-line;
     text-align: center;
   }
   .cell-equal {

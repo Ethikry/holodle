@@ -2,9 +2,32 @@ import type { FastifyInstance } from "fastify";
 import type { DailyState } from "@holodle/shared";
 import { MAX_GUESSES } from "@holodle/shared";
 import { requireUser } from "../auth/requireUser.js";
-import { loadUserDay } from "../db/client.js";
-import { dayIndexFor, pickByIndex, puzzleIdFor, safeTz } from "../game/dailyPicker.js";
+import {
+  getPickLogCounts,
+  getPickLogEntry,
+  getPickLogRecent,
+  getPickLogRecentOrdered,
+  insertPickLog,
+  loadUserDay,
+} from "../db/client.js";
+import {
+  dayIndexFor,
+  pickAndLogDaily,
+  pickByIndex,
+  puzzleIdFor,
+  safeTz,
+} from "../game/dailyPicker.js";
 import { getRegistry } from "../game/talents.js";
+
+// DB-backed deps for the weighted picker. One singleton so we're not
+// closing over a fresh object on every request.
+const pickLogDeps = {
+  getEntry: getPickLogEntry,
+  getRecent: getPickLogRecent,
+  getRecentOrdered: getPickLogRecentOrdered,
+  getCounts: getPickLogCounts,
+  insert: insertPickLog,
+};
 
 export async function dailyRoutes(app: FastifyInstance): Promise<void> {
   // Accepts ?tz=America/Chicago as a query string so the user's calendar can
@@ -20,7 +43,13 @@ export async function dailyRoutes(app: FastifyInstance): Promise<void> {
     const row = loadUserDay(user.id, dayIndex);
     // `endlessOffset` is 0 outside the test guild; the /endless command in
     // the test guild bumps it to rotate the answer without bumping calendars.
-    const answer = pickByIndex(reg.activePool, dayIndex + row.endlessOffset);
+    // Normal play uses the weighted-random log-backed picker (so picks
+    // bias toward less-frequently-seen talents); /endless stays on the
+    // pure shuffle picker so it doesn't pollute the daily_pick_log with
+    // day-indexes the natural sequence will hit later.
+    const answer = row.endlessOffset > 0
+      ? pickByIndex(reg.activePool, dayIndex + row.endlessOffset)
+      : pickAndLogDaily(reg.activePool, dayIndex, pickLogDeps);
     if (!answer) {
       reply.code(503);
       return { error: "No active talents available" };
