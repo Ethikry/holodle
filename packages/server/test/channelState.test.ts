@@ -450,6 +450,177 @@ describe("findMostRecentUnpostedRecapPuzzle", () => {
   });
 });
 
+// The original bug: a JP user launching at 09:00 JST = 00:00 UTC of day D+1
+// would trigger a recap for puzzle D in a channel that also had a US-CST
+// participant still mid-day. The fix delays the recap until every
+// participant's local day has rolled past puzzle-end. These tests pin that
+// behavior to specific UTC instants.
+describe("findMostRecentUnpostedRecapPuzzle (tz-aware safety gate)", () => {
+  // Helper: UTC seconds for a wall-clock (Y, M, D, h).
+  const utcSec = (y: number, m: number, d: number, h: number) =>
+    Math.floor(Date.UTC(y, m - 1, d, h) / 1000);
+
+  // The mixed-tz channel: one US-CST participant, one JP participant, both
+  // settled on puzzle 2026-05-26.
+  function seedMixedChannel(): void {
+    upsertParticipant({
+      channelId: "mix",
+      puzzleId: "2026-05-26",
+      userId: "us",
+      displayName: "US Player",
+      tz: "America/Chicago",
+    });
+    upsertParticipant({
+      channelId: "mix",
+      puzzleId: "2026-05-26",
+      userId: "jp",
+      displayName: "JP Player",
+      tz: "Asia/Tokyo",
+    });
+    getDb()
+      .prepare(
+        `UPDATE channel_daily_participant
+            SET status='won', guesses_used=3
+          WHERE channel_id='mix' AND puzzle_id='2026-05-26'`,
+      )
+      .run();
+  }
+
+  it("withholds the recap while a US-CST participant is still mid-day", () => {
+    seedMixedChannel();
+    // Wall clock: 2026-05-27 01:00 UTC. JP user has crossed midnight
+    // (JP rolled over at 2026-05-26 15:00 UTC), but CST won't until
+    // 2026-05-27 06:00 UTC. Recap should NOT fire yet.
+    const now = utcSec(2026, 5, 27, 1);
+    expect(findMostRecentUnpostedRecapPuzzle("mix", "2026-05-27", now)).toBeNull();
+  });
+
+  it("fires the recap once the latest-tz participant has rolled over", () => {
+    seedMixedChannel();
+    // Wall clock: 2026-05-27 06:00 UTC = midnight CST. Both JP and CST
+    // are now past puzzle-end, so the recap is eligible.
+    const now = utcSec(2026, 5, 27, 6);
+    expect(findMostRecentUnpostedRecapPuzzle("mix", "2026-05-27", now)).toBe(
+      "2026-05-26",
+    );
+  });
+
+  it("a JP-only channel can recap as soon as JP rolls over (15:00 UTC of puzzle day)", () => {
+    upsertParticipant({
+      channelId: "jp-only",
+      puzzleId: "2026-05-26",
+      userId: "jp1",
+      displayName: "JP Player",
+      tz: "Asia/Tokyo",
+    });
+    getDb()
+      .prepare(
+        `UPDATE channel_daily_participant
+            SET status='won', guesses_used=3
+          WHERE channel_id='jp-only'`,
+      )
+      .run();
+    // 1 hour before JP midnight = no recap.
+    expect(
+      findMostRecentUnpostedRecapPuzzle("jp-only", "2026-05-27", utcSec(2026, 5, 26, 14)),
+    ).toBeNull();
+    // 1 second after JP midnight (15:00 UTC + 1 sec) = recap is eligible.
+    expect(
+      findMostRecentUnpostedRecapPuzzle(
+        "jp-only",
+        "2026-05-27",
+        utcSec(2026, 5, 26, 15) + 1,
+      ),
+    ).toBe("2026-05-26");
+  });
+
+  it("an unknown-tz participant pins the gate to UTC-12 (most conservative)", () => {
+    upsertParticipant({
+      channelId: "unknown-tz",
+      puzzleId: "2026-05-26",
+      userId: "u",
+      displayName: "U",
+      // tz omitted → NULL → treated as UTC-12.
+    });
+    getDb()
+      .prepare(
+        `UPDATE channel_daily_participant
+            SET status='won', guesses_used=3
+          WHERE channel_id='unknown-tz'`,
+      )
+      .run();
+    // 2026-05-27 11:00 UTC is still before UTC-12 midnight (12:00 UTC).
+    expect(
+      findMostRecentUnpostedRecapPuzzle(
+        "unknown-tz",
+        "2026-05-28",
+        utcSec(2026, 5, 27, 11),
+      ),
+    ).toBeNull();
+    // 2026-05-27 12:00 UTC = midnight UTC-12 → eligible.
+    expect(
+      findMostRecentUnpostedRecapPuzzle(
+        "unknown-tz",
+        "2026-05-28",
+        utcSec(2026, 5, 27, 12),
+      ),
+    ).toBe("2026-05-26");
+  });
+
+  it("a still-playing participant in a slower tz also blocks the recap", () => {
+    // The gate considers ALL participants, not just settled ones — exactly
+    // the case the timing bug protects against (player is still mid-day).
+    upsertParticipant({
+      channelId: "still-playing",
+      puzzleId: "2026-05-26",
+      userId: "jp",
+      displayName: "JP Player",
+      tz: "Asia/Tokyo",
+    });
+    upsertParticipant({
+      channelId: "still-playing",
+      puzzleId: "2026-05-26",
+      userId: "us",
+      displayName: "US Player (still playing)",
+      tz: "America/Chicago",
+    });
+    // Only JP has settled; US is still 'playing'.
+    getDb()
+      .prepare(
+        `UPDATE channel_daily_participant
+            SET status='won', guesses_used=3
+          WHERE channel_id='still-playing' AND user_id='jp'`,
+      )
+      .run();
+    // 01:00 UTC of next day — JP rolled over, but US (still 'playing')
+    // pins safe-at to 06:00 UTC. Gate should hold.
+    const earlyNow = utcSec(2026, 5, 27, 1);
+    expect(
+      findMostRecentUnpostedRecapPuzzle("still-playing", "2026-05-27", earlyNow),
+    ).toBeNull();
+    // 06:00 UTC — CST midnight, gate opens.
+    const lateNow = utcSec(2026, 5, 27, 6);
+    expect(
+      findMostRecentUnpostedRecapPuzzle("still-playing", "2026-05-27", lateNow),
+    ).toBe("2026-05-26");
+  });
+
+  it("a puzzle with zero settled participants is never recap-eligible (only-mid-play)", () => {
+    upsertParticipant({
+      channelId: "no-settled",
+      puzzleId: "2026-05-26",
+      userId: "u",
+      displayName: "U",
+      tz: "Asia/Tokyo",
+    });
+    // Leave status='playing' — no settled plays at all.
+    const wayLate = utcSec(2026, 6, 1, 0);
+    expect(
+      findMostRecentUnpostedRecapPuzzle("no-settled", "2026-05-27", wayLate),
+    ).toBeNull();
+  });
+});
+
 describe("computeChannelStreak", () => {
   beforeEach(() => {
     // 4 consecutive days of settled plays in c1, ending 2026-05-20.

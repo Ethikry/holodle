@@ -168,6 +168,10 @@ export interface RenderedRecap {
   // line + grouped mentions by score. Recipients are mentioned by id but
   // we suppress notifications via allowed_mentions on the wire.
   content: string;
+  // Same blue "Play now!" button shape the Now Playing embed carries.
+  // Clicking it routes through the existing LAUNCH_BUTTON_CUSTOM_ID
+  // handler in interactions.ts (no new wiring required).
+  components: MessageComponent[];
 }
 
 const CROWN_EMOJI = "👑";
@@ -252,6 +256,16 @@ export async function buildYesterdayRecapEmbed({
     subtitle: answerName ? `Answer: ${answerName}` : "Yesterday's results",
   });
 
+  // Mirror the Now Playing button — same custom_id, same handler in
+  // interactions.ts, so the recap card invites a fresh /launch.
+  const button: PrimaryButton = {
+    type: 2,
+    style: 1,
+    label: "Play now!",
+    custom_id: LAUNCH_BUTTON_CUSTOM_ID,
+  };
+  const components: MessageComponent[] = [{ type: 1, components: [button] }];
+
   return {
     embed: {
       color: COLOR_RECAP,
@@ -259,5 +273,6 @@ export async function buildYesterdayRecapEmbed({
     },
     file: { filename: RECAP_FILENAME, data: png, contentType: "image/png" },
     content: buildRecapContent(players, puzzleId, streak, maxGuesses),
+    components,
   };
 }

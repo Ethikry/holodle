@@ -123,6 +123,8 @@ export async function guessRoutes(app: FastifyInstance): Promise<void> {
         user.displayName,
         row.guesses,
         row.status,
+        Math.floor(now / 1000),
+        tz,
       ).catch((err) => {
         req.log.error({ err }, "recordParticipantProgress threw");
       });

@@ -8,7 +8,11 @@ import {
   type NowPlayingParticipant,
   type RecapPlayer,
 } from "../discord/embeds.js";
-import { dayIndexForPuzzleId, prevPuzzleId } from "./dailyPicker.js";
+import {
+  dayIndexForPuzzleId,
+  prevPuzzleId,
+  puzzleEndUtcSecs,
+} from "./dailyPicker.js";
 
 // Staleness thresholds. If either is exceeded when we go to PATCH the
 // existing "Now Playing" message, we instead supersede: PATCH the old to
@@ -223,6 +227,12 @@ export interface UpsertParticipantInput {
   userId: string;
   displayName: string;
   avatarUrl?: string | null;
+  // IANA tz the user is playing from (typically from getLatestUserTz or the
+  // tz query param on /api/guess). Persisted so the recap eligibility gate
+  // can wait until this participant's local day rolls over. NULL/undefined
+  // leaves the column unchanged on update; the recap gate treats unknown
+  // tz as UTC-12.
+  tz?: string | null;
 }
 
 // Idempotent. Seeds (or refreshes) the channel row from the user's most
@@ -237,6 +247,7 @@ export function upsertParticipant({
   userId,
   displayName,
   avatarUrl,
+  tz,
 }: UpsertParticipantInput): void {
   const progress = findRecentUserDayProgress(userId);
   const guessesJson = progress ? JSON.stringify(progress.history) : "[]";
@@ -246,15 +257,18 @@ export function upsertParticipant({
   // On CONFLICT, only backfill progress when the existing channel row has
   // none and user_day has some. That preserves any in-channel progress
   // recordParticipantProgress has already written, while still healing rows
-  // that pre-date this channel for the user.
+  // that pre-date this channel for the user. The tz column follows the
+  // same "only overwrite when fresher info arrives" rule — passing NULL
+  // keeps whatever was there.
   getDb()
     .prepare(
       `INSERT INTO channel_daily_participant
-         (channel_id, puzzle_id, user_id, display_name, avatar_url, guesses_used, guesses_json, status, joined_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now'))
+         (channel_id, puzzle_id, user_id, display_name, avatar_url, guesses_used, guesses_json, status, joined_at, tz)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now'), ?)
        ON CONFLICT(channel_id, puzzle_id, user_id) DO UPDATE SET
          display_name = excluded.display_name,
          avatar_url   = COALESCE(excluded.avatar_url, channel_daily_participant.avatar_url),
+         tz           = COALESCE(excluded.tz, channel_daily_participant.tz),
          guesses_used = CASE
            WHEN channel_daily_participant.guesses_used = 0 AND excluded.guesses_used > 0
            THEN excluded.guesses_used ELSE channel_daily_participant.guesses_used
@@ -277,6 +291,7 @@ export function upsertParticipant({
       guessesUsed,
       guessesJson,
       status,
+      tz ?? null,
     );
 }
 
@@ -341,29 +356,74 @@ function parseGuesses(json: string): GuessDiff[] {
   }
 }
 
-// Returns the most-recent puzzle_id in this channel that has settled
-// (won/lost) plays AND hasn't been recapped yet AND is strictly older than
-// `todayPuzzleId`. Used by /launch to post the recap for "the previous
-// session in this channel" — not strictly literal "yesterday" — so a gap
-// of inactive days doesn't make the recap silently disappear. Returns
-// null when no eligible puzzle exists.
+// Returns the most-recent puzzle_id in this channel that:
+//   1) has at least one settled (won/lost) participant,
+//   2) hasn't been recapped yet,
+//   3) is strictly older than `todayPuzzleId`, AND
+//   4) is "globally safe" to recap — every participant's local day has
+//      rolled over past that puzzle's end (max(puzzleEndUtcSecs(puzzle_id,
+//      participant.tz)) ≤ now). Participants with a NULL tz are treated
+//      as UTC-12 for maximum safety.
+//
+// The safety gate is the fix for mixed-tz channels: a JP-tz /launch at
+// 00:00 UTC won't pop a recap for a US-CST participant who is still in
+// their own "today" until 06:00 UTC. Channels with no further activity
+// after the safe moment silently skip the recap — same constraint the
+// current design has, since we can only post via fresh interaction
+// tokens.
 export function findMostRecentUnpostedRecapPuzzle(
   channelId: string,
   todayPuzzleId: string,
+  nowSec: number = Math.floor(Date.now() / 1000),
 ): string | null {
-  const row = getDb()
+  // Pull every candidate (puzzle_id, tz) row in one query. We need ALL
+  // participants per puzzle (not just settled ones) to gate on the latest
+  // tz — an unsettled mid-day player is exactly who we're protecting
+  // against firing the recap on top of. The "at least one settled play"
+  // requirement is enforced in the JS reduce below.
+  const rows = getDb()
     .prepare(
-      `SELECT puzzle_id FROM channel_daily_participant
+      `SELECT puzzle_id, tz, status FROM channel_daily_participant
         WHERE channel_id = ?
-          AND status IN ('won','lost')
           AND puzzle_id < ?
           AND puzzle_id NOT IN (
             SELECT puzzle_id FROM channel_recap_posted WHERE channel_id = ?
-          )
-        ORDER BY puzzle_id DESC LIMIT 1`,
+          )`,
     )
-    .get(channelId, todayPuzzleId, channelId) as { puzzle_id: string } | undefined;
-  return row?.puzzle_id ?? null;
+    .all(channelId, todayPuzzleId, channelId) as Array<{
+    puzzle_id: string;
+    tz: string | null;
+    status: "playing" | "won" | "lost";
+  }>;
+
+  // Per-puzzle reduce: track max(safe-at) and "any settled play exists".
+  interface Agg {
+    safeAt: number;
+    hasSettled: boolean;
+  }
+  const agg = new Map<string, Agg>();
+  for (const r of rows) {
+    const safeAt = puzzleEndUtcSecs(r.puzzle_id, r.tz);
+    const existing = agg.get(r.puzzle_id);
+    const settled = r.status === "won" || r.status === "lost";
+    if (existing) {
+      if (safeAt > existing.safeAt) existing.safeAt = safeAt;
+      if (settled) existing.hasSettled = true;
+    } else {
+      agg.set(r.puzzle_id, { safeAt, hasSettled: settled });
+    }
+  }
+
+  // Pick the most recent puzzle id that's both safe and has settled plays.
+  let bestPuzzleId: string | null = null;
+  for (const [puzzleId, { safeAt, hasSettled }] of agg) {
+    if (!hasSettled) continue;
+    if (safeAt > nowSec) continue;
+    if (bestPuzzleId === null || puzzleId > bestPuzzleId) {
+      bestPuzzleId = puzzleId;
+    }
+  }
+  return bestPuzzleId;
 }
 
 export function listYesterdayRecapPlayers(
@@ -572,12 +632,14 @@ export async function recordParticipantProgress(
   history: GuessDiff[],
   status: "playing" | "won" | "lost",
   nowSec: number = Math.floor(Date.now() / 1000),
+  tz: string | null = null,
 ): Promise<void> {
   // Make sure the participant row exists — upsertParticipant is idempotent
   // and will backfill from user_day. The user may be playing a puzzle in
   // this channel that they never explicitly /launched (e.g. they crossed
-  // midnight mid-game).
-  upsertParticipant({ channelId, puzzleId, userId, displayName });
+  // midnight mid-game). tz threads through so the recap eligibility gate
+  // sees the freshest known timezone for each participant.
+  upsertParticipant({ channelId, puzzleId, userId, displayName, tz });
 
   const guessesUsed = history.length;
   const guessesJson = JSON.stringify(history);

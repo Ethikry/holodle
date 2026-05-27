@@ -77,6 +77,11 @@ CREATE TABLE IF NOT EXISTS channel_daily_participant (
   guesses_json TEXT NOT NULL DEFAULT '[]',
   status       TEXT NOT NULL DEFAULT 'playing',
   joined_at    INTEGER NOT NULL,
+  -- IANA timezone the participant was playing from (latest known). Used by
+  -- the recap eligibility gate so a JP-launched recap doesn't fire while
+  -- a US-CST participant is still mid-day. NULL on legacy rows; the gate
+  -- treats NULL as the most conservative tz (UTC-12).
+  tz           TEXT,
   PRIMARY KEY (channel_id, puzzle_id, user_id)
 );
 `;
@@ -123,5 +128,10 @@ export const ADDITIVE_MIGRATIONS: Array<{ table: string; column: string; ddl: st
     table: "user_day",
     column: "endless_offset",
     ddl: "ALTER TABLE user_day ADD COLUMN endless_offset INTEGER NOT NULL DEFAULT 0",
+  },
+  {
+    table: "channel_daily_participant",
+    column: "tz",
+    ddl: "ALTER TABLE channel_daily_participant ADD COLUMN tz TEXT",
   },
 ];
