@@ -1,30 +1,77 @@
 import type { Config } from "tailwindcss";
 
+// Colours and animations live in CSS variables so the runtime theme
+// picker can swap palettes without rebuilding the bundle. See
+// `src/styles.css` for the actual values of each `--holo-*` variable
+// under the various .theme-* classes.
+
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        // Approximate the Holodle palette from the reference screenshot.
+        // Each --holo-* CSS variable holds a space-separated RGB triplet
+        // ("250 245 238") so Tailwind's `bg-holo-x/60` opacity modifier
+        // can splice in the alpha channel at compile time. See
+        // src/styles.css for the per-theme values.
         holo: {
-          bg: "#eef3fb", // soft blue-grey page background
-          card: "#ffffff",
-          ink: "#1d2944", // navy "DLE" half of the wordmark
-          accent: "#22b8e6", // sky-blue "HOLO" half of the wordmark
-          ok: "#16a34a",
-          okBg: "#dcfce7",
-          okBd: "#86efac", // border for green box cells
-          bad: "#dc2626",
-          badBg: "#fee2e2",
-          badBd: "#fca5a5", // border for red box cells
-          muted: "#64748b",
+          bg: "rgb(var(--holo-bg) / <alpha-value>)",
+          card: "rgb(var(--holo-card) / <alpha-value>)",
+          ink: "rgb(var(--holo-ink) / <alpha-value>)",
+          accent: "rgb(var(--holo-accent) / <alpha-value>)",
+          ok: "rgb(var(--holo-ok) / <alpha-value>)",
+          okBg: "rgb(var(--holo-ok-bg) / <alpha-value>)",
+          okBd: "rgb(var(--holo-ok-bd) / <alpha-value>)",
+          bad: "rgb(var(--holo-bad) / <alpha-value>)",
+          badBg: "rgb(var(--holo-bad-bg) / <alpha-value>)",
+          badBd: "rgb(var(--holo-bad-bd) / <alpha-value>)",
+          muted: "rgb(var(--holo-muted) / <alpha-value>)",
         },
       },
       fontFamily: {
         display: ["'Inter'", "ui-sans-serif", "system-ui", "sans-serif"],
       },
       boxShadow: {
-        card: "0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06)",
+        card: "var(--holo-card-shadow)",
+      },
+      keyframes: {
+        // Each cell in a freshly-landed guess row pops in. Slight overshoot
+        // gives a tactile "graded" feel without being noisy.
+        cellPop: {
+          "0%": { transform: "scale(0.7)", opacity: "0" },
+          "60%": { transform: "scale(1.06)", opacity: "1" },
+          "100%": { transform: "scale(1)", opacity: "1" },
+        },
+        // Full-screen overlays (RecapScreen) fade + ever-so-slightly scale in.
+        overlayEnter: {
+          "0%": { transform: "scale(0.985)", opacity: "0" },
+          "100%": { transform: "scale(1)", opacity: "1" },
+        },
+        // Smaller modals (HelpModal) use a tighter version.
+        modalEnter: {
+          "0%": { transform: "scale(0.96)", opacity: "0" },
+          "100%": { transform: "scale(1)", opacity: "1" },
+        },
+        // Per-player tile entrance inside the RecapScreen; per-index delay
+        // applied via inline style.
+        tileEnter: {
+          "0%": { transform: "translateY(6px)", opacity: "0" },
+          "100%": { transform: "translateY(0)", opacity: "1" },
+        },
+        // Win banner emphasis — text-shadow glows then settles. The
+        // glow colour rebuilds the accent rgb() from the CSS variable so
+        // it tracks whichever theme is active.
+        pulseGlow: {
+          "0%, 100%": { textShadow: "0 0 0 transparent" },
+          "50%": { textShadow: "0 0 16px rgb(var(--holo-accent))" },
+        },
+      },
+      animation: {
+        cellPop: "cellPop 320ms cubic-bezier(.34,1.56,.64,1) both",
+        overlayEnter: "overlayEnter 260ms ease-out both",
+        modalEnter: "modalEnter 200ms ease-out both",
+        tileEnter: "tileEnter 280ms ease-out both",
+        pulseGlow: "pulseGlow 1200ms ease-in-out 1",
       },
     },
   },

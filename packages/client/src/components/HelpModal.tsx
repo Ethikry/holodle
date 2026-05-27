@@ -1,40 +1,40 @@
 import { useState } from "react";
 import { patchPrefs } from "../net/api.js";
 import { useGame } from "../state/game.js";
+import { THEMES, applyTheme } from "../themes.js";
 
 export function HelpModal(): JSX.Element | null {
   const { helpOpen, setHelpOpen, prefs, setPrefs, accessToken } = useGame();
-  // Local toggle-in-flight state so we can show pending UI without bouncing
-  // the whole prefs object back and forth.
+  // Local in-flight state so we can disable inputs while a PATCH is on
+  // the wire without bouncing the whole prefs object.
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   if (!helpOpen) return null;
 
-  const onTogglePing = async (): Promise<void> => {
+  // Generic helper: optimistically apply a partial pref update, send the
+  // PATCH, roll back on failure. Reused for both the ping toggle and the
+  // theme picker so we don't grow two near-identical handlers.
+  const updatePrefs = async (patch: { recapPingMuted?: boolean; theme?: string }): Promise<void> => {
     if (!accessToken || saving) return;
-    const next = { recapPingMuted: !prefs.recapPingMuted };
-    // Optimistic update — the server echoes the persisted state so we
-    // re-apply it on success in case anything else has changed.
+    const prev = prefs;
+    const next = { ...prefs, ...patch };
     setPrefs(next);
+    if (patch.theme && patch.theme !== prev.theme) applyTheme(patch.theme);
     setSaving(true);
     setSaveError(null);
     try {
-      const persisted = await patchPrefs(accessToken, next);
+      const persisted = await patchPrefs(accessToken, patch);
       setPrefs(persisted);
     } catch (err) {
-      // Roll back on failure so the toggle reflects reality.
-      setPrefs({ recapPingMuted: !next.recapPingMuted });
+      setPrefs(prev);
+      if (patch.theme && patch.theme !== prev.theme) applyTheme(prev.theme);
       setSaveError(err instanceof Error ? err.message : String(err));
     } finally {
       setSaving(false);
     }
   };
 
-  // The toggle is logically "show me as a mention chip"; that's the
-  // opt-in direction so it matches the default-true intuition. The flag
-  // we store is the inverse (recapPingMuted), so the checked state is
-  // !recapPingMuted.
   const mentionChipOn = !prefs.recapPingMuted;
 
   return (
@@ -45,7 +45,7 @@ export function HelpModal(): JSX.Element | null {
       onClick={() => setHelpOpen(false)}
     >
       <div
-        className="card max-w-md w-full p-6 text-sm"
+        className="card max-w-md w-full p-6 text-sm animate-modalEnter"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
@@ -81,11 +81,59 @@ export function HelpModal(): JSX.Element | null {
         <hr className="my-4 border-holo-muted/20" />
 
         <h3 className="text-base font-bold">Settings</h3>
-        <label className="mt-3 flex items-start gap-3 cursor-pointer select-none">
+
+        {/* Theme picker. Renders one swatch button per registered theme;
+            click → optimistically apply + PATCH. The active theme gets a
+            ring so it's obvious which one is selected. */}
+        <div className="mt-3">
+          <p className="text-xs font-semibold uppercase tracking-wider text-holo-muted">
+            Theme
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {THEMES.map((t) => {
+              const active = prefs.theme === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => void updatePrefs({ theme: t.id })}
+                  disabled={saving || !accessToken}
+                  className={`flex items-center gap-2 rounded-lg border px-2 py-2 text-left transition hover:bg-holo-bg ${
+                    active
+                      ? "border-holo-accent ring-2 ring-holo-accent/40"
+                      : "border-holo-muted/20"
+                  }`}
+                  aria-pressed={active}
+                >
+                  <span className="flex shrink-0 overflow-hidden rounded-md border border-holo-muted/20">
+                    {t.swatch.map((c, i) => (
+                      <span
+                        key={i}
+                        aria-hidden
+                        className="h-6 w-3"
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                  </span>
+                  <span className="flex flex-col leading-tight">
+                    <span className="text-xs font-semibold">{t.label}</span>
+                    {t.attribution && (
+                      <span className="text-[10px] text-holo-muted">
+                        {t.attribution}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <label className="mt-4 flex items-start gap-3 cursor-pointer select-none">
           <input
             type="checkbox"
             checked={mentionChipOn}
-            onChange={() => void onTogglePing()}
+            onChange={() => void updatePrefs({ recapPingMuted: mentionChipOn })}
             disabled={saving || !accessToken}
             className="mt-1 h-4 w-4 shrink-0 accent-holo-accent"
           />

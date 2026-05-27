@@ -74,15 +74,18 @@ function rank(p: PlayerSnapshot): number {
 function PlayerTile({
   snapshot,
   isSelf,
+  staggerIndex,
 }: {
   snapshot: PlayerSnapshot;
   isSelf: boolean;
+  staggerIndex: number;
 }): JSX.Element {
   return (
     <div
-      className={`card flex flex-col items-center gap-2 border ${
+      className={`card flex flex-col items-center gap-2 border animate-tileEnter ${
         isSelf ? "border-holo-accent/60" : "border-holo-muted/20"
       } p-3`}
+      style={{ animationDelay: `${staggerIndex * 50}ms` }}
     >
       <div className="relative">
         {snapshot.avatarUrl ? (
@@ -160,7 +163,7 @@ export function RecapScreen(): JSX.Element | null {
       role="dialog"
       aria-modal="true"
       aria-label="Daily recap"
-      className="fixed inset-0 z-40 overflow-y-auto bg-holo-bg/95 backdrop-blur-sm"
+      className="fixed inset-0 z-40 overflow-y-auto bg-holo-bg/95 backdrop-blur-sm animate-overlayEnter"
     >
       <div className="mx-auto flex min-h-full max-w-3xl flex-col px-4 py-4">
         <div className="flex justify-end">
@@ -174,8 +177,14 @@ export function RecapScreen(): JSX.Element | null {
         </div>
 
         <div className="mt-4 text-center">
-          {won && <div className="text-3xl">🎊</div>}
-          <p className={`mt-1 text-2xl font-bold ${heroTitleClass}`}>{heroTitle}</p>
+          {won && <div className="text-3xl animate-bounce">🎊</div>}
+          <p
+            className={`mt-1 text-2xl font-bold ${heroTitleClass} ${
+              won ? "animate-pulseGlow" : ""
+            }`}
+          >
+            {heroTitle}
+          </p>
           {answer && (
             <div className="mt-3">
               <AnswerAvatar answer={answer} size={96} />
@@ -190,11 +199,12 @@ export function RecapScreen(): JSX.Element | null {
               Everyone's boards
             </h3>
             <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-              {sorted.map((p) => (
+              {sorted.map((p, idx) => (
                 <PlayerTile
                   key={p.userId}
                   snapshot={p}
                   isSelf={p.userId === selfUserId}
+                  staggerIndex={idx}
                 />
               ))}
             </div>

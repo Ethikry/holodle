@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS channel_recap_posted (
 CREATE TABLE IF NOT EXISTS user_prefs (
   user_id          TEXT PRIMARY KEY,
   recap_ping_muted INTEGER NOT NULL DEFAULT 0,
+  theme            TEXT NOT NULL DEFAULT 'warm-pastel',
   updated_at       INTEGER NOT NULL DEFAULT (strftime('%s','now'))
 );
 
@@ -143,5 +144,13 @@ export const ADDITIVE_MIGRATIONS: Array<{ table: string; column: string; ddl: st
     table: "channel_daily_participant",
     column: "tz",
     ddl: "ALTER TABLE channel_daily_participant ADD COLUMN tz TEXT",
+  },
+  // Theming: visible-only client preference, but persisted server-side so
+  // it survives device reinstalls. Older user_prefs rows (created before
+  // the theme picker shipped) need the column added.
+  {
+    table: "user_prefs",
+    column: "theme",
+    ddl: "ALTER TABLE user_prefs ADD COLUMN theme TEXT NOT NULL DEFAULT 'warm-pastel'",
   },
 ];

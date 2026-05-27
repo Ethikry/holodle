@@ -77,24 +77,27 @@ export async function fetchStats(accessToken: string): Promise<UserStats> {
 
 // Per-user preferences. The shape here mirrors `UserPrefs` on the server
 // (packages/server/src/db/client.ts) — keep them in sync when adding
-// fields. The recap-ping toggle is the only field today.
+// fields.
 export interface UserPrefs {
   recapPingMuted: boolean;
+  theme: string;
 }
 
 export async function fetchPrefs(accessToken: string): Promise<UserPrefs> {
   return ok<UserPrefs>(await fetch("/api/prefs", { headers: authHeaders(accessToken) }));
 }
 
+// PATCH is a partial update — the client may send only the field it
+// changed. The server merges with the existing row.
 export async function patchPrefs(
   accessToken: string,
-  prefs: UserPrefs,
+  patch: Partial<UserPrefs>,
 ): Promise<UserPrefs> {
   return ok<UserPrefs>(
     await fetch("/api/prefs", {
       method: "PATCH",
       headers: authHeaders(accessToken),
-      body: JSON.stringify(prefs),
+      body: JSON.stringify(patch),
     }),
   );
 }
