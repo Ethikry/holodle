@@ -4,43 +4,42 @@
 // Activity iframe; rendering this in place of a half-populated UI avoids
 // the flash of empty stat cards and the empty-state "No talents loaded
 // yet" banner during that window.
+//
+// The wordmark is an italic lowercase `holodle` with a classic
+// skeleton-loader shimmer — a bright highlight band sweeps across the
+// muted base colour, looped. The shimmer alone communicates "we're
+// working on it" so no separate spinner / pulse-dots are needed. Both
+// the base and highlight use --holo-* variables so the loading screen
+// renders in the user's persisted theme (applied via applyPersistedTheme
+// in main.tsx before React mounts).
 export function LoadingScreen(): JSX.Element {
   return (
     <main className="flex min-h-full flex-col items-center justify-center px-6 text-center">
-      <h1 className="flex items-center gap-2 text-5xl font-extrabold tracking-tight">
-        <span className="text-holo-accent">HOLO</span>
-        <span aria-hidden className="text-holo-accent">
-          ✦
-        </span>
-        <span className="text-holo-ink">DLE</span>
+      <h1
+        className="font-display text-6xl font-semibold italic tracking-tight sm:text-8xl"
+        style={{
+          // Skeleton-loader gradient: muted base with a bright accent
+          // band roughly 20% wide. background-size:200% gives the
+          // shimmer keyframe room to sweep the highlight across.
+          background:
+            "linear-gradient(90deg, rgb(var(--holo-muted) / 0.45) 0%, rgb(var(--holo-muted) / 0.45) 40%, rgb(var(--holo-accent)) 50%, rgb(var(--holo-muted) / 0.45) 60%, rgb(var(--holo-muted) / 0.45) 100%)",
+          backgroundSize: "200% 100%",
+          WebkitBackgroundClip: "text",
+          backgroundClip: "text",
+          WebkitTextFillColor: "transparent",
+          color: "transparent",
+          animation: "shimmer 1.8s linear infinite",
+        }}
+      >
+        holodle
       </h1>
-      <p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-holo-muted">
-        Daily Hololive Talent Guessing Game
-      </p>
-
-      <div
+      <p
         role="status"
         aria-live="polite"
-        aria-label="Loading"
-        className="mt-10 flex items-center gap-2"
+        className="mt-6 text-xs font-semibold uppercase tracking-[0.22em] text-holo-muted sm:text-sm"
       >
-        {/* Three staggered pulsing dots. Tailwind's animate-pulse keyframes
-            run 1→0.5→1 opacity over 2s; the inline animation-delay shifts
-            each dot's phase so they ripple. */}
-        <span
-          className="h-3 w-3 animate-pulse rounded-full bg-holo-accent"
-          style={{ animationDelay: "0ms" }}
-        />
-        <span
-          className="h-3 w-3 animate-pulse rounded-full bg-holo-accent"
-          style={{ animationDelay: "200ms" }}
-        />
-        <span
-          className="h-3 w-3 animate-pulse rounded-full bg-holo-accent"
-          style={{ animationDelay: "400ms" }}
-        />
-      </div>
-      <p className="mt-3 text-sm text-holo-muted">Loading…</p>
+        loading…
+      </p>
     </main>
   );
 }

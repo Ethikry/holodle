@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS channel_recap_posted (
 CREATE TABLE IF NOT EXISTS user_prefs (
   user_id          TEXT PRIMARY KEY,
   recap_ping_muted INTEGER NOT NULL DEFAULT 0,
-  theme            TEXT NOT NULL DEFAULT 'warm-pastel',
+  theme            TEXT NOT NULL DEFAULT 'sky',
   updated_at       INTEGER NOT NULL DEFAULT (strftime('%s','now'))
 );
 
@@ -151,6 +151,6 @@ export const ADDITIVE_MIGRATIONS: Array<{ table: string; column: string; ddl: st
   {
     table: "user_prefs",
     column: "theme",
-    ddl: "ALTER TABLE user_prefs ADD COLUMN theme TEXT NOT NULL DEFAULT 'warm-pastel'",
+    ddl: "ALTER TABLE user_prefs ADD COLUMN theme TEXT NOT NULL DEFAULT 'sky'",
   },
 ];

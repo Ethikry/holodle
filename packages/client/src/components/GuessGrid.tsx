@@ -24,7 +24,7 @@ export function GuessGrid(): JSX.Element {
       <div className="mx-auto w-full max-w-3xl">
         <div
           role="row"
-          className="grid grid-cols-[48px_1.6fr_repeat(4,minmax(0,1fr))] items-end gap-1 px-1 pb-2 text-center text-[9px] font-semibold uppercase tracking-wider text-holo-muted sm:grid-cols-[72px_1.6fr_repeat(4,minmax(0,1fr))] sm:gap-2 sm:text-[11px]"
+          className="grid grid-cols-[48px_repeat(5,minmax(0,1fr))] items-end gap-1 px-1 pb-2 text-center text-[9px] font-semibold uppercase tracking-wider text-holo-muted sm:grid-cols-[72px_repeat(5,minmax(0,1fr))] sm:gap-2 sm:text-[11px]"
         >
           {COLUMN_HEADERS.map((h) => (
             <div role="columnheader" key={h.label} className="break-words leading-tight">

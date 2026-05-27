@@ -144,17 +144,17 @@ describe("getDb migration from pre-round-2 shape", () => {
     expect(row.status).toBe("playing");
   });
 
-  it("adds the user_prefs.theme column on a pre-theme database, defaulting to 'warm-pastel'", async () => {
+  it("adds the user_prefs.theme column on a pre-theme database, defaulting to 'sky'", async () => {
     const { getDb } = await import("../src/db/client.js");
     const db = getDb();
     const cols = db.prepare("PRAGMA table_info(user_prefs)").all() as Array<{ name: string }>;
     expect(cols.some((c) => c.name === "theme")).toBe(true);
     // The legacy row gets the column DEFAULT applied because the ALTER
-    // TABLE adds `NOT NULL DEFAULT 'warm-pastel'`.
+    // TABLE adds `NOT NULL DEFAULT 'sky'` (restored original palette).
     const row = db
       .prepare("SELECT theme, recap_ping_muted FROM user_prefs WHERE user_id = 'pre-theme-user'")
       .get() as { theme: string; recap_ping_muted: number };
-    expect(row.theme).toBe("warm-pastel");
+    expect(row.theme).toBe("sky");
     // Pre-existing recap_ping_muted value preserved.
     expect(row.recap_ping_muted).toBe(1);
   });

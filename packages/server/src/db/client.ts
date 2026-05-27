@@ -327,7 +327,10 @@ export interface UserPrefs {
 
 const DEFAULT_USER_PREFS: UserPrefs = {
   recapPingMuted: false,
-  theme: "warm-pastel",
+  // "sky" — the original holodle palette, restored as the default.
+  // Existing user_prefs rows keep whatever theme they were assigned;
+  // brand-new users (no row yet) and pre-theme migrated users get this.
+  theme: "sky",
 };
 
 // Returns the user's preferences row, falling back to DEFAULT_USER_PREFS

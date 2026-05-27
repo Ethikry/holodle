@@ -2,7 +2,13 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { App } from "./App.js";
 import { ErrorBoundary } from "./components/ErrorBoundary.js";
+import { applyPersistedTheme } from "./themes.js";
 import "./styles.css";
+
+// Apply the user's last-known theme *before* the first React paint so
+// the LoadingScreen (and everything else up to /api/prefs resolving)
+// renders in their palette instead of flashing sky-default.
+applyPersistedTheme();
 
 const rootEl = document.getElementById("root");
 if (!rootEl) throw new Error("#root element not found");

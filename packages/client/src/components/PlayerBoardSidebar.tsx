@@ -72,7 +72,7 @@ export function PlayerBoardSidebar(): JSX.Element | null {
     return a.guessesUsed - b.guessesUsed;
   });
   return (
-    <aside className="hidden w-[160px] shrink-0 border-r border-holo-muted/20 bg-holo-card/40 px-2 py-3 sm:block">
+    <aside className="hidden w-[160px] shrink-0 border-r border-holo-muted/10 bg-holo-card/30 px-2 py-3 backdrop-blur-sm sm:block">
       <h2 className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-holo-muted">
         In this channel
       </h2>
