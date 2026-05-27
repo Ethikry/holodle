@@ -1,11 +1,11 @@
 import { useGame } from "../state/game.js";
 
-// The wordmark renders `holodle` in lowercase Fredoka with a slow
-// holographic-gradient shimmer (the gradient slides across the letters
-// via the `shimmer` animation in tailwind.config.ts / styles.css). A
-// handful of decorative ✨ are absolutely positioned around the
-// wordmark and twinkle on a stagger — gives the header an idol/pop
-// vibe without leaning on a literal star inside the wordmark itself.
+// Wordmark: lowercase `holodle` in Fredoka. The earlier draft had a
+// shimmering holographic gradient + four twinkling sparkles; that read
+// as too busy at the top of the screen. This version uses a static
+// two-stop gradient (accent → ink) so the wordmark still has character
+// without animating, and no decorative sparkles compete with the
+// background pattern.
 export function Header(): JSX.Element {
   const setHelpOpen = useGame((s) => s.setHelpOpen);
   // Discord mobile overlays its own header bar (the "Holodle / Leave" chrome
@@ -22,58 +22,22 @@ export function Header(): JSX.Element {
       >
         ?
       </button>
-      <div className="relative inline-block">
-        <h1
-          className="font-display text-5xl font-semibold tracking-tight sm:text-7xl"
-          style={{
-            // Holographic gradient: accent → pink → accent. The
-            // background-clip:text + 200% width + animated background-
-            // position gives a slow shimmer that tracks the active
-            // theme's accent (since the stops use the CSS variable).
-            background:
-              "linear-gradient(90deg, rgb(var(--holo-accent)) 0%, rgb(255 105 180) 35%, rgb(180 130 255) 60%, rgb(var(--holo-accent)) 100%)",
-            backgroundSize: "200% 100%",
-            WebkitBackgroundClip: "text",
-            backgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            color: "transparent",
-            animation: "shimmer 6s linear infinite",
-          }}
-        >
-          holodle
-        </h1>
-        {/* Decorative twinkling sparkles around the wordmark. aria-hidden
-            because they don't carry meaning — the wordmark itself is the
-            label. Each gets its own staggered animation-delay. */}
-        <span
-          aria-hidden
-          className="pointer-events-none absolute -top-3 -left-4 text-xl text-holo-accent animate-twinkle sm:-top-4 sm:-left-6 sm:text-2xl"
-          style={{ animationDelay: "0s" }}
-        >
-          ✦
-        </span>
-        <span
-          aria-hidden
-          className="pointer-events-none absolute -top-1 -right-5 text-base text-holo-accent animate-twinkle sm:-top-2 sm:-right-7 sm:text-xl"
-          style={{ animationDelay: "0.8s" }}
-        >
-          ✧
-        </span>
-        <span
-          aria-hidden
-          className="pointer-events-none absolute -bottom-2 left-2 text-sm text-holo-accent animate-twinkle sm:-bottom-3 sm:left-4 sm:text-base"
-          style={{ animationDelay: "1.6s" }}
-        >
-          ✦
-        </span>
-        <span
-          aria-hidden
-          className="pointer-events-none absolute bottom-1 -right-3 text-xs text-holo-accent animate-twinkle sm:bottom-2 sm:-right-5 sm:text-sm"
-          style={{ animationDelay: "1.2s" }}
-        >
-          ✧
-        </span>
-      </div>
+      <h1
+        className="font-display text-5xl font-semibold tracking-tight sm:text-7xl"
+        style={{
+          // Static two-stop gradient: accent at the top fading into ink
+          // at the bottom. Reads as a single colour at a glance but has
+          // a touch of depth up close. No animation.
+          background:
+            "linear-gradient(180deg, rgb(var(--holo-accent)) 0%, rgb(var(--holo-ink)) 100%)",
+          WebkitBackgroundClip: "text",
+          backgroundClip: "text",
+          WebkitTextFillColor: "transparent",
+          color: "transparent",
+        }}
+      >
+        holodle
+      </h1>
       <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.22em] text-holo-muted sm:mt-4 sm:text-xs">
         Daily Hololive Talent Guessing Game
       </p>

@@ -41,11 +41,18 @@ export function HelpModal(): JSX.Element | null {
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      // Discord's iframe chrome covers ~50px at the top on mobile and a
+      // ~70px playback bar at the bottom. We pad the outer wrapper so
+      // the modal never tucks behind either, and use overflow-y-auto so
+      // tall modals scroll inside the wrapper on short viewports.
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 px-4 pt-14 pb-20 sm:items-center sm:pt-6 sm:pb-6"
       onClick={() => setHelpOpen(false)}
     >
       <div
-        className="card max-w-md w-full p-6 text-sm animate-modalEnter"
+        // max-h + overflow-y-auto on the inner card lets long content
+        // (the 12-swatch theme grid) scroll within the modal while the
+        // close button stays reachable.
+        className="card max-h-full max-w-md w-full overflow-y-auto p-6 text-sm animate-modalEnter"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">

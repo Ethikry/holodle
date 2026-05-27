@@ -54,15 +54,17 @@ html.theme-fubuki {
     0 3px 10px rgba(40, 160, 170, 0.10);
 }
 
-/* kanade — peach coral + cream. Warm analogous. */
+/* kanade — peach coral + warm gold on cream. Triadic. Gold reads as
+   a primary brand colour (used for the "match" state) so the picker
+   swatch shows coral + gold + cream. */
 html.theme-kanade {
   --holo-bg: 254 240 232;
   --holo-card: 255 252 248;
   --holo-ink: 80 30 50;
   --holo-accent: 237 110 131;
-  --holo-ok: 138 180 100;
-  --holo-ok-bg: 232 245 215;
-  --holo-ok-bd: 174 210 142;
+  --holo-ok: 218 162 60;
+  --holo-ok-bg: 253 240 210;
+  --holo-ok-bd: 238 200 120;
   --holo-bad: 220 70 90;
   --holo-bad-bg: 252 220 225;
   --holo-bad-bd: 234 158 170;
@@ -88,21 +90,21 @@ html.theme-su {
     0 3px 10px rgba(70, 160, 210, 0.10);
 }
 
-/* zeta — lilac purple + silver on deep night. Dark, cool. */
+/* zeta — lilac purple on a soft violet-white. Light, cool, analogous. */
 html.theme-zeta {
-  --holo-bg: 28 18 42;
-  --holo-card: 50 32 70;
-  --holo-ink: 240 232 248;
-  --holo-accent: 175 130 220;
-  --holo-ok: 138 200 158;
-  --holo-ok-bg: 42 50 70;
-  --holo-ok-bd: 100 168 122;
-  --holo-bad: 238 120 165;
-  --holo-bad-bg: 70 28 50;
-  --holo-bad-bd: 200 95 140;
-  --holo-muted: 168 152 200;
-  --holo-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.5),
-    0 6px 18px rgba(60, 30, 90, 0.5);
+  --holo-bg: 246 240 252;
+  --holo-card: 255 255 255;
+  --holo-ink: 50 30 80;
+  --holo-accent: 152 100 200;
+  --holo-ok: 110 168 124;
+  --holo-ok-bg: 222 240 224;
+  --holo-ok-bd: 158 200 168;
+  --holo-bad: 220 90 130;
+  --holo-bad-bg: 250 220 230;
+  --holo-bad-bd: 232 158 184;
+  --holo-muted: 130 110 152;
+  --holo-card-shadow: 0 1px 2px rgba(80, 40, 130, 0.05),
+    0 3px 10px rgba(150, 100, 200, 0.10);
 }
 
 /* marine — pirate burgundy and treasure gold. Dark, warm analogous. */
@@ -237,9 +239,11 @@ html.theme-irys {
     padding-bottom: env(safe-area-inset-bottom);
     position: relative;
   }
-  /* Subtle dotted lattice on the body — gives the flat bg a bit of
-     "paper" texture without competing with content. Tracks the theme
-     because it uses --holo-accent. Fixed so it doesn't scroll. */
+  /* Decorative bg pattern: three overlapping dot grids at different
+     scales create an irregular constellation-like scatter rather than
+     a uniform lattice. Tracks the theme via --holo-accent. Fixed so
+     it doesn't scroll. Opacities are tuned to be visible enough to
+     read as "texture" without competing with the foreground content. */
   body::before {
     content: "";
     position: fixed;
@@ -247,11 +251,11 @@ html.theme-irys {
     pointer-events: none;
     z-index: 0;
     background-image:
-      radial-gradient(rgb(var(--holo-accent) / 0.10) 1px, transparent 1px),
-      radial-gradient(rgb(var(--holo-accent) / 0.06) 1px, transparent 1px);
-    background-size: 28px 28px, 56px 56px;
-    background-position: 0 0, 14px 14px;
-    opacity: 0.55;
+      radial-gradient(circle, rgb(var(--holo-accent) / 0.22) 1px, transparent 1.5px),
+      radial-gradient(circle, rgb(var(--holo-accent) / 0.14) 1.5px, transparent 2.5px),
+      radial-gradient(circle, rgb(var(--holo-accent) / 0.10) 1px, transparent 1.5px);
+    background-size: 56px 56px, 96px 96px, 32px 32px;
+    background-position: 8px 12px, 40px 48px, 16px 24px;
   }
   /* Anything above the bg pattern needs explicit stacking context. */
   #root {
@@ -300,18 +304,11 @@ html.theme-irys {
 
 /* ─── Decorative keyframes ─────────────────────────────────────────── */
 
-/* Holographic shimmer for the wordmark — the background-clip-text
-   gradient slides slowly across the letters. */
+/* Skeleton-loader shimmer used by LoadingScreen: a bright highlight
+   band sweeps across the wordmark via background-position animation. */
 @keyframes shimmer {
   from { background-position: 0% 50%; }
   to   { background-position: 200% 50%; }
-}
-
-/* Decorative ✨ around the wordmark — gentle twinkle (opacity + tiny
-   scale). Staggered per-sparkle via inline animation-delay. */
-@keyframes twinkle {
-  0%, 100% { opacity: 0.35; transform: scale(0.85) rotate(-4deg); }
-  50%      { opacity: 1;    transform: scale(1.08) rotate(4deg); }
 }
 
 /* Respect the OS-level "reduce motion" preference: every named animation
@@ -324,8 +321,11 @@ html.theme-irys {
   .animate-tileEnter,
   .animate-pulseGlow,
   .animate-bounce,
-  .animate-shimmer,
-  .animate-twinkle {
+  .animate-shimmer {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+  [style*="shimmer"] {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
   }

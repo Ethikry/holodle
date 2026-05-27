@@ -71,16 +71,11 @@ export default {
           "0%, 100%": { textShadow: "0 0 0 transparent" },
           "50%": { textShadow: "0 0 16px rgb(var(--holo-accent))" },
         },
-        // Holographic shimmer on the wordmark — slides the gradient
-        // background across the letters.
+        // Skeleton-loader shimmer used by LoadingScreen — slides the
+        // gradient background across the wordmark.
         shimmer: {
           "0%": { backgroundPosition: "0% 50%" },
           "100%": { backgroundPosition: "200% 50%" },
-        },
-        // Sparkles around the wordmark twinkle gently.
-        twinkle: {
-          "0%, 100%": { opacity: "0.35", transform: "scale(0.85) rotate(-4deg)" },
-          "50%": { opacity: "1", transform: "scale(1.08) rotate(4deg)" },
         },
       },
       animation: {
@@ -89,8 +84,7 @@ export default {
         modalEnter: "modalEnter 200ms ease-out both",
         tileEnter: "tileEnter 280ms ease-out both",
         pulseGlow: "pulseGlow 1200ms ease-in-out 1",
-        shimmer: "shimmer 6s linear infinite",
-        twinkle: "twinkle 2.4s ease-in-out infinite",
+        shimmer: "shimmer 1.8s linear infinite",
       },
     },
   },
