@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Talent } from "@holodle/shared";
-import { compareGuess, heightBucket } from "../src/game/compare.js";
+import { compareGuess, displayGroup, heightBucket } from "../src/game/compare.js";
 
 function t(overrides: Partial<Talent>): Talent {
   return {
@@ -33,12 +33,36 @@ describe("heightBucket", () => {
   });
 });
 
+describe("displayGroup label formatting", () => {
+  it("formats numbered gens as 'BRANCH Gen N'", () => {
+    expect(displayGroup("JP", "Gen 0")).toBe("JP Gen 0");
+    expect(displayGroup("JP", "Gen 5")).toBe("JP Gen 5");
+    expect(displayGroup("ID", "Gen 3")).toBe("ID Gen 3");
+  });
+  it("synthesizes numbered gens for un-numbered cohorts with the original name in parens", () => {
+    expect(displayGroup("JP", "holoX")).toBe("JP Gen 6 (holoX)");
+    expect(displayGroup("EN", "Myth")).toBe("EN Gen 1 (Myth)");
+    expect(displayGroup("EN", "Promise")).toBe("EN Gen 2 (Promise)");
+    expect(displayGroup("EN", "Council")).toBe("EN Gen 2 (Promise)");
+    expect(displayGroup("EN", "Advent")).toBe("EN Gen 3 (Advent)");
+    expect(displayGroup("EN", "Justice")).toBe("EN Gen 4 (Justice)");
+    expect(displayGroup("DEV_IS", "ReGLOSS")).toBe("DEV_IS Gen 1 (ReGLOSS)");
+    expect(displayGroup("DEV_IS", "FLOW GLOW")).toBe("DEV_IS Gen 2 (FLOWGLOW)");
+  });
+  it("falls through unknown gens unchanged (no mapping required for GAMERS, Project: HOPE)", () => {
+    expect(displayGroup("JP", "GAMERS")).toBe("JP GAMERS");
+    expect(displayGroup("EN", "Project: HOPE")).toBe("EN Project: HOPE");
+  });
+  it("joins multi-group talents with ' / ' (branch shown once)", () => {
+    expect(displayGroup("JP", ["Gen 1", "GAMERS"])).toBe("JP Gen 1 / GAMERS");
+  });
+});
+
 describe("compareGuess", () => {
   it("flags an exact match green everywhere", () => {
     const a = t({ id: "kobo", name: "Kobo" });
     const diff = compareGuess(a, a);
-    expect(diff.generation.state).toBe("equal");
-    expect(diff.branch.state).toBe("equal");
+    expect(diff.group.state).toBe("equal");
     expect(diff.penlightColor.state).toBe("equal");
     expect(diff.archetype.state).toBe("equal");
     expect(diff.height.state).toBe("equal");
@@ -65,42 +89,59 @@ describe("compareGuess", () => {
     expect(compareGuess(t({ heightCm: 140 }), tall).height.state).toBe("wrong"); // Smol vs Tall
   });
 
-  it("birthMonth: equal / higher / lower (linear by calendar order, no wrap)", () => {
+  it("birthMonth: equal or wrong (no higher/lower direction)", () => {
     const target = t({ birthMonth: "June" });
     expect(compareGuess(t({ birthMonth: "June" }), target).birthMonth.state).toBe("equal");
-    // Target (June) is later in the year than guess → ↑ "higher".
-    expect(compareGuess(t({ birthMonth: "January" }), target).birthMonth.state).toBe("higher");
-    expect(compareGuess(t({ birthMonth: "May" }), target).birthMonth.state).toBe("higher");
-    // Target (June) is earlier than guess → ↓ "lower".
-    expect(compareGuess(t({ birthMonth: "July" }), target).birthMonth.state).toBe("lower");
-    expect(compareGuess(t({ birthMonth: "December" }), target).birthMonth.state).toBe("lower");
-
-    // No wrap-around: guessing January against December is "lower" (Jan < Dec),
-    // not "higher" (which would imply Dec is ~1 month after Jan).
-    const dec = t({ birthMonth: "December" });
-    expect(compareGuess(t({ birthMonth: "January" }), dec).birthMonth.state).toBe("higher");
-    expect(compareGuess(t({ birthMonth: "November" }), dec).birthMonth.state).toBe("higher");
+    expect(compareGuess(t({ birthMonth: "January" }), target).birthMonth.state).toBe("wrong");
+    expect(compareGuess(t({ birthMonth: "July" }), target).birthMonth.state).toBe("wrong");
+    expect(compareGuess(t({ birthMonth: "December" }), target).birthMonth.state).toBe("wrong");
   });
 
-  it("generation: equal or wrong (string compared exactly)", () => {
-    const target = t({ generation: "Gen 3" });
-    expect(compareGuess(t({ generation: "Gen 3" }), target).generation.state).toBe("equal");
-    expect(compareGuess(t({ generation: "Gen 4" }), target).generation.state).toBe("wrong");
-    expect(compareGuess(t({ generation: "GAMERS" }), target).generation.state).toBe("wrong");
+  it("group: equal when both branch AND generation match", () => {
+    const target = t({ branch: "JP", generation: "Gen 3" });
+    expect(compareGuess(t({ branch: "JP", generation: "Gen 3" }), target).group.state).toBe("equal");
   });
 
-  it("generation: multi-group talents match on any shared label (Fubuki: Gen 1 + GAMERS)", () => {
-    const fubuki = t({ generation: ["Gen 1", "GAMERS"] });
-    // Guessing a single-group talent that shares one of Fubuki's labels.
-    expect(compareGuess(t({ generation: "Gen 1" }), fubuki).generation.state).toBe("equal");
-    expect(compareGuess(t({ generation: "GAMERS" }), fubuki).generation.state).toBe("equal");
-    // No overlap → wrong.
-    expect(compareGuess(t({ generation: "Gen 2" }), fubuki).generation.state).toBe("wrong");
-    // And the reverse: guessing Fubuki against a Gen 1 target also matches.
-    const aki = t({ generation: "Gen 1" });
-    expect(compareGuess(fubuki, aki).generation.state).toBe("equal");
-    // Display value carries the guess's labels joined.
-    expect(compareGuess(fubuki, aki).generation.value).toBe("Gen 1 / GAMERS");
+  it("group: partial when only branch matches", () => {
+    const target = t({ branch: "JP", generation: "Gen 3" });
+    const diff = compareGuess(t({ branch: "JP", generation: "Gen 4" }), target);
+    expect(diff.group.state).toBe("partial");
+    expect(diff.group.value).toBe("JP Gen 4");
+  });
+
+  it("group: partial when only generation matches across branches", () => {
+    // Both ID and JP have a "Gen 1" — the gen string overlaps but branch differs.
+    const target = t({ branch: "JP", generation: "Gen 1" });
+    const diff = compareGuess(t({ branch: "ID", generation: "Gen 1" }), target);
+    expect(diff.group.state).toBe("partial");
+    expect(diff.group.value).toBe("ID Gen 1");
+  });
+
+  it("group: wrong when neither matches", () => {
+    const target = t({ branch: "JP", generation: "Gen 3" });
+    expect(
+      compareGuess(t({ branch: "EN", generation: "Myth" }), target).group.state,
+    ).toBe("wrong");
+  });
+
+  it("group: multi-group talents like Fubuki (JP Gen 1 + GAMERS) match any overlap", () => {
+    const fubuki = t({ branch: "JP", generation: ["Gen 1", "GAMERS"] });
+    // Guessing Aki (JP Gen 1) — branch matches AND Gen 1 overlap → equal.
+    const aki = t({ branch: "JP", generation: "Gen 1" });
+    expect(compareGuess(aki, fubuki).group.state).toBe("equal");
+    // Guessing Mio (JP GAMERS) — branch matches AND GAMERS overlap → equal.
+    const mio = t({ branch: "JP", generation: "GAMERS" });
+    expect(compareGuess(mio, fubuki).group.state).toBe("equal");
+    // Reverse direction (guessing Fubuki against an Aki target) — same.
+    expect(compareGuess(fubuki, aki).group.state).toBe("equal");
+    expect(compareGuess(fubuki, aki).group.value).toBe("JP Gen 1 / GAMERS");
+  });
+
+  it("group: Council ↔ Promise are treated as the same cohort", () => {
+    const sana = t({ branch: "EN", generation: "Council" });
+    const mumei = t({ branch: "EN", generation: "Promise" });
+    expect(compareGuess(sana, mumei).group.state).toBe("equal");
+    expect(compareGuess(mumei, sana).group.state).toBe("equal");
   });
 
   it("archetype: multi-archetype talents match on any shared label (Nerissa: Bird + Demon)", () => {
@@ -108,12 +149,5 @@ describe("compareGuess", () => {
     expect(compareGuess(t({ archetype: "Bird" }), nerissa).archetype.state).toBe("equal");
     expect(compareGuess(t({ archetype: "Demon" }), nerissa).archetype.state).toBe("equal");
     expect(compareGuess(t({ archetype: "Human" }), nerissa).archetype.state).toBe("wrong");
-  });
-
-  it("branch and archetype: equal or wrong", () => {
-    const target = t({ branch: "ID", archetype: "Human" });
-    expect(compareGuess(t({ branch: "ID", archetype: "Human" }), target).branch.state).toBe("equal");
-    expect(compareGuess(t({ branch: "JP", archetype: "Zombie" }), target).branch.state).toBe("wrong");
-    expect(compareGuess(t({ branch: "JP", archetype: "Zombie" }), target).archetype.state).toBe("wrong");
   });
 });

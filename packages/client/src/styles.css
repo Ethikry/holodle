@@ -149,6 +149,13 @@ html.theme-marine {
   .cell-wrong {
     @apply cell bg-holo-badBg/60 text-holo-bad border-holo-badBd;
   }
+  /* Yellow / partial. Used by the combined group column when exactly one
+     of (branch, generation) matches. Amber 300/500 reads well against
+     every theme background today; if we add a high-contrast theme that
+     clashes we'd introduce --holo-warn-* variables here too. */
+  .cell-partial {
+    @apply cell border-amber-500/70 bg-amber-300/40 text-amber-700;
+  }
   .card {
     @apply rounded-2xl bg-holo-card shadow-card;
   }

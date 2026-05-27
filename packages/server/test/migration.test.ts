@@ -25,11 +25,12 @@ const STALE_DIFF_JSON = JSON.stringify([
   },
 ]);
 
+// Current shape: combined `group` cell, no `generation` / `branch`,
+// birthMonth equal-or-wrong.
 const FRESH_DIFF_JSON = JSON.stringify([
   {
     talentId: "kobo-kanaeru",
-    generation: { value: "ID Gen 3", state: "wrong" },
-    branch: { value: "ID", state: "equal" },
+    group: { value: "ID Gen 3", state: "equal" },
     penlightColor: { value: "Light Blue", state: "equal" },
     archetype: { value: "Human", state: "equal" },
     height: { value: "Med", state: "equal" },
@@ -121,15 +122,17 @@ describe("getDb migration from pre-round-2 shape", () => {
     expect(row.exit_embed_posted).toBe(0);
   });
 
-  it("preserves fresh (generation-shape) diffs untouched", async () => {
+  it("preserves fresh (group-shape) diffs untouched", async () => {
     const { getDb } = await import("../src/db/client.js");
     const row = getDb()
       .prepare("SELECT guesses_json, status FROM user_day WHERE user_id = 'fresh-user'")
       .get() as { guesses_json: string; status: string };
     expect(row.status).toBe("won");
     const parsed = JSON.parse(row.guesses_json);
-    expect(parsed[0]).toHaveProperty("generation");
+    expect(parsed[0]).toHaveProperty("group");
     expect(parsed[0]).not.toHaveProperty("name");
+    expect(parsed[0]).not.toHaveProperty("generation");
+    expect(parsed[0]).not.toHaveProperty("branch");
   });
 
   it("clears rows with malformed guesses_json", async () => {

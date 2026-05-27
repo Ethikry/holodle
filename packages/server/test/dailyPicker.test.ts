@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { Talent } from "@holodle/shared";
 import {
   EPOCH_UTC_MS,
+  NO_REPEAT_WINDOW,
   cstDayIndexFor,
   dayIndexFor,
+  pickByIndex,
   pickDaily,
   puzzleEndUtcSecs,
   puzzleIdFor,
@@ -51,6 +53,63 @@ describe("pickDaily", () => {
       seen.add(pick!.id);
     }
     expect(seen.size).toBe(pool.length);
+  });
+});
+
+describe("pickByIndex 30-day no-repeat window", () => {
+  // A fresh pool reference per test so we don't share the WeakMap memo
+  // across tests. Each pool has a distinct identity even when contents
+  // overlap, which is exactly what we want for isolation.
+  const makePool = (ids: string[]) => ids.map((id) => t(id));
+
+  it("never returns the same talent within a NO_REPEAT_WINDOW-day stretch", () => {
+    const pool = makePool(["a", "b", "c", "d", "e", "f", "g", "h", "i", "j",
+      "k", "l", "m", "n", "o", "p", "q", "r", "s", "t",
+      "u", "v", "w", "x", "y", "z", "aa", "bb", "cc", "dd",
+      "ee", "ff", "gg", "hh", "ii", "jj"]);
+    const recent: string[] = [];
+    for (let day = 0; day < 120; day++) {
+      const pick = pickByIndex(pool, day);
+      expect(pick).not.toBeNull();
+      // Within any 30-day window the id must not have appeared yet.
+      const window = recent.slice(-NO_REPEAT_WINDOW);
+      expect(window).not.toContain(pick!.id);
+      recent.push(pick!.id);
+    }
+  });
+
+  it("is deterministic — same dayIndex returns the same talent across calls", () => {
+    const pool = makePool(["a", "b", "c", "d", "e", "f", "g", "h", "i", "j",
+      "k", "l", "m", "n", "o", "p", "q", "r", "s", "t",
+      "u", "v", "w", "x", "y", "z", "aa", "bb", "cc", "dd", "ee"]);
+    // Drive the picker forward then re-query in different order; results
+    // must match.
+    const a50 = pickByIndex(pool, 50);
+    const a10 = pickByIndex(pool, 10);
+    const a50again = pickByIndex(pool, 50);
+    const a10again = pickByIndex(pool, 10);
+    expect(a50?.id).toBe(a50again?.id);
+    expect(a10?.id).toBe(a10again?.id);
+  });
+
+  it("on day 0 returns the canonical shuffled-pool head (no recents to skip)", () => {
+    const pool = makePool(["a", "b", "c"]);
+    const pick = pickByIndex(pool, 0);
+    expect(pick).not.toBeNull();
+    // The exact id depends on the shuffle seed; just assert it's IN the pool.
+    expect(["a", "b", "c"]).toContain(pick!.id);
+  });
+
+  it("with a small pool (< NO_REPEAT_WINDOW), still returns a talent every day", () => {
+    const pool = makePool(["a", "b", "c", "d"]);
+    for (let day = 0; day < 10; day++) {
+      const pick = pickByIndex(pool, day);
+      expect(pick).not.toBeNull();
+    }
+  });
+
+  it("returns null for an empty pool", () => {
+    expect(pickByIndex([], 5)).toBeNull();
   });
 });
 

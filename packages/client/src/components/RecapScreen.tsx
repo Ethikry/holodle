@@ -13,14 +13,13 @@ import { AnswerAvatar } from "./AnswerAvatar.js";
 // Reuses the existing PlayerSnapshot data already broadcast over the
 // socket — no new traffic.
 
-const COLS = 6;
+const COLS = 5;
 
 function cellClass(state: CellState | "empty"): string {
   switch (state) {
     case "equal":
       return "bg-holo-ok border-holo-okBd";
-    case "higher":
-    case "lower":
+    case "partial":
       return "bg-amber-300/70 border-amber-500/70";
     case "wrong":
       return "bg-holo-bad border-holo-badBd";
@@ -50,7 +49,7 @@ function MiniBoard({ board }: { board: BoardRow[] }): JSX.Element {
     }
   }
   return (
-    <div className="grid grid-cols-6 gap-[3px]">
+    <div className="grid grid-cols-5 gap-[3px]">
       {cells.map((state, i) => (
         <div
           key={i}

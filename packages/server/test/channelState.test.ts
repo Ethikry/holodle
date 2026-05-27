@@ -59,8 +59,7 @@ function stubDiffs(n: number): GuessDiff[] {
   for (let i = 0; i < n; i++) {
     diffs.push({
       talentId: `t-${i}`,
-      generation: { value: "?", state: "wrong" },
-      branch: { value: "JP", state: "wrong" },
+      group: { value: "JP Gen 0", state: "wrong" },
       penlightColor: { value: "Blue", state: "wrong" },
       archetype: { value: "?", state: "wrong" },
       height: { value: "Med", state: "wrong" },
@@ -824,8 +823,7 @@ describe("loadChannelBoards", () => {
     const userDayHistory = JSON.stringify([
       {
         talentId: "t-x",
-        generation: { value: "?", state: "wrong" },
-        branch: { value: "JP", state: "wrong" },
+        group: { value: "JP Gen 0", state: "wrong" },
         penlightColor: { value: "Blue", state: "wrong" },
         archetype: { value: "?", state: "wrong" },
         height: { value: "Med", state: "wrong" },
