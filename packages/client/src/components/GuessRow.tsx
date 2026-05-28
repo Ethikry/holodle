@@ -32,13 +32,13 @@ const MONTH_ABBR: Record<Month, string> = {
   December: "Dec",
 };
 
-// One row of the guess grid. 6 columns: avatar + 5 attribute cells
-// (group / penlight / archetype / height / month). The CSS-grid template
-// is defined on the parent GuessGrid so header labels line up with the
-// cells below. When `isLatest` is true, the attribute cells flip in
-// left-to-right via `animate-cellPop` with a staggered per-column delay
-// — gives the just-landed guess a tactile "grading" reveal. Older rows
-// render static.
+// One row of the guess grid. 7 columns: avatar + 6 attribute cells
+// (branch / gen / penlight / archetype / height / month). The CSS-grid
+// template is defined on this row and on the parent GuessGrid header
+// so labels line up with the cells below. When `isLatest` is true,
+// the attribute cells flip in left-to-right via the cellPop keyframe
+// with a per-column staggered delay — gives the just-landed guess a
+// tactile "grading" reveal. Older rows render static.
 const CELL_STAGGER_MS = 90;
 // Sweep timing — see comment on `cellStyle` below.
 const SWEEP_START_MS = 820;
@@ -80,10 +80,10 @@ export function GuessRow({
   return (
     <div
       role="row"
-      className="grid grid-cols-[48px_repeat(5,minmax(0,1fr))] items-center gap-1 sm:grid-cols-[72px_repeat(5,minmax(0,1fr))] sm:gap-2"
+      className="grid grid-cols-[40px_repeat(6,minmax(0,1fr))] items-center gap-1 sm:grid-cols-[64px_repeat(6,minmax(0,1fr))] sm:gap-2"
     >
       <div role="cell" className="flex items-center justify-center">
-        <div className="card flex h-10 w-10 items-center justify-center overflow-hidden border border-holo-accent/30 sm:h-14 sm:w-14">
+        <div className="card flex h-9 w-9 items-center justify-center overflow-hidden border border-holo-accent/30 sm:h-12 sm:w-12">
           {talent?.avatarUrl ? (
             <img
               src={talent.avatarUrl}
@@ -96,18 +96,21 @@ export function GuessRow({
         </div>
       </div>
       <div role="cell" style={cellStyle(0)}>
-        <AttributePill cell={diff.group} />
+        <AttributePill cell={diff.branch} />
       </div>
       <div role="cell" style={cellStyle(1)}>
-        <AttributePill cell={diff.penlightColor} />
+        <AttributePill cell={diff.group} />
       </div>
       <div role="cell" style={cellStyle(2)}>
-        <AttributePill cell={diff.archetype} />
+        <AttributePill cell={diff.penlightColor} />
       </div>
       <div role="cell" style={cellStyle(3)}>
-        <AttributePill cell={{ ...diff.height, value: BUCKET_LABEL[diff.height.value] }} />
+        <AttributePill cell={diff.archetype} />
       </div>
       <div role="cell" style={cellStyle(4)}>
+        <AttributePill cell={{ ...diff.height, value: BUCKET_LABEL[diff.height.value] }} />
+      </div>
+      <div role="cell" style={cellStyle(5)}>
         <AttributePill cell={{ ...diff.birthMonth, value: MONTH_ABBR[diff.birthMonth.value] }} />
       </div>
     </div>

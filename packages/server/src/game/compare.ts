@@ -124,6 +124,7 @@ function birthMonthCell(guess: Month, target: Month): AttrCell<Month> {
 export function compareGuess(guess: Talent, target: Talent): GuessDiff {
   return {
     talentId: guess.id,
+    branch: exactCell<Branch>(guess.branch, guess.branch === target.branch),
     group: groupCell(guess, target),
     penlightColor: penlightColorCell(guess.penlightColor, target.penlightColor),
     archetype: multiCell(guess.archetype, target.archetype),

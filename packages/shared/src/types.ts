@@ -67,13 +67,14 @@ export interface AttrCell<V> {
 
 export interface GuessDiff {
   talentId: string;
-  // Combined "branch + generation" column. The displayed value is the
-  // formatted string ("JP Gen 1", "EN Gen 1 (Myth)", "JP Gen 1 / GAMERS"
-  // for multi-group talents). State semantics:
-  //   - "equal":   both branch AND generation match (any-of-array for
-  //                multi-group talents like Fubuki).
-  //   - "partial": exactly one of branch / generation matches.
-  //   - "wrong":   neither matches.
+  // Branch (JP / EN / ID / DEV_IS / Stars). Binary equal/wrong.
+  branch: AttrCell<Branch>;
+  // Generation column (legacy field name "group" preserved for
+  // backwards compatibility with stored rows). Value is the gen
+  // label only — e.g. "Gen 2", "Gen 6 (holoX)", or "Gen 1 / GAMERS"
+  // for multi-gen talents like Fubuki. Binary equal/wrong: matches
+  // by displayed gen NUMBER across branches (Aqua's "Gen 2" matches
+  // Fauna's "Gen 2 (Promise)").
   group: AttrCell<string>;
   penlightColor: AttrCell<string>;
   archetype: AttrCell<string>;
@@ -84,6 +85,7 @@ export interface GuessDiff {
 // Column order for board rows derived from a GuessDiff. Defined as a shared
 // constant so both client and server agree on the order of cell states.
 export const BOARD_COLUMNS: ReadonlyArray<keyof Omit<GuessDiff, "talentId">> = [
+  "branch",
   "group",
   "penlightColor",
   "archetype",
@@ -143,7 +145,7 @@ export interface PlayerSnapshot {
   avatarUrl: string | null;
   guessesUsed: number;
   status: GameStatus;
-  // Each row is a 5-tuple of CellStates (one per BOARD_COLUMNS entry).
+  // Each row is a 6-tuple of CellStates (one per BOARD_COLUMNS entry).
   // Length equals guessesUsed; older snapshots from completed players are
   // loaded from the DB on socket connect. We intentionally do NOT broadcast
   // the full GuessDiff (with talent ids + attribute values) — only cell

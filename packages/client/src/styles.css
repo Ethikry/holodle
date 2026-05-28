@@ -285,11 +285,13 @@ html.theme-irys {
 
 /* ─── Decorative keyframes ─────────────────────────────────────────── */
 
-/* Skeleton-loader shimmer used by LoadingScreen: a bright highlight
-   band sweeps across the wordmark via background-position animation. */
+/* Skeleton-loader shimmer used by LoadingScreen. The highlight band
+   sweeps right across the wordmark, then sweeps back left — a single
+   keyframe encodes both halves so a plain `linear infinite` produces
+   the ping-pong. */
 @keyframes shimmer {
-  from { background-position: 0% 50%; }
-  to   { background-position: 200% 50%; }
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 200% 50%; }
 }
 
 /* Header wordmark breathing: the background-clip-text gradient stops

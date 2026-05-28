@@ -67,8 +67,9 @@ export function HelpModal(): JSX.Element | null {
           </button>
         </div>
         <p className="mt-3">
-          Guess today's Hololive talent in six tries. After each guess each attribute
-          turns:
+          Guess today's Hololive talent in six tries. Each guess grades
+          six attributes — Branch, Generation, Penlight, Archetype,
+          Height, and Birth Month — and every cell lands as either:
         </p>
         <ul className="mt-2 space-y-2">
           <li className="flex items-center gap-2">
@@ -76,15 +77,19 @@ export function HelpModal(): JSX.Element | null {
             <span>Exact match.</span>
           </li>
           <li className="flex items-center gap-2">
-            <span className="cell-partial w-24 shrink-0">Yellow</span>
-            <span>Group only: branch or generation matches, but not both.</span>
-          </li>
-          <li className="flex items-center gap-2">
             <span className="cell-wrong w-24 shrink-0">Red</span>
             <span>No match.</span>
           </li>
         </ul>
         <p className="mt-3 text-xs text-holo-muted">
+          <span className="font-semibold">Generation</span> matches across
+          branches — Aqua's <span className="font-semibold">Gen 2</span>
+          {" "}matches Fauna's <span className="font-semibold">Gen 2
+          (Promise)</span>. <span className="font-semibold">Archetype</span>
+          {" "}counts as a match if any of the talent's archetypes overlap
+          (Nerissa's "Bird / Demon" matches both Bird and Demon guesses).
+        </p>
+        <p className="mt-2 text-xs text-holo-muted">
           A new puzzle drops at midnight in your timezone. Streaks roll
           over with your local day.
         </p>
