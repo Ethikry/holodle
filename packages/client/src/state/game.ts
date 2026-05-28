@@ -44,6 +44,10 @@ interface GameState {
   // transitions the user to a terminal status (won/lost) within this
   // session; manually re-openable via the "View recap" button.
   recapOpen: boolean;
+  // First-launch / replayable welcome screen. Initialized true on first
+  // ever launch (when localStorage `holodle-welcomed` is unset); user
+  // can replay it any time via a button in the Help modal.
+  welcomeOpen: boolean;
   loading: boolean;
   error: string | null;
 }
@@ -65,6 +69,7 @@ interface GameActions {
   removePlayer: (userId: string) => void;
   setHelpOpen: (open: boolean) => void;
   setRecapOpen: (open: boolean) => void;
+  setWelcomeOpen: (open: boolean) => void;
   setPrefs: (prefs: UserPrefs) => void;
   setLoading: (loading: boolean) => void;
   setError: (err: string | null) => void;
@@ -90,6 +95,7 @@ export const useGame = create<GameState & GameActions>((set) => ({
 
   helpOpen: false,
   recapOpen: false,
+  welcomeOpen: false,
   // Start as `true` so the first paint shows the LoadingScreen rather than
   // a half-populated UI. The App.tsx bootstrap effect flips this to false
   // once talents + session + daily + stats + socket are all wired up.
@@ -166,6 +172,7 @@ export const useGame = create<GameState & GameActions>((set) => ({
     }),
   setHelpOpen: (helpOpen) => set({ helpOpen }),
   setRecapOpen: (recapOpen) => set({ recapOpen }),
+  setWelcomeOpen: (welcomeOpen) => set({ welcomeOpen }),
   setPrefs: (prefs) => set({ prefs }),
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),

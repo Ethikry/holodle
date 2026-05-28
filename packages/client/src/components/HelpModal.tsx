@@ -4,7 +4,7 @@ import { useGame } from "../state/game.js";
 import { THEMES, applyTheme } from "../themes.js";
 
 export function HelpModal(): JSX.Element | null {
-  const { helpOpen, setHelpOpen, prefs, setPrefs, accessToken } = useGame();
+  const { helpOpen, setHelpOpen, setWelcomeOpen, prefs, setPrefs, accessToken } = useGame();
   // Local in-flight state so we can disable inputs while a PATCH is on
   // the wire without bouncing the whole prefs object.
   const [saving, setSaving] = useState(false);
@@ -159,6 +159,24 @@ export function HelpModal(): JSX.Element | null {
         {saveError && (
           <p className="mt-2 text-xs text-holo-bad">Couldn't save: {saveError}</p>
         )}
+
+        {/* Replay the first-launch welcome on demand. Closes the help
+            modal so the welcome overlay paints on top. Does NOT clear
+            `holodle-welcomed` — that flag tracks "has the user ever
+            dismissed it before" and we don't want re-opening it via
+            this button to re-trigger the auto-popup on every reload. */}
+        <div className="mt-4 border-t border-holo-muted/15 pt-3 text-center">
+          <button
+            type="button"
+            onClick={() => {
+              setHelpOpen(false);
+              setWelcomeOpen(true);
+            }}
+            className="text-xs font-semibold text-holo-accent underline-offset-2 hover:underline"
+          >
+            Replay welcome
+          </button>
+        </div>
       </div>
     </div>
   );

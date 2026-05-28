@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { MAX_GUESSES } from "@holodle/shared";
 import { getDevSession, getDiscordSession, isEmbeddedInDiscord } from "./sdk/discord.js";
 import {
@@ -26,9 +26,10 @@ import { LoadingScreen } from "./components/LoadingScreen.js";
 import { RecapScreen } from "./components/RecapScreen.js";
 import { WelcomeOverlay } from "./components/WelcomeOverlay.js";
 
-// One-time first-launch flag. Read once at mount; the overlay clears
-// it on dismiss. Bracketed in a try/catch because localStorage can
-// throw in privacy-mode iframes.
+// Read the first-launch flag from localStorage on App mount. Bracketed
+// in a try/catch because localStorage can throw in privacy-mode
+// iframes. Returns true iff the user has previously dismissed the
+// welcome overlay — so brand-new visitors get welcomeOpen = true.
 function readWelcomed(): boolean {
   try {
     return localStorage.getItem("holodle-welcomed") === "1";
@@ -70,11 +71,16 @@ export function App(): JSX.Element {
     removePlayer,
     setError,
     setLoading,
+    setWelcomeOpen,
   } = useGame();
 
-  // Show the welcome overlay on first ever launch. Initialized from
-  // localStorage so a reload after dismissal doesn't re-pop it.
-  const [showWelcome, setShowWelcome] = useState<boolean>(() => !readWelcomed());
+  // Flip the welcome overlay on for first-ever launches. After this,
+  // the overlay is controlled by Zustand (so the Help modal can
+  // re-open it from anywhere in the tree). Fires once at mount.
+  useEffect(() => {
+    if (!readWelcomed()) setWelcomeOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Bootstrap: load the public talent catalog first (no auth required), then
   // try to establish a Discord session. The catalog load is independent so a
@@ -225,6 +231,7 @@ export function App(): JSX.Element {
         <StatusBanner />
         <StatsRow />
         <ResultPanel />
+        <GuessGrid />
         {emptyCatalog ? (
           <div className="mx-4 my-6 rounded-[1.5rem] border border-dashed border-holo-muted/40 p-6 text-center text-sm text-holo-muted">
             No talents loaded yet. Edit <code>talent_data.json</code> at the repo root to add some.
@@ -232,7 +239,6 @@ export function App(): JSX.Element {
         ) : (
           <TalentAutocomplete onSubmit={handleGuess} disabled={inputDisabled} />
         )}
-        <GuessGrid />
         {error && (
           <div className="mx-4 my-4 whitespace-pre-line rounded-xl border border-holo-bad/40 bg-holo-badBg/40 p-3 text-sm text-holo-bad">
             {error}
@@ -244,7 +250,7 @@ export function App(): JSX.Element {
         <HelpModal />
       </main>
       <RecapScreen />
-      {showWelcome && <WelcomeOverlay onDismiss={() => setShowWelcome(false)} />}
+      <WelcomeOverlay />
     </div>
   );
 }
