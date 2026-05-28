@@ -131,6 +131,23 @@ export interface UserStats {
   winRate: number; // 0..1
 }
 
+// Admin-only aggregated statistics across all users.
+export interface AdminStats {
+  generatedAt: number; // unix timestamp in seconds
+  totalGames: number;
+  totalWins: number;
+  totalLosses: number;
+  winRate: number; // 0..1
+  averageGuessesPerWin: number;
+  averageGuessesPerLoss: number;
+  averageGuessesPerGame: number;
+  guessDistribution: Record<number, number>; // 1-6 → count of games
+  talentGuessFrequency: Array<{ talentId: string; count: number }>;
+  dailyPickFrequency: Array<{ talentId: string; count: number }>;
+  attributeAccuracy: Record<string, number>; // "branch" | "generation" | "archetype" | "height" | "birthMonth" → 0..1
+  activityByDate: Array<{ date: string; games: number }>;
+}
+
 // A single guess row reduced to its 5 cell-state colors (one per
 // BOARD_COLUMNS entry). Values are stripped so we never leak what talent
 // another player guessed — only whether each attribute matched. Used by

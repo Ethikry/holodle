@@ -41,6 +41,9 @@ const EnvSchema = z.object({
   CORS_ORIGINS: z.string().default("http://localhost:5173"),
   // Where the built client lives in production (Docker copies it here).
   CLIENT_DIST: z.string().default("../client/dist"),
+  // Admin token for accessing the /api/admin/stats endpoint. Optional;
+  // if not set, the endpoint is disabled.
+  ADMIN_TOKEN: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

@@ -626,3 +626,122 @@ export function settledRowsBetween(startSec: number, endSec: number): SettledRow
     };
   });
 }
+
+// ─── Admin stats aggregation ──────────────────────────────────────────
+//
+// Functions for querying global usage statistics across all users.
+
+// Returns all settled games (won or lost) with parsed guesses.
+export interface SettledGameRow {
+  userId: string;
+  dayIndex: number;
+  guesses: GuessDiff[];
+  status: "won" | "lost";
+  settledAt: number | null;
+}
+
+export function getAllSettledGames(): SettledGameRow[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT user_id, day_index, guesses_json, status, settled_at
+         FROM user_day
+        WHERE status IN ('won','lost')`,
+    )
+    .all() as Array<{
+    user_id: string;
+    day_index: number;
+    guesses_json: string;
+    status: "won" | "lost";
+    settled_at: number | null;
+  }>;
+  return rows.map((r) => ({
+    userId: r.user_id,
+    dayIndex: r.day_index,
+    guesses: JSON.parse(r.guesses_json) as GuessDiff[],
+    status: r.status,
+    settledAt: r.settled_at,
+  }));
+}
+
+// Count how many times each talent was guessed across all games.
+export function getTalentGuessFrequency(): Map<string, number> {
+  const games = getAllSettledGames();
+  const freq = new Map<string, number>();
+  for (const game of games) {
+    for (const guess of game.guesses) {
+      freq.set(guess.talentId, (freq.get(guess.talentId) ?? 0) + 1);
+    }
+  }
+  return freq;
+}
+
+// Returns histogram of games by guess count (1-6).
+export function getGuessDistribution(): Record<number, number> {
+  const dist: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+  const games = getAllSettledGames();
+  for (const game of games) {
+    const guessCount = Math.min(game.guesses.length, 6) || 1;
+    dist[guessCount as keyof typeof dist]++;
+  }
+  return dist;
+}
+
+// Aggregate accuracy (% of "equal" state) for each attribute.
+export function getAttributeAccuracy(): Record<string, number> {
+  const attributes: Array<keyof Omit<GuessDiff, "talentId">> = [
+    "branch",
+    "group",
+    "penlightColor",
+    "archetype",
+    "height",
+    "birthMonth",
+  ];
+  const accuracy: Record<string, number> = {};
+
+  const games = getAllSettledGames();
+  const counts = new Map<string, { correct: number; total: number }>();
+
+  for (const attr of attributes) {
+    counts.set(attr, { correct: 0, total: 0 });
+  }
+
+  for (const game of games) {
+    for (const guess of game.guesses) {
+      for (const attr of attributes) {
+        const cell = guess[attr];
+        if (cell) {
+          const key = String(attr);
+          const stat = counts.get(key)!;
+          stat.total++;
+          if (cell.state === "equal") {
+            stat.correct++;
+          }
+        }
+      }
+    }
+  }
+
+  for (const [attr, stat] of counts) {
+    accuracy[attr] = stat.total > 0 ? stat.correct / stat.total : 0;
+  }
+
+  return accuracy;
+}
+
+// Returns games per date (from settled_at timestamps).
+export function getActivityByDate(): Array<{ date: string; games: number }> {
+  const games = getAllSettledGames();
+  const dateMap = new Map<string, number>();
+
+  for (const game of games) {
+    if (!game.settledAt) continue;
+    // Convert unix timestamp to YYYY-MM-DD
+    const date = new Date(game.settledAt * 1000).toISOString().split("T")[0];
+    dateMap.set(date, (dateMap.get(date) ?? 0) + 1);
+  }
+
+  // Sort by date ascending
+  return Array.from(dateMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, games]) => ({ date, games }));
+}
