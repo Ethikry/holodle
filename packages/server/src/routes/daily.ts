@@ -61,6 +61,16 @@ export async function dailyRoutes(app: FastifyInstance): Promise<void> {
       status: row.status,
       maxGuesses: MAX_GUESSES,
     };
+    // Settled days expose the answer so the auto-recap on relaunch
+    // can render the talent name + avatar. In-progress days
+    // intentionally don't.
+    if (row.status !== "playing") {
+      state.answer = {
+        id: answer.id,
+        name: answer.name,
+        avatarUrl: answer.avatarUrl,
+      };
+    }
     return state;
   });
 }

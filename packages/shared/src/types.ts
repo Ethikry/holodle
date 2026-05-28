@@ -106,6 +106,11 @@ export interface DailyState {
   history: GuessDiff[];
   status: GameStatus;
   maxGuesses: number; // always 6
+  // On terminal status the server reveals the answer so a returning
+  // player who's already finished today's puzzle can see the talent +
+  // avatar on the auto-opened recap overlay. Only present when
+  // status !== "playing"; in-progress days do NOT leak the answer.
+  answer?: TalentSummary;
 }
 
 export interface GuessResponse {

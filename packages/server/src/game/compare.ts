@@ -48,18 +48,17 @@ function penlightColorCell(
 }
 
 // Generation display labels. Maps the canonical generation string stored
-// in talent_data.json to the formatted label shown to users. Un-numbered
-// gens get a synthetic gen number for parity with the JP Gen 0..Gen 5
-// scheme; the original group name lives in the parenthetical so a quick
-// "EN Gen 2 (Promise)" tells players exactly which cohort matched.
-// Council ⇒ Promise — Council members who stayed migrated to the Promise
-// rebrand after Sana's graduation, so we treat them as one cohort for
-// matching too (see GEN_NORMALIZE below).
+// in talent_data.json to the formatted label shown to users. Numbered
+// JP gens render as-is ("Gen 2"); un-numbered named cohorts render as
+// "Gen N (CohortName)" so the player sees both the gen number and the
+// branded label. Council/Promise both render as "Gen 2 (Promise)" —
+// they're the same cohort (Council members migrated to Promise).
 const GEN_DISPLAY: Record<string, string> = {
-  "holoX": "Gen 6 (holoX)",
+  holoX: "Gen 6 (holoX)",
   Myth: "Gen 1 (Myth)",
   Council: "Gen 2 (Promise)",
   Promise: "Gen 2 (Promise)",
+  "Project: HOPE": "Gen 2 (Project HOPE)",
   Advent: "Gen 3 (Advent)",
   Justice: "Gen 4 (Justice)",
   ReGLOSS: "Gen 1 (ReGLOSS)",
@@ -70,18 +69,16 @@ function displayGen(gen: string): string {
   return GEN_DISPLAY[gen] ?? gen;
 }
 
-// For matching purposes, every named cohort normalises to its numeric
-// gen tag. That makes the group cell match by what the player SEES
-// (e.g. "Gen 2 (Promise)" on Fauna ↔ "Gen 2" on Aqua) instead of by
-// the internal cohort label. Cross-branch comparisons therefore yield
-// partial-match (yellow) whenever the displayed gen number agrees,
-// even when one talent's gen is a numbered string and the other's is
-// a named cohort. Council ⇒ Gen 2 (same EN cohort as Promise) is the
-// historical special case that motivated this map.
+// Generation normalisation for matching. Every named cohort collapses
+// to its numeric gen tag so cross-branch comparisons agree by what
+// the player SEES on the chip (e.g. Aqua's "Gen 2" matches Fauna's
+// "Gen 2 (Promise)"). GAMERS stays unmapped — it's the lone cohort
+// without a gen number, so it only matches itself.
 const GEN_NORMALIZE: Record<string, string> = {
   Myth: "Gen 1",
   Council: "Gen 2",
   Promise: "Gen 2",
+  "Project: HOPE": "Gen 2",
   Advent: "Gen 3",
   Justice: "Gen 4",
   ReGLOSS: "Gen 1",
@@ -93,37 +90,30 @@ function normalizeGen(gen: string): string {
   return GEN_NORMALIZE[gen] ?? gen;
 }
 
-// Formatted combined value rendered across TWO lines: branch on the
-// first line, generation(s) on the second. Returning a "\n"-separated
-// string lets the rendering layer (a `.cell` with `white-space:
-// pre-line`) split the visual without the React layer needing to know
-// about the structure. Multi-group talents (e.g. Fubuki: JP / [Gen 1,
-// GAMERS]) join their gen labels with " / " inside line 2 — branch
-// stays on its own line so the partial-match state can highlight either
-// half of the value independently. Examples:
-//   "JP\nGen 1"
-//   "EN\nGen 1 (Myth)"
-//   "JP\nGen 1 / GAMERS"
-export function displayGroup(branch: Branch, generation: string | string[]): string {
-  const gens = asList(generation).map(displayGen);
-  return `${branch}\n${gens.join(" / ")}`;
+// Cell value for the Generation column. Branch is intentionally NOT
+// included — generation matches across branches now, so showing the
+// branch alongside would suggest it's part of the comparison when it
+// isn't. Multi-group talents (e.g. Fubuki: ["Gen 1", "GAMERS"]) join
+// their gen labels with " / ".
+//
+// The exported name stays `displayGroup` so callers don't need to
+// rename, but the Branch parameter is now ignored.
+export function displayGroup(_branch: Branch, generation: string | string[]): string {
+  return asList(generation).map(displayGen).join(" / ");
 }
 
-// Combined branch + generation cell. Three states:
-//   - "equal":   branch AND any generation match
-//   - "partial": exactly one of (branch, generation) matches
-//   - "wrong":   neither matches
+// Generation cell. Two states only:
+//   - "equal":  any (normalised) generation overlaps the target's
+//   - "wrong":  no overlap
+// Branch is ignored — Aqua (JP Gen 2) matches Fauna (EN Promise/Gen 2).
 function groupCell(guess: Talent, target: Talent): AttrCell<string> {
-  const branchMatch = guess.branch === target.branch;
   const guessGens = asList(guess.generation).map(normalizeGen);
   const targetGens = new Set(asList(target.generation).map(normalizeGen));
-  const genMatch = guessGens.some((g) => targetGens.has(g));
-  const matches = (branchMatch ? 1 : 0) + (genMatch ? 1 : 0);
-  let state: "equal" | "partial" | "wrong";
-  if (matches === 2) state = "equal";
-  else if (matches === 1) state = "partial";
-  else state = "wrong";
-  return { value: displayGroup(guess.branch, guess.generation), state };
+  const match = guessGens.some((g) => targetGens.has(g));
+  return {
+    value: displayGroup(guess.branch, guess.generation),
+    state: match ? "equal" : "wrong",
+  };
 }
 
 function birthMonthCell(guess: Month, target: Month): AttrCell<Month> {

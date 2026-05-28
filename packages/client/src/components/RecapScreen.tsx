@@ -164,7 +164,12 @@ export function RecapScreen(): JSX.Element | null {
       aria-label="Daily recap"
       className="fixed inset-0 z-40 overflow-y-auto bg-holo-bg/95 backdrop-blur-sm animate-overlayEnter"
     >
-      <div className="mx-auto flex min-h-full max-w-3xl flex-col px-4 py-4">
+      {/* pt-14 matches Header.tsx — Discord mobile overlays ~48px of
+          its own chrome at the top of the iframe, so anything in the
+          first ~48px (notably the "Back to puzzle" button) gets
+          clipped. Desktop gets the smaller pt-4 since there's no
+          overlay there. */}
+      <div className="mx-auto flex min-h-full max-w-3xl flex-col px-4 pt-14 pb-4 sm:pt-4">
         <div className="flex justify-end">
           <button
             type="button"

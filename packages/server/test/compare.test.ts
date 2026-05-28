@@ -34,31 +34,30 @@ describe("heightBucket", () => {
 });
 
 describe("displayGroup label formatting", () => {
-  // Branch goes on line 1, generation on line 2 (separated by "\n"). The
-  // cell CSS uses `white-space: pre-line` so the literal newline becomes
-  // a hard break in the rendered chip — this makes partial-match state
-  // (only branch OR only gen matches) visually obvious.
-  it("formats numbered gens as 'BRANCH\\nGen N'", () => {
-    expect(displayGroup("JP", "Gen 0")).toBe("JP\nGen 0");
-    expect(displayGroup("JP", "Gen 5")).toBe("JP\nGen 5");
-    expect(displayGroup("ID", "Gen 3")).toBe("ID\nGen 3");
+  // Cell shows the generation only (branch is no longer part of the
+  // comparison or the displayed value). Numbered gens render as-is;
+  // named cohorts render as "Gen N (CohortName)".
+  it("formats numbered gens as 'Gen N'", () => {
+    expect(displayGroup("JP", "Gen 0")).toBe("Gen 0");
+    expect(displayGroup("JP", "Gen 5")).toBe("Gen 5");
+    expect(displayGroup("ID", "Gen 3")).toBe("Gen 3");
   });
-  it("synthesizes numbered gens for un-numbered cohorts with the original name in parens", () => {
-    expect(displayGroup("JP", "holoX")).toBe("JP\nGen 6 (holoX)");
-    expect(displayGroup("EN", "Myth")).toBe("EN\nGen 1 (Myth)");
-    expect(displayGroup("EN", "Promise")).toBe("EN\nGen 2 (Promise)");
-    expect(displayGroup("EN", "Council")).toBe("EN\nGen 2 (Promise)");
-    expect(displayGroup("EN", "Advent")).toBe("EN\nGen 3 (Advent)");
-    expect(displayGroup("EN", "Justice")).toBe("EN\nGen 4 (Justice)");
-    expect(displayGroup("DEV_IS", "ReGLOSS")).toBe("DEV_IS\nGen 1 (ReGLOSS)");
-    expect(displayGroup("DEV_IS", "FLOW GLOW")).toBe("DEV_IS\nGen 2 (FLOWGLOW)");
+  it("synthesizes numbered labels for named cohorts", () => {
+    expect(displayGroup("JP", "holoX")).toBe("Gen 6 (holoX)");
+    expect(displayGroup("EN", "Myth")).toBe("Gen 1 (Myth)");
+    expect(displayGroup("EN", "Promise")).toBe("Gen 2 (Promise)");
+    expect(displayGroup("EN", "Council")).toBe("Gen 2 (Promise)");
+    expect(displayGroup("EN", "Project: HOPE")).toBe("Gen 2 (Project HOPE)");
+    expect(displayGroup("EN", "Advent")).toBe("Gen 3 (Advent)");
+    expect(displayGroup("EN", "Justice")).toBe("Gen 4 (Justice)");
+    expect(displayGroup("DEV_IS", "ReGLOSS")).toBe("Gen 1 (ReGLOSS)");
+    expect(displayGroup("DEV_IS", "FLOW GLOW")).toBe("Gen 2 (FLOWGLOW)");
   });
-  it("falls through unknown gens unchanged (no mapping required for GAMERS, Project: HOPE)", () => {
-    expect(displayGroup("JP", "GAMERS")).toBe("JP\nGAMERS");
-    expect(displayGroup("EN", "Project: HOPE")).toBe("EN\nProject: HOPE");
+  it("falls through unknown gens unchanged (GAMERS has no gen number)", () => {
+    expect(displayGroup("JP", "GAMERS")).toBe("GAMERS");
   });
-  it("joins multi-group talents with ' / ' inside the gen line (branch alone on line 1)", () => {
-    expect(displayGroup("JP", ["Gen 1", "GAMERS"])).toBe("JP\nGen 1 / GAMERS");
+  it("joins multi-group talents with ' / '", () => {
+    expect(displayGroup("JP", ["Gen 1", "GAMERS"])).toBe("Gen 1 / GAMERS");
   });
 });
 
@@ -101,68 +100,65 @@ describe("compareGuess", () => {
     expect(compareGuess(t({ birthMonth: "December" }), target).birthMonth.state).toBe("wrong");
   });
 
-  it("group: equal when both branch AND generation match", () => {
+  // Generation cell is now BINARY (equal/wrong only). It matches by
+  // gen number across branches — Aqua (JP Gen 2) and Fauna (EN Gen 2
+  // (Promise)) both display "Gen 2" so they match.
+
+  it("group: equal when the gen number matches (same branch)", () => {
     const target = t({ branch: "JP", generation: "Gen 3" });
     expect(compareGuess(t({ branch: "JP", generation: "Gen 3" }), target).group.state).toBe("equal");
   });
 
-  it("group: partial when only branch matches", () => {
-    const target = t({ branch: "JP", generation: "Gen 3" });
-    const diff = compareGuess(t({ branch: "JP", generation: "Gen 4" }), target);
-    expect(diff.group.state).toBe("partial");
-    expect(diff.group.value).toBe("JP\nGen 4");
+  it("group: equal across branches when the gen NUMBER agrees", () => {
+    // Aqua (JP Gen 2) vs Fauna (EN Promise → Gen 2): both Gen 2 → equal.
+    const aqua = t({ branch: "JP", generation: "Gen 2" });
+    const fauna = t({ branch: "EN", generation: "Promise" });
+    expect(compareGuess(aqua, fauna).group.state).toBe("equal");
+    expect(compareGuess(fauna, aqua).group.state).toBe("equal");
+
+    // Calliope (EN Myth → Gen 1) and Aki (JP Gen 1) — both Gen 1.
+    const calli = t({ branch: "EN", generation: "Myth" });
+    const aki = t({ branch: "JP", generation: "Gen 1" });
+    expect(compareGuess(calli, aki).group.state).toBe("equal");
+    expect(compareGuess(aki, calli).group.state).toBe("equal");
   });
 
-  it("group: partial when only generation matches across branches", () => {
-    // Both ID and JP have a "Gen 1" — the gen string overlaps but branch differs.
-    const target = t({ branch: "JP", generation: "Gen 1" });
-    const diff = compareGuess(t({ branch: "ID", generation: "Gen 1" }), target);
-    expect(diff.group.state).toBe("partial");
-    expect(diff.group.value).toBe("ID\nGen 1");
-  });
-
-  it("group: wrong when neither matches", () => {
+  it("group: wrong when gen numbers don't agree, regardless of branch", () => {
     const target = t({ branch: "JP", generation: "Gen 3" });
+    expect(
+      compareGuess(t({ branch: "JP", generation: "Gen 4" }), target).group.state,
+    ).toBe("wrong");
     expect(
       compareGuess(t({ branch: "EN", generation: "Myth" }), target).group.state,
     ).toBe("wrong");
   });
 
-  it("group: multi-group talents like Fubuki (JP Gen 1 + GAMERS) match any overlap", () => {
+  it("group: multi-group talents (Fubuki: Gen 1 + GAMERS) match on any overlap", () => {
     const fubuki = t({ branch: "JP", generation: ["Gen 1", "GAMERS"] });
-    // Guessing Aki (JP Gen 1) — branch matches AND Gen 1 overlap → equal.
     const aki = t({ branch: "JP", generation: "Gen 1" });
     expect(compareGuess(aki, fubuki).group.state).toBe("equal");
-    // Guessing Mio (JP GAMERS) — branch matches AND GAMERS overlap → equal.
     const mio = t({ branch: "JP", generation: "GAMERS" });
     expect(compareGuess(mio, fubuki).group.state).toBe("equal");
-    // Reverse direction (guessing Fubuki against an Aki target) — same.
     expect(compareGuess(fubuki, aki).group.state).toBe("equal");
-    expect(compareGuess(fubuki, aki).group.value).toBe("JP\nGen 1 / GAMERS");
+    expect(compareGuess(fubuki, aki).group.value).toBe("Gen 1 / GAMERS");
   });
 
-  it("group: numbered gens partial-match across branches when the gen NUMBER agrees", () => {
-    // The displayed label is what matters — both Aqua (JP Gen 2) and
-    // Fauna (EN Promise → \"Gen 2 (Promise)\") read as Gen 2 to players,
-    // so the group cell partial-matches on gen even though the branches
-    // and cohort labels differ.
-    const aqua = t({ branch: "JP", generation: "Gen 2" });
+  it("group: Project HOPE normalises to Gen 2 (matches Promise/Council)", () => {
+    const hopeful = t({ branch: "EN", generation: "Project: HOPE" });
     const fauna = t({ branch: "EN", generation: "Promise" });
-    expect(compareGuess(aqua, fauna).group.state).toBe("partial");
-    expect(compareGuess(fauna, aqua).group.state).toBe("partial");
-
-    // Same idea: Calliope (EN Myth → Gen 1) partial-matches Aki (JP Gen 1).
-    const calli = t({ branch: "EN", generation: "Myth" });
-    const aki = t({ branch: "JP", generation: "Gen 1" });
-    expect(compareGuess(calli, aki).group.state).toBe("partial");
-    expect(compareGuess(aki, calli).group.state).toBe("partial");
-
-    // And different gen numbers stay wrong even across branches.
-    const advent = t({ branch: "EN", generation: "Advent" });
-    expect(compareGuess(advent, aki).group.state).toBe("wrong");
+    expect(compareGuess(hopeful, fauna).group.state).toBe("equal");
+    expect(compareGuess(hopeful, fauna).group.value).toBe("Gen 2 (Project HOPE)");
   });
 
-  it("group: Council ↔ Promise are treated as the same cohort", () => {
+  it("group: GAMERS only matches itself (no gen number, stays unmapped)", () => {
+    const mio = t({ branch: "JP", generation: "GAMERS" });
+    const aki = t({ branch: "JP", generation: "Gen 1" });
+    expect(compareGuess(mio, aki).group.state).toBe("wrong");
+    const fubuki = t({ branch: "JP", generation: ["Gen 1", "GAMERS"] });
+    expect(compareGuess(mio, fubuki).group.state).toBe("equal");
+  });
+
+  it("group: Council ↔ Promise are still the same cohort", () => {
     const sana = t({ branch: "EN", generation: "Council" });
     const mumei = t({ branch: "EN", generation: "Promise" });
     expect(compareGuess(sana, mumei).group.state).toBe("equal");
