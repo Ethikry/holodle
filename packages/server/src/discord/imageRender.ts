@@ -320,8 +320,9 @@ interface CellRender {
 }
 
 function cellRenderAt(diff: GuessDiff | undefined, col: number): CellRender {
-  if (!diff) return { fill: CELL_EMPTY };
+  if (!diff) return { fill: CELL_USED };
   const cells = [
+    diff.branch,
     diff.group,
     diff.penlightColor,
     diff.archetype,
