@@ -21,6 +21,10 @@ import {
   puzzleIdFor,
   safeTz,
 } from "../game/dailyPicker.js";
+import { updateProgress } from "../game/instance.js";
+import { getRegistry } from "../game/talents.js";
+import { recordParticipantProgress } from "../game/channelState.js";
+import { broadcastProgress } from "../ws/socket.js";
 
 // DB-backed deps for the weighted picker. Identical shape to the
 // version in routes/daily.ts; both routes target the same log so the
@@ -32,10 +36,6 @@ const pickLogDeps = {
   getCounts: getPickLogCounts,
   insert: insertPickLog,
 };
-import { updateProgress } from "../game/instance.js";
-import { getRegistry } from "../game/talents.js";
-import { recordParticipantProgress } from "../game/channelState.js";
-import { broadcastProgress } from "../ws/socket.js";
 
 const BodySchema = z.object({
   talentId: z.string().min(1),

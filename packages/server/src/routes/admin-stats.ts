@@ -7,6 +7,7 @@ import {
   getAttributeAccuracy,
   getGuessDistribution,
   getTalentGuessFrequency,
+  getPickLogCounts,
 } from "../db/client.js";
 import { getRegistry } from "../game/talents.js";
 
@@ -56,49 +57,7 @@ export async function adminStatsRoutes(app: FastifyInstance): Promise<void> {
     // Get statistics
     const guessDistribution = getGuessDistribution();
     const talentGuessFreq = getTalentGuessFrequency();
-    const registry = getRegistry();
-    const dailyPickLog = new Map(
-      Array.from(
-        new Map<string, number>(
-          registry.all.map((t) => [
-            t.id,
-            Array.from(
-              games.reduce((acc, g) => {
-                acc.add(g.dayIndex);
-                return acc;
-              }, new Set<number>()),
-            ).filter((dayIdx) => {
-              // Rough heuristic: count how many times this talent appears
-              // in games for that day. This is approximate since we don't have
-              // the daily_pick_log data parsed here.
-              return true;
-            }).length,
-          ]),
-        ),
-        (m) => m.sort((a, b) => b[1] - a[1]),
-      ),
-    );
-
-    // Get more accurate daily pick frequencies from the pick log
-    const dailyPickCounts = new Map<string, number>();
-    const rows = (
-      Array.from(
-        new Map<string, number>(
-          games
-            .filter((g) => g.status === "won")
-            .map((g) => [
-              g.dayIndex,
-              g.guesses[0]?.talentId || "",
-            ])
-            .filter((e) => e[1]),
-        ),
-      ) as Array<[number, string]>
-    );
-
-    // For simplicity, count talent IDs from successful game days
-    for (const [, talentId] of rows) {
-      dailyPickCounts.set(talentId, (dailyPickCounts.get(talentId) ?? 0) + 1);
-    }
+    const dailyPickCounts = getPickLogCounts();
 
     const talentGuessFrequencyArray = Array.from(talentGuessFreq.entries())
       .map(([talentId, count]) => ({ talentId, count }))

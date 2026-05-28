@@ -365,8 +365,8 @@ export interface UserPrefs {
   theme: string;
   // Has the user dismissed the first-launch welcome overlay?
   // Server-tracked rather than localStorage-tracked because Discord
-  // Activity iframes use partitioned storage and the localStorage flag
-  // wasn't persisting across launches.
+  // Activity iframes don't reliably share localStorage across
+  // launches (partitioned storage).
   welcomed: boolean;
 }
 
@@ -415,7 +415,7 @@ export function setUserPrefs(userId: string, prefs: UserPrefs): void {
 }
 
 // Returns the subset of `userIds` whose recap_ping_muted flag is set.
-// Used at recap-build time to decide which mentions should render as
+// Used by the recap-build time to decide which mentions should render as
 // plain text vs as `<@id>` chips. Empty input → empty set, no query.
 export function getMutedRecapUserIds(userIds: string[]): Set<string> {
   if (userIds.length === 0) return new Set();
@@ -681,7 +681,10 @@ export function getGuessDistribution(): Record<number, number> {
   const games = getAllSettledGames();
   for (const game of games) {
     const guessCount = Math.min(game.guesses.length, 6) || 1;
-    dist[guessCount as keyof typeof dist]++;
+    const current = dist[guessCount];
+    if (current !== undefined) {
+      dist[guessCount] = current + 1;
+    }
   }
   return dist;
 }
@@ -711,10 +714,12 @@ export function getAttributeAccuracy(): Record<string, number> {
         const cell = guess[attr];
         if (cell) {
           const key = String(attr);
-          const stat = counts.get(key)!;
-          stat.total++;
-          if (cell.state === "equal") {
-            stat.correct++;
+          const stat = counts.get(key);
+          if (stat) { // Check stat is defined to satisfy strict compilers
+            stat.total++;
+            if (cell.state === "equal") {
+              stat.correct++;
+            }
           }
         }
       }
@@ -737,7 +742,9 @@ export function getActivityByDate(): Array<{ date: string; games: number }> {
     if (!game.settledAt) continue;
     // Convert unix timestamp to YYYY-MM-DD
     const date = new Date(game.settledAt * 1000).toISOString().split("T")[0];
-    dateMap.set(date, (dateMap.get(date) ?? 0) + 1);
+    if (date) { // Check that date exists to satisfy strict 'noUncheckedIndexedAccess' compiler rule
+      dateMap.set(date, (dateMap.get(date) ?? 0) + 1);
+    }
   }
 
   // Sort by date ascending

@@ -111,12 +111,9 @@ export const useGame = create<GameState & GameActions>((set) => ({
       history: d.history,
       status: d.status,
       maxGuesses: d.maxGuesses,
-      // The server now includes `answer` on settled days so a returning
-      // player's auto-opened recap has the talent + avatar to render.
-      // For in-progress days `d.answer` is undefined; leave `answer`
-      // untouched so the live /api/guess path remains the source of
-      // truth for the live win/loss reveal.
-      ...(d.answer !== undefined ? { answer: d.answer } : {}),
+      // The server includes `answer` on settled days. For in-progress/new days, 
+      // explicitly reset it to null so yesterday's details don't leak.
+      answer: d.answer !== undefined ? d.answer : null,
     }),
   appendGuess: (diff, status, answer) =>
     set((s) => {

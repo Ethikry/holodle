@@ -14,9 +14,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const envPath = resolve(__dirname, "../../../.env");
 
 // Skip the .env load entirely under NODE_ENV=test so unit tests can set up
-// their own isolated env (e.g. unset DISCORD_CLIENT_SECRET to enable the
-// dev: token escape hatch).
-if (process.env.NODE_ENV !== "test" && existsSync(envPath)) {
+// their own isolated env. Also explicitly delete any ambient DISCORD_CLIENT_SECRET
+// from the local terminal environment so the dev: token escape hatch activates cleanly.
+if (process.env.NODE_ENV === "test") {
+  delete process.env.DISCORD_CLIENT_SECRET;
+} else if (existsSync(envPath)) {
   const loader = (process as unknown as { loadEnvFile?: (p: string) => void }).loadEnvFile;
   if (typeof loader === "function") {
     try {
