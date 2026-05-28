@@ -77,6 +77,35 @@ export default {
           "0%": { backgroundPosition: "0% 50%" },
           "100%": { backgroundPosition: "200% 50%" },
         },
+        // Per-cell victory pulse. Tracks --holo-ok so it glows whatever
+        // green the active theme uses. The whole row plays this with a
+        // 60ms-per-cell stagger AFTER cellPop completes, so the user
+        // sees the cells fill in, then a left→right sweep of glow.
+        winSweep: {
+          "0%, 100%": {
+            boxShadow: "0 0 0 0 rgb(var(--holo-ok) / 0)",
+            transform: "scale(1)",
+          },
+          "50%": {
+            boxShadow: "0 0 18px 4px rgb(var(--holo-ok) / 0.7)",
+            transform: "scale(1.06)",
+          },
+        },
+        // Single confetti piece: flies outward + downward while
+        // rotating, fading out at the end. The --cf-x / --cf-y CSS
+        // variables on each piece supply the per-piece direction so a
+        // burst of many pieces with different randomised values
+        // produces an explosion.
+        confettiBurst: {
+          "0%": {
+            transform: "translate(0, 0) rotate(0deg)",
+            opacity: "1",
+          },
+          "100%": {
+            transform: "translate(var(--cf-x), var(--cf-y)) rotate(720deg)",
+            opacity: "0",
+          },
+        },
       },
       animation: {
         cellPop: "cellPop 320ms cubic-bezier(.34,1.56,.64,1) both",
@@ -85,6 +114,8 @@ export default {
         tileEnter: "tileEnter 280ms ease-out both",
         pulseGlow: "pulseGlow 1200ms ease-in-out 1",
         shimmer: "shimmer 1.8s linear infinite",
+        winSweep: "winSweep 360ms ease-out both",
+        confettiBurst: "confettiBurst 1200ms cubic-bezier(.2,.6,.4,1) both",
       },
     },
   },

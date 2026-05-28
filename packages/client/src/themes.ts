@@ -51,7 +51,7 @@ export const THEMES: readonly Theme[] = [
     id: "kanade",
     label: "Cadence",
     attribution: "Otonose Kanade",
-    swatch: ["#fef0e8", "#ed6e83", "#daa23c"],
+    swatch: ["#fef0e8", "#daa23c", "#8ab464"],
   },
   {
     id: "su",

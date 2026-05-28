@@ -75,6 +75,11 @@ CREATE TABLE IF NOT EXISTS user_prefs (
   user_id          TEXT PRIMARY KEY,
   recap_ping_muted INTEGER NOT NULL DEFAULT 0,
   theme            TEXT NOT NULL DEFAULT 'sky',
+  -- Has the user dismissed the first-launch welcome overlay? Tracked
+  -- server-side because Discord Activity iframes don't share
+  -- localStorage across launches reliably — partitioned storage was
+  -- causing the welcome screen to pop every session.
+  welcomed         INTEGER NOT NULL DEFAULT 0,
   updated_at       INTEGER NOT NULL DEFAULT (strftime('%s','now'))
 );
 
@@ -166,5 +171,14 @@ export const ADDITIVE_MIGRATIONS: Array<{ table: string; column: string; ddl: st
     table: "user_prefs",
     column: "theme",
     ddl: "ALTER TABLE user_prefs ADD COLUMN theme TEXT NOT NULL DEFAULT 'sky'",
+  },
+  // First-launch welcome flag. localStorage proved unreliable inside
+  // Discord Activity iframes (the storage partition wasn't shared
+  // across launches, so the overlay popped every session). Tracking it
+  // server-side via /api/prefs fixes that.
+  {
+    table: "user_prefs",
+    column: "welcomed",
+    ddl: "ALTER TABLE user_prefs ADD COLUMN welcomed INTEGER NOT NULL DEFAULT 0",
   },
 ];

@@ -70,10 +70,23 @@ function displayGen(gen: string): string {
   return GEN_DISPLAY[gen] ?? gen;
 }
 
-// For matching, Council and Promise count as the same cohort. Anywhere
-// we compare generation values, normalize through this map first.
+// For matching purposes, every named cohort normalises to its numeric
+// gen tag. That makes the group cell match by what the player SEES
+// (e.g. "Gen 2 (Promise)" on Fauna ↔ "Gen 2" on Aqua) instead of by
+// the internal cohort label. Cross-branch comparisons therefore yield
+// partial-match (yellow) whenever the displayed gen number agrees,
+// even when one talent's gen is a numbered string and the other's is
+// a named cohort. Council ⇒ Gen 2 (same EN cohort as Promise) is the
+// historical special case that motivated this map.
 const GEN_NORMALIZE: Record<string, string> = {
-  Council: "Promise",
+  Myth: "Gen 1",
+  Council: "Gen 2",
+  Promise: "Gen 2",
+  Advent: "Gen 3",
+  Justice: "Gen 4",
+  ReGLOSS: "Gen 1",
+  "FLOW GLOW": "Gen 2",
+  holoX: "Gen 6",
 };
 
 function normalizeGen(gen: string): string {

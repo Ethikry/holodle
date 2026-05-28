@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import type { GuessDiff, Month, TalentSummary, HeightBucket } from "@holodle/shared";
+import { useGame } from "../state/game.js";
 import { AttributePill } from "./AttributePill.js";
 
 // Short bucket labels: the parenthetical range overflowed the column on
@@ -39,6 +40,9 @@ const MONTH_ABBR: Record<Month, string> = {
 // — gives the just-landed guess a tactile "grading" reveal. Older rows
 // render static.
 const CELL_STAGGER_MS = 90;
+// Sweep timing — see comment on `cellStyle` below.
+const SWEEP_START_MS = 820;
+const SWEEP_STAGGER_MS = 70;
 
 export function GuessRow({
   diff,
@@ -49,12 +53,29 @@ export function GuessRow({
   talents: TalentSummary[];
   isLatest?: boolean;
 }): JSX.Element {
+  const status = useGame((s) => s.status);
+  const winning = isLatest && status === "won";
   const talent = talents.find((t) => t.id === diff.talentId);
   // The avatar cell doesn't carry attribute info so it doesn't animate;
-  // the six attribute cells share one cellClass + per-column delay.
-  const cellClass = isLatest ? "animate-cellPop" : undefined;
-  const cellStyle = (col: number): CSSProperties | undefined =>
-    isLatest ? { animationDelay: `${col * CELL_STAGGER_MS}ms` } : undefined;
+  // the five attribute cells share the same animation string but with
+  // a per-column animation-delay. For a winning row we chain a second
+  // `winSweep` animation behind the cellPop reveal — pop fills the
+  // cells (~320ms + 4*90ms stagger ≈ 680ms), then sweep flashes a
+  // green glow across the row left→right (starts ~820ms, finishes
+  // ~1180ms), comfortably before the 1400ms recap fade-in.
+  const cellStyle = (col: number): CSSProperties | undefined => {
+    if (!isLatest) return undefined;
+    const popDelay = col * CELL_STAGGER_MS;
+    const pop = `cellPop 320ms cubic-bezier(.34,1.56,.64,1) ${popDelay}ms both`;
+    if (!winning) return { animation: pop };
+    const sweepDelay = SWEEP_START_MS + col * SWEEP_STAGGER_MS;
+    return {
+      animation: `${pop}, winSweep 360ms ease-out ${sweepDelay}ms both`,
+      // The winSweep box-shadow needs to escape the rounded cell so
+      // the glow reads outside the border, not clipped by it.
+      borderRadius: "inherit",
+    };
+  };
 
   return (
     <div
@@ -74,19 +95,19 @@ export function GuessRow({
           )}
         </div>
       </div>
-      <div role="cell" className={cellClass} style={cellStyle(0)}>
+      <div role="cell" style={cellStyle(0)}>
         <AttributePill cell={diff.group} />
       </div>
-      <div role="cell" className={cellClass} style={cellStyle(1)}>
+      <div role="cell" style={cellStyle(1)}>
         <AttributePill cell={diff.penlightColor} />
       </div>
-      <div role="cell" className={cellClass} style={cellStyle(2)}>
+      <div role="cell" style={cellStyle(2)}>
         <AttributePill cell={diff.archetype} />
       </div>
-      <div role="cell" className={cellClass} style={cellStyle(3)}>
+      <div role="cell" style={cellStyle(3)}>
         <AttributePill cell={{ ...diff.height, value: BUCKET_LABEL[diff.height.value] }} />
       </div>
-      <div role="cell" className={cellClass} style={cellStyle(4)}>
+      <div role="cell" style={cellStyle(4)}>
         <AttributePill cell={{ ...diff.birthMonth, value: MONTH_ABBR[diff.birthMonth.value] }} />
       </div>
     </div>

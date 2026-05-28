@@ -91,7 +91,7 @@ export const useGame = create<GameState & GameActions>((set) => ({
   stats: { streak: 0, best: 0, played: 0, winRate: 0 },
   players: new Map(),
 
-  prefs: { recapPingMuted: false, theme: "sky" },
+  prefs: { recapPingMuted: false, theme: "sky", welcomed: false },
 
   helpOpen: false,
   recapOpen: false,

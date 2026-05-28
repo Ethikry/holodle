@@ -36,9 +36,13 @@ const PrefsPatchSchema = z
   .object({
     recapPingMuted: z.boolean().optional(),
     theme: ThemeIdSchema.optional(),
+    welcomed: z.boolean().optional(),
   })
   .refine(
-    (v) => v.recapPingMuted !== undefined || v.theme !== undefined,
+    (v) =>
+      v.recapPingMuted !== undefined ||
+      v.theme !== undefined ||
+      v.welcomed !== undefined,
     { message: "PATCH body must include at least one field" },
   );
 
@@ -63,6 +67,7 @@ export async function prefsRoutes(app: FastifyInstance): Promise<void> {
     setUserPrefs(user.id, {
       recapPingMuted: parsed.data.recapPingMuted ?? existing.recapPingMuted,
       theme: parsed.data.theme ?? existing.theme,
+      welcomed: parsed.data.welcomed ?? existing.welcomed,
     });
     return getUserPrefs(user.id);
   });
