@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import type { TalentSummary } from "@holodle/shared";
 import { useGame } from "../state/game.js";
 
@@ -34,7 +34,6 @@ export function TalentAutocomplete({
 }): JSX.Element {
   const { talents, history } = useGame();
   const [query, setQuery] = useState("");
-  const wrapRef = useRef<HTMLDivElement>(null);
 
   const guessedIds = useMemo(() => new Set(history.map((h) => h.talentId)), [history]);
 
@@ -52,27 +51,27 @@ export function TalentAutocomplete({
     setQuery("");
   }
 
-  // The autocomplete now lives below the guess board (so history stays
-  // visible while typing). When the user taps the input we scroll it
-  // into view — keeps the input + suggestions in frame on mobile
-  // keyboards and on long boards where the input was below the fold.
-  // Delayed one tick so the virtual keyboard has time to shrink the
-  // viewport before we measure.
-  function handleFocus(): void {
-    setTimeout(() => {
-      wrapRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 50);
-  }
-
+  // We position the suggestions list as an ABSOLUTELY positioned
+  // overlay above the input rather than letting it grow inline. The
+  // earlier inline-above layout shifted the input upward when results
+  // appeared, which on iOS Safari (inside the Discord Activity
+  // iframe) caused the virtual keyboard to dismiss as the input moved
+  // out from under the user's tap. With absolute positioning the
+  // input stays fixed in place and the keyboard sticks.
+  //
+  // The container is `relative` and the dropdown lives at
+  // `bottom-full` (right above the input). pointer-events on the
+  // mousedown handler is the standard "don't blur the input when
+  // selecting a suggestion" pattern.
   return (
-    <div ref={wrapRef} className="mx-4 my-2">
-      {/* Suggestions appear ABOVE the input (the input sits at the very
-          bottom of the page, so a downward dropdown would land off-
-          screen). `flex-col-reverse` would also work, but we keep the
-          DOM order matching reading order — list first, input last —
-          and let `mb-2` on the list create the gap. */}
+    <div className="relative mx-4 my-2">
       {matches.length > 0 && (
-        <ul className="card mb-2 max-h-64 overflow-y-auto divide-y divide-holo-muted/10">
+        <ul
+          className="card absolute bottom-full left-0 right-0 z-20 mb-2 max-h-64 overflow-y-auto divide-y divide-holo-muted/10"
+          // Preventing default on mousedown stops the input from
+          // losing focus before our onClick handler fires.
+          onMouseDown={(e) => e.preventDefault()}
+        >
           {matches.map((t) => (
             <li key={t.id}>
               <button
@@ -95,7 +94,6 @@ export function TalentAutocomplete({
         disabled={disabled}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        onFocus={handleFocus}
         className="w-full rounded-2xl border-2 border-holo-accent/30 bg-holo-card px-4 py-3 text-base shadow-card transition focus:border-holo-accent focus:outline-none disabled:opacity-60"
       />
     </div>

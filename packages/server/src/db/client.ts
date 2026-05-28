@@ -24,6 +24,17 @@ export function getDb(): Database.Database {
   return db;
 }
 
+// Detects the legacy "branch\ngen" formatted group value (e.g.
+// "JP\nGen 1"). Newer diffs use just the gen string ("Gen 1"); a
+// "\n" in the value means the row was written under the branch+gen
+// two-line format. Treats anything weird (non-object, non-string
+// value) as suspicious enough to clear.
+function hasLegacyGroupValue(group: unknown): boolean {
+  if (!group || typeof group !== "object") return false;
+  const v = (group as { value?: unknown }).value;
+  return typeof v === "string" && v.includes("\n");
+}
+
 // One-time data migration: scan every user_day row, drop any whose stored
 // guesses_json contains a diff that no longer matches the current shape.
 // The row is reset to a fresh playing state — the user effectively gets
@@ -61,7 +72,8 @@ function clearStaleDiffShapes(database: Database.Database): void {
             "generation" in first ||
             "branch" in first ||
             !("penlightColor" in first) ||
-            !("group" in first))
+            !("group" in first) ||
+            hasLegacyGroupValue(first.group))
         ) {
           stale = true;
         }
@@ -114,7 +126,8 @@ function clearStaleDiffShapes(database: Database.Database): void {
             "generation" in first ||
             "branch" in first ||
             !("penlightColor" in first) ||
-            !("group" in first))
+            !("group" in first) ||
+            hasLegacyGroupValue(first.group))
         ) {
           stale = true;
         }
