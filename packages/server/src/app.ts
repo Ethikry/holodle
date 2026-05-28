@@ -13,7 +13,6 @@ import { talentsRoutes } from "./routes/talents.js";
 import { dailyRoutes } from "./routes/daily.js";
 import { guessRoutes } from "./routes/guess.js";
 import { statsRoutes } from "./routes/stats.js";
-import { adminStatsRoutes } from "./routes/admin-stats.js";
 import { prefsRoutes } from "./routes/prefs.js";
 import { interactionsRoutes } from "./routes/interactions.js";
 
@@ -50,7 +49,6 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(dailyRoutes);
   await app.register(guessRoutes);
   await app.register(statsRoutes);
-  await app.register(adminStatsRoutes);
   await app.register(prefsRoutes);
   await app.register(interactionsRoutes);
 
