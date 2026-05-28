@@ -3,11 +3,12 @@ import { GuessRow } from "./GuessRow.js";
 
 const COLUMN_HEADERS: Array<{ label: string; align?: string }> = [
   { label: "Talent" },
-  { label: "Generation" },
+  { label: "Branch" },
+  { label: "Gen" },
   { label: "Penlight" },
   { label: "Archetype" },
   { label: "Height" },
-  { label: "Birth Month" },
+  { label: "Birthday" },
 ];
 
 export function GuessGrid(): JSX.Element {
@@ -24,7 +25,7 @@ export function GuessGrid(): JSX.Element {
       <div className="mx-auto w-full max-w-3xl">
         <div
           role="row"
-          className="grid grid-cols-[48px_repeat(5,minmax(0,1fr))] items-end gap-1 px-1 pb-2 text-center text-[9px] font-semibold uppercase tracking-wider text-holo-muted sm:grid-cols-[72px_repeat(5,minmax(0,1fr))] sm:gap-2 sm:text-[11px]"
+          className="grid grid-cols-[40px_repeat(6,minmax(0,1fr))] items-end gap-1 px-1 pb-2 text-center text-[9px] font-semibold uppercase tracking-wider text-holo-muted sm:grid-cols-[64px_repeat(6,minmax(0,1fr))] sm:gap-2 sm:text-[10px]"
         >
           {COLUMN_HEADERS.map((h) => (
             <div role="columnheader" key={h.label} className="break-words leading-tight">

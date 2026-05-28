@@ -65,11 +65,20 @@ describe("compareGuess", () => {
   it("flags an exact match green everywhere", () => {
     const a = t({ id: "kobo", name: "Kobo" });
     const diff = compareGuess(a, a);
+    expect(diff.branch.state).toBe("equal");
     expect(diff.group.state).toBe("equal");
     expect(diff.penlightColor.state).toBe("equal");
     expect(diff.archetype.state).toBe("equal");
     expect(diff.height.state).toBe("equal");
     expect(diff.birthMonth.state).toBe("equal");
+  });
+
+  it("branch: equal-or-wrong only; tracks the guess's branch on the chip", () => {
+    const jp = t({ branch: "JP" });
+    const en = t({ branch: "EN" });
+    expect(compareGuess(jp, jp).branch).toEqual({ value: "JP", state: "equal" });
+    expect(compareGuess(jp, en).branch).toEqual({ value: "JP", state: "wrong" });
+    expect(compareGuess(en, jp).branch).toEqual({ value: "EN", state: "wrong" });
   });
 
   it("penlightColor: exact-match string (null/None only matches None)", () => {

@@ -13,7 +13,7 @@ import { AnswerAvatar } from "./AnswerAvatar.js";
 // Reuses the existing PlayerSnapshot data already broadcast over the
 // socket — no new traffic.
 
-const COLS = 5;
+const COLS = 6;
 
 function cellClass(state: CellState | "empty"): string {
   switch (state) {
@@ -49,7 +49,7 @@ function MiniBoard({ board }: { board: BoardRow[] }): JSX.Element {
     }
   }
   return (
-    <div className="grid grid-cols-5 gap-[3px]">
+    <div className="grid grid-cols-6 gap-[3px]">
       {cells.map((state, i) => (
         <div
           key={i}

@@ -28,7 +28,7 @@ export function LoadingScreen(): JSX.Element {
           backgroundClip: "text",
           WebkitTextFillColor: "transparent",
           color: "transparent",
-          animation: "shimmer 1.8s linear infinite",
+          animation: "shimmer 2.6s ease-in-out infinite",
         }}
       >
         holodle

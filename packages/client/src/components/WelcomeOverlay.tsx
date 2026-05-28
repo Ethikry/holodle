@@ -13,19 +13,19 @@ import { GuessRow } from "./GuessRow.js";
 // "answer" is Ceres Fauna (EN, Promise → Gen 2, Kirin, Light Green,
 // 164cm Tall, March). The four rows show a progression from a complete
 // miss to the solve:
-//   1. Usada Pekora — JP Gen 3 / Animal / Light Blue / Med / January
+//   1. Usada Pekora — JP / Gen 3 / Animal / Light Blue / Med / January
 //      → every cell red.
-//   2. Anya Melfissa — ID Gen 2 / Dagger / Yellow / Smol / March
-//      → group partial (gen 2 ↔ gen 2 across branches) + birthMonth
-//      equal; rest red.
-//   3. Takanashi Kiara — EN Myth (Gen 1) / Bird / Orange / Tall / July
-//      → group partial (EN branch match, Gen 1 ≠ Gen 2) + height equal.
+//   2. Anya Melfissa — ID / Gen 2 / Dagger / Yellow / Smol / March
+//      → gen matches (cross-branch Gen 2 ↔ Gen 2) + birthMonth equal.
+//   3. Takanashi Kiara — EN / Gen 1 (Myth) / Bird / Orange / Tall / July
+//      → branch matches (both EN) + height equal.
 //   4. Ceres Fauna — full match, all green.
 // All values mirror talent_data.json verbatim.
 const EXAMPLE_ROWS: GuessDiff[] = [
   {
     talentId: "usada-pekora",
-    group: { value: "JP\nGen 3", state: "wrong" },
+    branch: { value: "JP", state: "wrong" },
+    group: { value: "Gen 3", state: "wrong" },
     penlightColor: { value: "Light Blue", state: "wrong" },
     archetype: { value: "Animal", state: "wrong" },
     height: { value: "Med", state: "wrong" },
@@ -33,7 +33,8 @@ const EXAMPLE_ROWS: GuessDiff[] = [
   },
   {
     talentId: "anya-melfissa",
-    group: { value: "ID\nGen 2", state: "partial" },
+    branch: { value: "ID", state: "wrong" },
+    group: { value: "Gen 2", state: "equal" },
     penlightColor: { value: "Yellow", state: "wrong" },
     archetype: { value: "Dagger", state: "wrong" },
     height: { value: "Smol", state: "wrong" },
@@ -41,7 +42,8 @@ const EXAMPLE_ROWS: GuessDiff[] = [
   },
   {
     talentId: "takanashi-kiara",
-    group: { value: "EN\nGen 1 (Myth)", state: "partial" },
+    branch: { value: "EN", state: "equal" },
+    group: { value: "Gen 1 (Myth)", state: "wrong" },
     penlightColor: { value: "Orange", state: "wrong" },
     archetype: { value: "Bird", state: "wrong" },
     height: { value: "Tall", state: "equal" },
@@ -49,7 +51,8 @@ const EXAMPLE_ROWS: GuessDiff[] = [
   },
   {
     talentId: "ceres-fauna",
-    group: { value: "EN\nGen 2 (Promise)", state: "equal" },
+    branch: { value: "EN", state: "equal" },
+    group: { value: "Gen 2 (Promise)", state: "equal" },
     penlightColor: { value: "Light Green", state: "equal" },
     archetype: { value: "Kirin", state: "equal" },
     height: { value: "Tall", state: "equal" },
@@ -104,8 +107,8 @@ export function WelcomeOverlay(): JSX.Element | null {
           welcome to holodle
         </h1>
         <p className="mt-3 text-center text-sm sm:text-base">
-          Guess today's Hololive talent in six tries. After each guess every
-          attribute turns one of three colours:
+          Guess today's Hololive talent in six tries. Each guess grades
+          six attributes — every cell lands green or red.
         </p>
 
         {/* Colour key — same copy + chips as HelpModal so the two
@@ -116,16 +119,15 @@ export function WelcomeOverlay(): JSX.Element | null {
             <span className="text-sm">Exact match.</span>
           </li>
           <li className="flex items-center gap-3">
-            <span className="cell-partial w-24 shrink-0">Yellow</span>
-            <span className="text-sm">
-              Group only: branch or generation matches, but not both.
-            </span>
-          </li>
-          <li className="flex items-center gap-3">
             <span className="cell-wrong w-24 shrink-0">Red</span>
             <span className="text-sm">No match.</span>
           </li>
         </ul>
+        <p className="mx-auto mt-3 max-w-md text-center text-xs text-holo-muted">
+          Generation matches across branches — Aqua's{" "}
+          <span className="font-semibold">Gen 2</span> matches Fauna's{" "}
+          <span className="font-semibold">Gen 2 (Promise)</span>.
+        </p>
 
         {/* Example board — three synthetic rows showing the progression
             from a complete miss (Aqua) → narrowing in (Kiara, partial
@@ -137,14 +139,15 @@ export function WelcomeOverlay(): JSX.Element | null {
           <div className="mx-auto mt-2 w-full max-w-xl">
             <div
               role="row"
-              className="grid grid-cols-[48px_repeat(5,minmax(0,1fr))] items-end gap-1 px-1 pb-2 text-center text-[9px] font-semibold uppercase tracking-wider text-holo-muted sm:grid-cols-[72px_repeat(5,minmax(0,1fr))] sm:gap-2 sm:text-[11px]"
+              className="grid grid-cols-[40px_repeat(6,minmax(0,1fr))] items-end gap-1 px-1 pb-2 text-center text-[9px] font-semibold uppercase tracking-wider text-holo-muted sm:grid-cols-[64px_repeat(6,minmax(0,1fr))] sm:gap-2 sm:text-[10px]"
             >
               <div className="break-words leading-tight">Talent</div>
-              <div className="break-words leading-tight">Group</div>
+              <div className="break-words leading-tight">Branch</div>
+              <div className="break-words leading-tight">Gen</div>
               <div className="break-words leading-tight">Penlight</div>
               <div className="break-words leading-tight">Archetype</div>
               <div className="break-words leading-tight">Height</div>
-              <div className="break-words leading-tight">Birth Month</div>
+              <div className="break-words leading-tight">Birthday</div>
             </div>
             <div className="space-y-2">
               {EXAMPLE_ROWS.map((diff, i) => (

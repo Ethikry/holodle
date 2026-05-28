@@ -20,9 +20,10 @@ const CELL_BORDER = "#1c1c1f";
 const TITLE_INK = "#ffffff";
 const SUBTEXT = "#b5b8bf";
 
-// Five attribute columns: group / penlight / archetype / height / month.
-// Six guess rows. Stays in sync with BOARD_COLUMNS in @holodle/shared.
-const GRID_COLS = 5;
+// Six attribute columns: branch / generation / penlight / archetype /
+// height / birthMonth. Six guess rows. Stays in sync with BOARD_COLUMNS
+// in @holodle/shared.
+const GRID_COLS = 6;
 const GRID_ROWS = 6;
 
 // ---------- Public types -------------------------------------------------

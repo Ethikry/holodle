@@ -71,11 +71,14 @@ export default {
           "0%, 100%": { textShadow: "0 0 0 transparent" },
           "50%": { textShadow: "0 0 16px rgb(var(--holo-accent))" },
         },
-        // Skeleton-loader shimmer used by LoadingScreen — slides the
-        // gradient background across the wordmark.
+        // Skeleton-loader shimmer used by LoadingScreen — the
+        // highlight band sweeps RIGHT across the wordmark, then
+        // sweeps back LEFT, and so on. The single keyframe encodes
+        // both halves of the ping-pong so the animation can run a
+        // plain `linear infinite` without needing `alternate`.
         shimmer: {
-          "0%": { backgroundPosition: "0% 50%" },
-          "100%": { backgroundPosition: "200% 50%" },
+          "0%, 100%": { backgroundPosition: "0% 50%" },
+          "50%": { backgroundPosition: "200% 50%" },
         },
         // Per-cell victory pulse. Tracks --holo-ok so it glows whatever
         // green the active theme uses. The whole row plays this with a
@@ -113,7 +116,10 @@ export default {
         modalEnter: "modalEnter 200ms ease-out both",
         tileEnter: "tileEnter 280ms ease-out both",
         pulseGlow: "pulseGlow 1200ms ease-in-out 1",
-        shimmer: "shimmer 1.8s linear infinite",
+        // 2.6s = ~1.3s each direction. Slow enough that the reverse
+        // sweep reads as deliberate (vs. a hard reset) but quick
+        // enough to communicate "we're loading."
+        shimmer: "shimmer 2.6s ease-in-out infinite",
         winSweep: "winSweep 360ms ease-out both",
         confettiBurst: "confettiBurst 1200ms cubic-bezier(.2,.6,.4,1) both",
       },

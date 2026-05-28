@@ -35,6 +35,43 @@ function hasLegacyGroupValue(group: unknown): boolean {
   return typeof v === "string" && v.includes("\n");
 }
 
+// Returns true iff `cell` is shaped like an AttrCell ({ value, state }).
+// Used to tell apart current diffs (where `branch` is an AttrCell) from
+// the pre-merged-group legacy diffs (where `branch` was the raw "JP"
+// string at the top of the diff).
+function isAttrCell(cell: unknown): boolean {
+  return (
+    typeof cell === "object" &&
+    cell !== null &&
+    "value" in cell &&
+    "state" in cell
+  );
+}
+
+// True iff this diff row has the legacy pre-merged-group shape: a raw
+// `name` field (pre-Gen), a top-level `generation` string (pre-merged-
+// group), or `branch` as a raw string instead of an AttrCell.
+function hasLegacyTopLevelFields(first: Record<string, unknown>): boolean {
+  if ("name" in first) return true;
+  if ("generation" in first) return true;
+  // Pre-merged-group diffs had `branch: "JP"` (string). Current diffs
+  // have `branch: { value, state }`. Anything else with that field
+  // present-but-not-AttrCell is treated as legacy.
+  if ("branch" in first && !isAttrCell(first.branch)) return true;
+  return false;
+}
+
+// True iff this diff row is missing a field the current GuessDiff
+// shape requires, or carries the legacy two-line group value.
+function isMissingCurrentFields(first: Record<string, unknown>): boolean {
+  return (
+    !("penlightColor" in first) ||
+    !("group" in first) ||
+    !("branch" in first) ||
+    hasLegacyGroupValue(first.group)
+  );
+}
+
 // One-time data migration: scan every user_day row, drop any whose stored
 // guesses_json contains a diff that no longer matches the current shape.
 // The row is reset to a fresh playing state — the user effectively gets
@@ -68,12 +105,7 @@ function clearStaleDiffShapes(database: Database.Database): void {
         // under the current GuessDiff shape.
         if (
           first &&
-          ("name" in first ||
-            "generation" in first ||
-            "branch" in first ||
-            !("penlightColor" in first) ||
-            !("group" in first) ||
-            hasLegacyGroupValue(first.group))
+          (hasLegacyTopLevelFields(first) || isMissingCurrentFields(first))
         ) {
           stale = true;
         }
@@ -122,12 +154,7 @@ function clearStaleDiffShapes(database: Database.Database): void {
         const first = guesses[0] as Record<string, unknown> | null;
         if (
           first &&
-          ("name" in first ||
-            "generation" in first ||
-            "branch" in first ||
-            !("penlightColor" in first) ||
-            !("group" in first) ||
-            hasLegacyGroupValue(first.group))
+          (hasLegacyTopLevelFields(first) || isMissingCurrentFields(first))
         ) {
           stale = true;
         }
