@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { TalentSummary } from "@holodle/shared";
 import { useGame } from "../state/game.js";
 
@@ -34,6 +34,7 @@ export function TalentAutocomplete({
 }): JSX.Element {
   const { talents, history } = useGame();
   const [query, setQuery] = useState("");
+  const wrapRef = useRef<HTMLDivElement>(null);
 
   const guessedIds = useMemo(() => new Set(history.map((h) => h.talentId)), [history]);
 
@@ -51,20 +52,27 @@ export function TalentAutocomplete({
     setQuery("");
   }
 
+  // The autocomplete now lives below the guess board (so history stays
+  // visible while typing). When the user taps the input we scroll it
+  // into view — keeps the input + suggestions in frame on mobile
+  // keyboards and on long boards where the input was below the fold.
+  // Delayed one tick so the virtual keyboard has time to shrink the
+  // viewport before we measure.
+  function handleFocus(): void {
+    setTimeout(() => {
+      wrapRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
+  }
+
   return (
-    <div className="mx-4 my-2">
-      <input
-        type="text"
-        inputMode="text"
-        autoComplete="off"
-        placeholder="Type a talent name…"
-        disabled={disabled}
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        className="w-full rounded-2xl border-2 border-holo-accent/30 bg-white px-4 py-3 text-base shadow-card transition focus:border-holo-accent focus:outline-none disabled:opacity-60"
-      />
+    <div ref={wrapRef} className="mx-4 my-2">
+      {/* Suggestions appear ABOVE the input (the input sits at the very
+          bottom of the page, so a downward dropdown would land off-
+          screen). `flex-col-reverse` would also work, but we keep the
+          DOM order matching reading order — list first, input last —
+          and let `mb-2` on the list create the gap. */}
       {matches.length > 0 && (
-        <ul className="card mt-2 max-h-64 overflow-y-auto divide-y divide-holo-muted/10">
+        <ul className="card mb-2 max-h-64 overflow-y-auto divide-y divide-holo-muted/10">
           {matches.map((t) => (
             <li key={t.id}>
               <button
@@ -79,6 +87,17 @@ export function TalentAutocomplete({
           ))}
         </ul>
       )}
+      <input
+        type="text"
+        inputMode="text"
+        autoComplete="off"
+        placeholder="Type a talent name…"
+        disabled={disabled}
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onFocus={handleFocus}
+        className="w-full rounded-2xl border-2 border-holo-accent/30 bg-holo-card px-4 py-3 text-base shadow-card transition focus:border-holo-accent focus:outline-none disabled:opacity-60"
+      />
     </div>
   );
 }

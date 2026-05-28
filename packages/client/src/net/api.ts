@@ -81,6 +81,10 @@ export async function fetchStats(accessToken: string): Promise<UserStats> {
 export interface UserPrefs {
   recapPingMuted: boolean;
   theme: string;
+  // Server-tracked first-launch welcome flag. Server-side because
+  // Discord Activity iframes don't reliably share localStorage across
+  // launches (partitioned storage).
+  welcomed: boolean;
 }
 
 export async function fetchPrefs(accessToken: string): Promise<UserPrefs> {

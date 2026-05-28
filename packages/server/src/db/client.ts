@@ -323,6 +323,11 @@ export interface UserPrefs {
   // allowlist at the route boundary; this layer just round-trips the
   // string so unknown ids from a future client never crash the server.
   theme: string;
+  // Has the user dismissed the first-launch welcome overlay?
+  // Server-tracked rather than localStorage-tracked because Discord
+  // Activity iframes use partitioned storage and the localStorage flag
+  // wasn't persisting across launches.
+  welcomed: boolean;
 }
 
 const DEFAULT_USER_PREFS: UserPrefs = {
@@ -331,6 +336,7 @@ const DEFAULT_USER_PREFS: UserPrefs = {
   // Existing user_prefs rows keep whatever theme they were assigned;
   // brand-new users (no row yet) and pre-theme migrated users get this.
   theme: "sky",
+  welcomed: false,
 };
 
 // Returns the user's preferences row, falling back to DEFAULT_USER_PREFS
@@ -339,13 +345,16 @@ const DEFAULT_USER_PREFS: UserPrefs = {
 export function getUserPrefs(userId: string): UserPrefs {
   const row = getDb()
     .prepare(
-      `SELECT recap_ping_muted, theme FROM user_prefs WHERE user_id = ?`,
+      `SELECT recap_ping_muted, theme, welcomed FROM user_prefs WHERE user_id = ?`,
     )
-    .get(userId) as { recap_ping_muted: number; theme: string } | undefined;
+    .get(userId) as
+    | { recap_ping_muted: number; theme: string; welcomed: number }
+    | undefined;
   if (!row) return { ...DEFAULT_USER_PREFS };
   return {
     recapPingMuted: row.recap_ping_muted !== 0,
     theme: row.theme || DEFAULT_USER_PREFS.theme,
+    welcomed: row.welcomed !== 0,
   };
 }
 
@@ -354,14 +363,15 @@ export function getUserPrefs(userId: string): UserPrefs {
 export function setUserPrefs(userId: string, prefs: UserPrefs): void {
   getDb()
     .prepare(
-      `INSERT INTO user_prefs (user_id, recap_ping_muted, theme, updated_at)
-       VALUES (?, ?, ?, strftime('%s','now'))
+      `INSERT INTO user_prefs (user_id, recap_ping_muted, theme, welcomed, updated_at)
+       VALUES (?, ?, ?, ?, strftime('%s','now'))
        ON CONFLICT(user_id) DO UPDATE SET
          recap_ping_muted = excluded.recap_ping_muted,
          theme            = excluded.theme,
+         welcomed         = excluded.welcomed,
          updated_at       = excluded.updated_at`,
     )
-    .run(userId, prefs.recapPingMuted ? 1 : 0, prefs.theme);
+    .run(userId, prefs.recapPingMuted ? 1 : 0, prefs.theme, prefs.welcomed ? 1 : 0);
 }
 
 // Returns the subset of `userIds` whose recap_ping_muted flag is set.

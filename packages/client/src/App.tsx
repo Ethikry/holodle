@@ -25,18 +25,7 @@ import { HelpModal } from "./components/HelpModal.js";
 import { LoadingScreen } from "./components/LoadingScreen.js";
 import { RecapScreen } from "./components/RecapScreen.js";
 import { WelcomeOverlay } from "./components/WelcomeOverlay.js";
-
-// Read the first-launch flag from localStorage on App mount. Bracketed
-// in a try/catch because localStorage can throw in privacy-mode
-// iframes. Returns true iff the user has previously dismissed the
-// welcome overlay — so brand-new visitors get welcomeOpen = true.
-function readWelcomed(): boolean {
-  try {
-    return localStorage.getItem("holodle-welcomed") === "1";
-  } catch {
-    return false;
-  }
-}
+import { Confetti } from "./components/Confetti.js";
 
 function preloadAvatars(talents: TalentSummary[]): void {
   for (const t of talents) {
@@ -71,16 +60,7 @@ export function App(): JSX.Element {
     removePlayer,
     setError,
     setLoading,
-    setWelcomeOpen,
   } = useGame();
-
-  // Flip the welcome overlay on for first-ever launches. After this,
-  // the overlay is controlled by Zustand (so the Help modal can
-  // re-open it from anywhere in the tree). Fires once at mount.
-  useEffect(() => {
-    if (!readWelcomed()) setWelcomeOpen(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Bootstrap: load the public talent catalog first (no auth required), then
   // try to establish a Discord session. The catalog load is independent so a
@@ -142,11 +122,23 @@ export function App(): JSX.Element {
         if (cancelled) return;
         setDaily(daily);
         setStats(stats);
+        // Returning users who've already finished today's puzzle land
+        // directly on the recap overlay instead of an empty grid. Only
+        // fires when the bootstrap finds a terminal status — fresh
+        // launches with status="playing" still see the normal board.
+        if (daily.status !== "playing") {
+          useGame.getState().setRecapOpen(true);
+        }
         if (prefs) {
           setPrefs(prefs);
           // Apply the persisted theme as soon as it's known so the
           // palette doesn't flash from the default to the user's pick.
           applyTheme(prefs.theme);
+          // First-launch welcome: only open if the server says we've
+          // never welcomed this user. The flag is server-tracked
+          // because Discord Activity iframes partition localStorage
+          // across launches.
+          if (!prefs.welcomed) useGame.getState().setWelcomeOpen(true);
         }
       } catch (err) {
         errs.push(describe(err));
@@ -250,6 +242,7 @@ export function App(): JSX.Element {
         <HelpModal />
       </main>
       <RecapScreen />
+      <Confetti />
       <WelcomeOverlay />
     </div>
   );

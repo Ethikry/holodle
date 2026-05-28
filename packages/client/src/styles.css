@@ -54,23 +54,25 @@ html.theme-fubuki {
     0 3px 10px rgba(40, 160, 170, 0.10);
 }
 
-/* kanade — peach coral + warm gold on cream. Triadic. Gold reads as
-   a primary brand colour (used for the "match" state) so the picker
-   swatch shows coral + gold + cream. */
+/* kanade — gold accents on cream with green matches. Triadic. Gold
+   carries the brand identity (wordmark, header chevron, primary
+   button) while the "match" state stays semantically green so a
+   correct guess never reads as "yellow" against the partial-match
+   amber. */
 html.theme-kanade {
   --holo-bg: 254 240 232;
   --holo-card: 255 252 248;
   --holo-ink: 80 30 50;
-  --holo-accent: 237 110 131;
-  --holo-ok: 218 162 60;
-  --holo-ok-bg: 253 240 210;
-  --holo-ok-bd: 238 200 120;
+  --holo-accent: 218 162 60;
+  --holo-ok: 138 180 100;
+  --holo-ok-bg: 232 245 215;
+  --holo-ok-bd: 174 210 142;
   --holo-bad: 220 70 90;
   --holo-bad-bg: 252 220 225;
   --holo-bad-bd: 234 158 170;
   --holo-muted: 152 110 122;
   --holo-card-shadow: 0 1px 2px rgba(110, 40, 70, 0.05),
-    0 3px 10px rgba(220, 100, 130, 0.10);
+    0 3px 10px rgba(218, 162, 60, 0.18);
 }
 
 /* su — icy glacial blue + crystalline mint. Cool, clean. */
@@ -308,7 +310,9 @@ html.theme-irys {
   .animate-tileEnter,
   .animate-pulseGlow,
   .animate-bounce,
-  .animate-shimmer {
+  .animate-shimmer,
+  .animate-winSweep,
+  .animate-confettiBurst {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
   }

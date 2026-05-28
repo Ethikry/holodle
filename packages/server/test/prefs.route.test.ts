@@ -35,7 +35,7 @@ describe("GET /api/prefs", () => {
       headers: authFor("first-load-user"),
     });
     expect(r.statusCode).toBe(200);
-    expect(r.json()).toEqual({ recapPingMuted: false, theme: "sky" });
+    expect(r.json()).toEqual({ recapPingMuted: false, theme: "sky", welcomed: false });
   });
 
   it("rejects unauthenticated requests with 401", async () => {
@@ -54,14 +54,14 @@ describe("PATCH /api/prefs", () => {
       payload: { recapPingMuted: true },
     });
     expect(patch.statusCode).toBe(200);
-    expect(patch.json()).toEqual({ recapPingMuted: true, theme: "sky" });
+    expect(patch.json()).toEqual({ recapPingMuted: true, theme: "sky", welcomed: false });
 
     const get = await app.inject({
       method: "GET",
       url: "/api/prefs",
       headers: userHeaders,
     });
-    expect(get.json()).toEqual({ recapPingMuted: true, theme: "sky" });
+    expect(get.json()).toEqual({ recapPingMuted: true, theme: "sky", welcomed: false });
   });
 
   it("toggles back to false on a second PATCH", async () => {
@@ -78,7 +78,7 @@ describe("PATCH /api/prefs", () => {
       headers: userHeaders,
       payload: { recapPingMuted: false },
     });
-    expect(second.json()).toEqual({ recapPingMuted: false, theme: "sky" });
+    expect(second.json()).toEqual({ recapPingMuted: false, theme: "sky", welcomed: false });
   });
 
   it("rejects body validation errors with 400", async () => {
@@ -113,7 +113,7 @@ describe("PATCH /api/prefs", () => {
       url: "/api/prefs",
       headers: authFor("isolated-b"),
     });
-    expect(otherUser.json()).toEqual({ recapPingMuted: false, theme: "sky" });
+    expect(otherUser.json()).toEqual({ recapPingMuted: false, theme: "sky", welcomed: false });
   });
 });
 
@@ -127,14 +127,14 @@ describe("PATCH /api/prefs theme", () => {
       payload: { theme: "suisei" },
     });
     expect(patch.statusCode).toBe(200);
-    expect(patch.json()).toEqual({ recapPingMuted: false, theme: "suisei" });
+    expect(patch.json()).toEqual({ recapPingMuted: false, theme: "suisei", welcomed: false });
 
     const get = await app.inject({
       method: "GET",
       url: "/api/prefs",
       headers: userHeaders,
     });
-    expect(get.json()).toEqual({ recapPingMuted: false, theme: "suisei" });
+    expect(get.json()).toEqual({ recapPingMuted: false, theme: "suisei", welcomed: false });
   });
 
   it("rejects an unknown theme id with 400", async () => {
@@ -163,7 +163,7 @@ describe("PATCH /api/prefs theme", () => {
       headers: userHeaders,
       payload: { theme: "calliope" },
     });
-    expect(themePatch.json()).toEqual({ recapPingMuted: true, theme: "calliope" });
+    expect(themePatch.json()).toEqual({ recapPingMuted: true, theme: "calliope", welcomed: false });
   });
 
   it("partial PATCH (recapPingMuted only) preserves theme", async () => {
@@ -180,7 +180,7 @@ describe("PATCH /api/prefs theme", () => {
       headers: userHeaders,
       payload: { recapPingMuted: true },
     });
-    expect(togglePatch.json()).toEqual({ recapPingMuted: true, theme: "fauna" });
+    expect(togglePatch.json()).toEqual({ recapPingMuted: true, theme: "fauna", welcomed: false });
   });
 
   it("rejects an empty PATCH body with 400", async () => {

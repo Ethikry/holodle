@@ -141,6 +141,27 @@ describe("compareGuess", () => {
     expect(compareGuess(fubuki, aki).group.value).toBe("JP\nGen 1 / GAMERS");
   });
 
+  it("group: numbered gens partial-match across branches when the gen NUMBER agrees", () => {
+    // The displayed label is what matters — both Aqua (JP Gen 2) and
+    // Fauna (EN Promise → \"Gen 2 (Promise)\") read as Gen 2 to players,
+    // so the group cell partial-matches on gen even though the branches
+    // and cohort labels differ.
+    const aqua = t({ branch: "JP", generation: "Gen 2" });
+    const fauna = t({ branch: "EN", generation: "Promise" });
+    expect(compareGuess(aqua, fauna).group.state).toBe("partial");
+    expect(compareGuess(fauna, aqua).group.state).toBe("partial");
+
+    // Same idea: Calliope (EN Myth → Gen 1) partial-matches Aki (JP Gen 1).
+    const calli = t({ branch: "EN", generation: "Myth" });
+    const aki = t({ branch: "JP", generation: "Gen 1" });
+    expect(compareGuess(calli, aki).group.state).toBe("partial");
+    expect(compareGuess(aki, calli).group.state).toBe("partial");
+
+    // And different gen numbers stay wrong even across branches.
+    const advent = t({ branch: "EN", generation: "Advent" });
+    expect(compareGuess(advent, aki).group.state).toBe("wrong");
+  });
+
   it("group: Council ↔ Promise are treated as the same cohort", () => {
     const sana = t({ branch: "EN", generation: "Council" });
     const mumei = t({ branch: "EN", generation: "Promise" });

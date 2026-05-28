@@ -1,4 +1,5 @@
 import type { GuessDiff } from "@holodle/shared";
+import { patchPrefs } from "../net/api.js";
 import { useGame } from "../state/game.js";
 import { GuessRow } from "./GuessRow.js";
 
@@ -9,22 +10,34 @@ import { GuessRow } from "./GuessRow.js";
 // colour rules and a 3-row example board with real talent stats.
 
 // Synthetic GuessDiff rows for the example board. The hypothetical
-// "answer" is Ceres Fauna (EN Promise Gen 2, Kirin, Light Green, 164cm
-// Tall, March). The three rows show:
-//   1. Minato Aqua — every cell red (no overlap on any attribute)
-//   2. Takanashi Kiara — group partial (EN matches, Myth ≠ Promise)
-//      + height equal (both Tall), other cells red
-//   3. Ceres Fauna — full match, all green
-// All values mirror talent_data.json verbatim so the example doesn't
-// claim "Eldritch" archetypes or wrong birth months.
+// "answer" is Ceres Fauna (EN, Promise → Gen 2, Kirin, Light Green,
+// 164cm Tall, March). The four rows show a progression from a complete
+// miss to the solve:
+//   1. Usada Pekora — JP Gen 3 / Animal / Light Blue / Med / January
+//      → every cell red.
+//   2. Anya Melfissa — ID Gen 2 / Dagger / Yellow / Smol / March
+//      → group partial (gen 2 ↔ gen 2 across branches) + birthMonth
+//      equal; rest red.
+//   3. Takanashi Kiara — EN Myth (Gen 1) / Bird / Orange / Tall / July
+//      → group partial (EN branch match, Gen 1 ≠ Gen 2) + height equal.
+//   4. Ceres Fauna — full match, all green.
+// All values mirror talent_data.json verbatim.
 const EXAMPLE_ROWS: GuessDiff[] = [
   {
-    talentId: "minato-aqua",
-    group: { value: "JP\nGen 2", state: "wrong" },
-    penlightColor: { value: "Light Pink", state: "wrong" },
-    archetype: { value: "Human", state: "wrong" },
+    talentId: "usada-pekora",
+    group: { value: "JP\nGen 3", state: "wrong" },
+    penlightColor: { value: "Light Blue", state: "wrong" },
+    archetype: { value: "Animal", state: "wrong" },
+    height: { value: "Med", state: "wrong" },
+    birthMonth: { value: "January", state: "wrong" },
+  },
+  {
+    talentId: "anya-melfissa",
+    group: { value: "ID\nGen 2", state: "partial" },
+    penlightColor: { value: "Yellow", state: "wrong" },
+    archetype: { value: "Dagger", state: "wrong" },
     height: { value: "Smol", state: "wrong" },
-    birthMonth: { value: "December", state: "wrong" },
+    birthMonth: { value: "March", state: "equal" },
   },
   {
     talentId: "takanashi-kiara",
@@ -45,17 +58,23 @@ const EXAMPLE_ROWS: GuessDiff[] = [
 ];
 
 export function WelcomeOverlay(): JSX.Element | null {
-  const { welcomeOpen, setWelcomeOpen, talents } = useGame();
+  const { welcomeOpen, setWelcomeOpen, talents, accessToken, prefs, setPrefs } = useGame();
   if (!welcomeOpen) return null;
 
   const handleDismiss = (): void => {
-    try {
-      localStorage.setItem("holodle-welcomed", "1");
-    } catch {
-      // localStorage may be unavailable in private-mode iframes — the
-      // user just sees the overlay again next launch, which is fine.
-    }
+    // Close immediately for snappy UX, then persist the flag in the
+    // background. Failure to persist just means the overlay pops once
+    // more next launch — not catastrophic, the user gets a chance to
+    // dismiss again.
     setWelcomeOpen(false);
+    if (accessToken && !prefs.welcomed) {
+      setPrefs({ ...prefs, welcomed: true });
+      void patchPrefs(accessToken, { welcomed: true }).catch(() => {
+        // Roll back the optimistic update so a retry from the Help
+        // modal's "Replay welcome" stays consistent with the server.
+        setPrefs({ ...prefs, welcomed: false });
+      });
+    }
   };
 
   return (
