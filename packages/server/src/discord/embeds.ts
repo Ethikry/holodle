@@ -1,9 +1,4 @@
-// Embed + component builders for the user-install flow. The visible content
-// of every bot-posted message is now a composited PNG (see imageRender.ts);
-// the embed itself is minimal scaffolding so Discord renders the attached
-// image inline. We intentionally duplicate the minimal types we need here
-// rather than depending on a `discord.js` client — the only thing that ever
-// consumes these is JSON.stringify into a webhook POST body.
+// --- packages/server/src/discord/embeds.ts ---
 
 import type { GuessDiff } from "@holodle/shared";
 import {
@@ -53,7 +48,11 @@ export interface ActionRow {
 export type MessageComponent = ActionRow;
 
 const COLOR_RECAP = 0x22b8e6;
-const COLOR_PLAYING = 0x9333ea;
+
+// Embed Side-Bar Color Constants
+export const COLOR_STALE = 0x7f8c8d;   // Gray when stale/superseded
+export const COLOR_BLUE = 0x22b8e6;    // Sky blue when active with no players yet
+export const COLOR_GREEN = 0x3aa55d;   // Green when active and someone is playing
 
 const NOW_PLAYING_FILENAME = "holodle-now-playing.png";
 const RECAP_FILENAME = "holodle-recap.png";
@@ -71,6 +70,7 @@ export interface NowPlayingInput {
   puzzleId: string;
   participants: NowPlayingParticipant[];
   applicationId: string;
+  isStale?: boolean; // <-- Added optional staleness flag
 }
 
 export interface RenderedMessage {
@@ -82,6 +82,7 @@ export interface RenderedMessage {
 export async function buildNowPlayingEmbed({
   puzzleId,
   participants,
+  isStale = false, // Default to active/non-stale
 }: NowPlayingInput): Promise<RenderedMessage> {
   const imageParticipants: NowPlayingImageParticipant[] = participants.map((p) => ({
     avatarUrl: p.avatarUrl,
@@ -95,8 +96,16 @@ export async function buildNowPlayingEmbed({
     participants: imageParticipants,
   });
 
+  // Dynamically assign sidebar color based on criteria
+  let sidebarColor = COLOR_BLUE;
+  if (isStale) {
+    sidebarColor = COLOR_STALE;
+  } else if (participants.length > 0) {
+    sidebarColor = COLOR_GREEN;
+  }
+
   const embed: Embed = {
-    color: COLOR_PLAYING,
+    color: sidebarColor,
     image: { url: `attachment://${NOW_PLAYING_FILENAME}` },
   };
 
@@ -299,8 +308,7 @@ export async function buildYesterdayRecapEmbed({
   };
 }
 
-// --- Add to the bottom of packages/server/src/discord/embeds.ts ---
-
+// Live subtitle text generator for active (non-stale) embeds
 export function buildActiveContent(participants: NowPlayingParticipant[]): string {
   if (participants.length === 0) return "No one is playing yet";
   const sorted = [...participants].sort((a, b) => b.guessesUsed - a.guessesUsed);

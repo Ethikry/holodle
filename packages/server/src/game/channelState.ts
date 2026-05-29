@@ -6,6 +6,7 @@ import {
   buildSupersededContent,
   buildActiveContent, // Imported our new active subtitle helper
   buildYesterdayRecapEmbed,
+  COLOR_STALE,
   type NowPlayingParticipant,
   type RecapPlayer,
 } from "../discord/embeds.js";
@@ -574,13 +575,18 @@ export async function syncChannelEmbed(
   if (allowSupersede && isStaleMessage(state, nowSec)) {
     const oldMessageId = state.messageId;
     const supersededContent = buildSupersededContent(participants);
+
+    // 1. ADD THIS STALE EMBED OBJECT:
+    const staleEmbed = {
+      color: COLOR_STALE, // <-- Applies the stale gray color
+      image: { url: "attachment://holodle-now-playing.png" } // <-- Retains your original board image
+    };
+
     try {
-      // PATCH the old message: past-tense content, drop the "Play now!"
-      // button (clicking it would now hit the new message's flow anyway,
-      // but visually the old one shouldn't invite new clicks).
-      // We omit 'embeds' and 'files' to keep the original grid image untouched!
+      // PATCH the old message: update text, drop the button, and set the side line to gray.
       await patchFollowup(state.latestTokenAppId, state.latestToken, oldMessageId, {
         content: supersededContent,
+        embeds: [staleEmbed], // <-- ADD THIS LINE to pass the stale color
         components: [],
       });
     } catch (err) {

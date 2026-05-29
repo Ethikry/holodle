@@ -11,10 +11,20 @@ import { BOARD_COLUMNS, type GuessDiff } from "@holodle/shared";
 const BG = "#1c1c1f";
 const TILE_BG = "transparent";
 const TILE_BORDER = "#3a3b40";
-const CELL_EMPTY = "#1f2024";
-const CELL_USED = "#3a3b40";
-const CELL_EQUAL = "#3aa55d";
-const CELL_PARTIAL = "#c89b3f";
+
+// Color definitions matching the in-frame player grids (adapted for dark mode readability):
+const CELL_EMPTY_BG = "#2a2b2f";      // Sleek dark gray for unused/empty cells
+const CELL_EMPTY_BD = "#3e4046";      // Muted gray outline for empty cells
+
+const CELL_WRONG_BG = "#dc5a82";      // Soft red background for wrong guesses
+const CELL_WRONG_BD = "#982a4d";      // Darker red outline for wrong guesses
+
+const CELL_EQUAL_BG = "#3aa55d";      // Soft green background for correct matches
+const CELL_EQUAL_BD = "#1a6532";      // Darker green outline for correct matches
+
+const CELL_PARTIAL_BG = "#c89b3f";    // Amber/yellow background for partial matches
+const CELL_PARTIAL_BD = "#8f671c";    // Darker yellow outline for partial matches
+
 const CELL_BORDER = "#1c1c1f";
 
 const TITLE_INK = "#ffffff";
@@ -316,19 +326,25 @@ function drawGuessGrid(
 
 interface CellRender {
   fill: string;
+  border?: string; // Optional outline color
   glyph?: string;
 }
 
-// Maps column states dynamically based on shared BOARD_COLUMNS, preventing alignment/typographical drift.
+// Maps column states dynamically based on shared BOARD_COLUMNS.
 function cellRenderAt(diff: GuessDiff | undefined, col: number): CellRender {
-  if (!diff) return { fill: CELL_USED };
+  if (!diff) return { fill: CELL_EMPTY_BG, border: CELL_EMPTY_BD };
   const key = BOARD_COLUMNS[col];
-  if (!key) return { fill: CELL_USED };
+  if (!key) return { fill: CELL_EMPTY_BG, border: CELL_EMPTY_BD };
   const c = diff[key];
-  if (!c) return { fill: CELL_USED };
-  if (c.state === "equal") return { fill: CELL_EQUAL };
-  if (c.state === "partial") return { fill: CELL_PARTIAL };
-  return { fill: CELL_USED };
+  if (!c) return { fill: CELL_EMPTY_BG, border: CELL_EMPTY_BD };
+  
+  if (c.state === "equal") {
+    return { fill: CELL_EQUAL_BG, border: CELL_EQUAL_BD };
+  }
+  if (c.state === "partial") {
+    return { fill: CELL_PARTIAL_BG, border: CELL_PARTIAL_BD };
+  }
+  return { fill: CELL_WRONG_BG, border: CELL_WRONG_BD };
 }
 
 function drawGuessCell(
@@ -338,11 +354,19 @@ function drawGuessCell(
   size: number,
   r: CellRender,
 ): void {
+  const borderRadius = 3; // Renders curved cell edges matching client's rounded-[3px] Look
+
+  // Fill cell background
   ctx.fillStyle = r.fill;
-  ctx.fillRect(x, y, size, size);
-  ctx.strokeStyle = CELL_BORDER;
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x, y, size, size);
+  roundedRect(ctx, x, y, size, size, borderRadius);
+  ctx.fill();
+
+  // Stroke cell border
+  ctx.strokeStyle = r.border ?? CELL_BORDER;
+  ctx.lineWidth = 1.5;
+  roundedRect(ctx, x, y, size, size, borderRadius);
+  ctx.stroke();
+
   if (r.glyph && size >= 24) {
     ctx.fillStyle = TITLE_INK;
     ctx.font = `700 ${Math.round(size * 0.7)}px sans-serif`;
