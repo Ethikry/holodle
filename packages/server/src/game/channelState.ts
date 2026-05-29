@@ -4,6 +4,7 @@ import { patchFollowup, postFollowup } from "../discord/followups.js";
 import {
   buildNowPlayingEmbed,
   buildSupersededContent,
+  buildActiveContent, // Imported our new active subtitle helper
   buildYesterdayRecapEmbed,
   type NowPlayingParticipant,
   type RecapPlayer,
@@ -548,13 +549,15 @@ export async function syncChannelEmbed(
     applicationId: state.latestTokenAppId,
   });
 
+  const activeContent = buildActiveContent(participants);
+
   // No message yet for this puzzle → POST a new one (no reply context).
   if (!state.messageId) {
     try {
       const posted = await postFollowup(
         state.latestTokenAppId,
         state.latestToken,
-        { embeds: [embed], components, files: [file] },
+        { content: activeContent, embeds: [embed], components, files: [file] },
         { wait: true },
       );
       if (posted) setChannelMessageId(channelId, puzzleId, posted.id, nowSec);
@@ -575,11 +578,10 @@ export async function syncChannelEmbed(
       // PATCH the old message: past-tense content, drop the "Play now!"
       // button (clicking it would now hit the new message's flow anyway,
       // but visually the old one shouldn't invite new clicks).
+      // We omit 'embeds' and 'files' to keep the original grid image untouched!
       await patchFollowup(state.latestTokenAppId, state.latestToken, oldMessageId, {
         content: supersededContent,
-        embeds: [embed],
         components: [],
-        files: [file],
       });
     } catch (err) {
       console.error("[channelState] syncChannelEmbed supersede-patch failed:", err);
@@ -591,6 +593,7 @@ export async function syncChannelEmbed(
         state.latestTokenAppId,
         state.latestToken,
         {
+          content: activeContent,
           embeds: [embed],
           components,
           files: [file],
@@ -611,6 +614,7 @@ export async function syncChannelEmbed(
   // Normal in-place edit.
   try {
     const ok = await patchFollowup(state.latestTokenAppId, state.latestToken, state.messageId, {
+      content: activeContent,
       embeds: [embed],
       components,
       files: [file],
@@ -621,9 +625,9 @@ export async function syncChannelEmbed(
   }
 }
 
-// Called from the guess route on EVERY guess. Persists the running history
-// against channel_daily_participant, then defers the embed write to
-// syncChannelEmbed.
+// Drives the embed-write side of every guess + every /launch click.
+// Persists the running history against channel_daily_participant, then defers
+// the embed write to syncChannelEmbed.
 export async function recordParticipantProgress(
   userId: string,
   channelId: string,

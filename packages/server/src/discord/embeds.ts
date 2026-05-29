@@ -298,3 +298,18 @@ export async function buildYesterdayRecapEmbed({
     components,
   };
 }
+
+// --- Add to the bottom of packages/server/src/discord/embeds.ts ---
+
+export function buildActiveContent(participants: NowPlayingParticipant[]): string {
+  if (participants.length === 0) return "No one is playing yet";
+  const sorted = [...participants].sort((a, b) => b.guessesUsed - a.guessesUsed);
+  // biome-ignore lint/style/noNonNullAssertion: bounded by length check above
+  const first = sorted[0]!;
+  if (sorted.length === 1) return `${first.displayName} is currently playing`;
+  if (sorted.length === 2) {
+    // biome-ignore lint/style/noNonNullAssertion: bounded by length check above
+    return `${first.displayName} and ${sorted[1]!.displayName} are currently playing`;
+  }
+  return `${first.displayName} and ${sorted.length - 1} others are currently playing`;
+}

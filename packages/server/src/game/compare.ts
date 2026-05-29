@@ -54,15 +54,15 @@ function penlightColorCell(
 // branded label. Council/Promise both render as "Gen 2 (Promise)" —
 // they're the same cohort (Council members migrated to Promise).
 const GEN_DISPLAY: Record<string, string> = {
-  holoX: "Gen 6 (holoX)",
-  Myth: "Gen 1 (Myth)",
-  Council: "Gen 2 (Promise)",
-  Promise: "Gen 2 (Promise)",
-  "Project: HOPE": "Gen 2 (Project HOPE)",
-  Advent: "Gen 3 (Advent)",
-  Justice: "Gen 4 (Justice)",
-  ReGLOSS: "Gen 1 (ReGLOSS)",
-  "FLOW GLOW": "Gen 2 (FLOWGLOW)",
+  holoX: "Gen 6",
+  Myth: "Gen 1",
+  Council: "Gen 2",
+  Promise: "Gen 2",
+  "Project: HOPE": "Gen 2",
+  Advent: "Gen 3",
+  Justice: "Gen 4",
+  ReGLOSS: "Gen 1",
+  "FLOW GLOW": "Gen 2",
 };
 
 function displayGen(gen: string): string {

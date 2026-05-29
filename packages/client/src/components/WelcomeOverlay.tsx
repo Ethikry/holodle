@@ -3,24 +3,9 @@ import { patchPrefs } from "../net/api.js";
 import { useGame } from "../state/game.js";
 import { GuessRow } from "./GuessRow.js";
 
-// First-launch onboarding. Shown once per browser (gated by the
-// `holodle-welcomed` localStorage key set in App.tsx + the Zustand
-// `welcomeOpen` action). The intent is to land users with a tiny "I
-// get it" moment before they're staring at an empty grid — show the
-// colour rules and a 3-row example board with real talent stats.
-
 // Synthetic GuessDiff rows for the example board. The hypothetical
 // "answer" is Ceres Fauna (EN, Promise → Gen 2, Kirin, Light Green,
-// 164cm Tall, March). The four rows show a progression from a complete
-// miss to the solve:
-//   1. Usada Pekora — JP / Gen 3 / Animal / Light Blue / Med / January
-//      → every cell red.
-//   2. Anya Melfissa — ID / Gen 2 / Dagger / Yellow / Smol / March
-//      → gen matches (cross-branch Gen 2 ↔ Gen 2) + birthMonth equal.
-//   3. Takanashi Kiara — EN / Gen 1 (Myth) / Bird / Orange / Tall / July
-//      → branch matches (both EN) + height equal.
-//   4. Ceres Fauna — full match, all green.
-// All values mirror talent_data.json verbatim.
+// 164cm Tall, March).
 const EXAMPLE_ROWS: GuessDiff[] = [
   {
     talentId: "usada-pekora",
@@ -43,7 +28,7 @@ const EXAMPLE_ROWS: GuessDiff[] = [
   {
     talentId: "takanashi-kiara",
     branch: { value: "EN", state: "equal" },
-    group: { value: "Gen 1 (Myth)", state: "wrong" },
+    group: { value: "Gen 1", state: "wrong" }, // <-- Updated to clean "Gen 1"
     penlightColor: { value: "Orange", state: "wrong" },
     archetype: { value: "Bird", state: "wrong" },
     height: { value: "Tall", state: "equal" },
@@ -52,7 +37,7 @@ const EXAMPLE_ROWS: GuessDiff[] = [
   {
     talentId: "ceres-fauna",
     branch: { value: "EN", state: "equal" },
-    group: { value: "Gen 2 (Promise)", state: "equal" },
+    group: { value: "Gen 2", state: "equal" }, // <-- Updated to clean "Gen 2"
     penlightColor: { value: "Light Green", state: "equal" },
     archetype: { value: "Kirin", state: "equal" },
     height: { value: "Tall", state: "equal" },
@@ -143,7 +128,7 @@ export function WelcomeOverlay(): JSX.Element | null {
             >
               <div className="break-words leading-tight">Talent</div>
               <div className="break-words leading-tight">Branch</div>
-              <div className="break-words leading-tight">Gen</div>
+              <div className="break-words leading-tight">Gen #</div>
               <div className="break-words leading-tight">Penlight</div>
               <div className="break-words leading-tight">Archetype</div>
               <div className="break-words leading-tight">Height</div>

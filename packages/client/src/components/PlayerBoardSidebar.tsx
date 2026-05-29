@@ -9,7 +9,7 @@ import { useGame } from "../state/game.js";
 // CellState colors; the GuessDiff values themselves are never broadcast, so
 // nobody sees what talents anyone else guessed.
 
-const COLS = 5;
+const COLS = 6; // Set to 6 to stay aligned with shared BOARD_COLUMNS
 
 function cellClass(state: CellState | "empty"): string {
   switch (state) {
@@ -39,7 +39,7 @@ function MiniBoard({ board }: { board: BoardRow[] }): JSX.Element {
     }
   }
   return (
-    <div className="grid grid-cols-5 gap-[2px]">
+    <div className="grid grid-cols-6 gap-[2px]"> {/* Changed to grid-cols-6 */}
       {cells.map((state, i) => (
         <div
           key={i}

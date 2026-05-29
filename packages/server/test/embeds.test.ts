@@ -25,7 +25,7 @@ interface RecapPlayerInput {
   userId: string;
   displayName: string;
   guessesUsed: number;
-  status: "won" | "lost";
+  status: "won" | "lost" | "playing"; // <-- Added "playing" here
 }
 
 function recapPlayer(p: RecapPlayerInput): {
@@ -34,7 +34,7 @@ function recapPlayer(p: RecapPlayerInput): {
   avatarUrl: string | null;
   guessesUsed: number;
   history: never[];
-  status: "won" | "lost";
+  status: "won" | "lost" | "playing"; // <-- Added "playing" here
 } {
   return {
     userId: p.userId,
@@ -72,7 +72,7 @@ describe("buildYesterdayRecapEmbed content (mention vs plain-text)", () => {
       players: [
         recapPlayer({ userId: "u-alice", displayName: "Alice", guessesUsed: 3, status: "won" }),
         recapPlayer({ userId: "u-bob", displayName: "Bob", guessesUsed: 6, status: "lost" }),
-      ],
+      ] as any,
     });
     expect(content).toContain("<@u-alice>");
     expect(content).toContain("<@u-bob>");
@@ -84,7 +84,7 @@ describe("buildYesterdayRecapEmbed content (mention vs plain-text)", () => {
       players: [
         recapPlayer({ userId: "u-alice", displayName: "Alice", guessesUsed: 3, status: "won" }),
         recapPlayer({ userId: "u-bob", displayName: "Bob", guessesUsed: 6, status: "lost" }),
-      ],
+      ] as any,
       mutedUserIds: new Set(["u-bob"]),
     });
     // Bob is muted: plain "Bob" appears, "<@u-bob>" does not.
@@ -104,7 +104,7 @@ describe("buildYesterdayRecapEmbed content (mention vs plain-text)", () => {
           guessesUsed: 4,
           status: "won",
         }),
-      ],
+      ] as any,
       mutedUserIds: new Set(["u-evil"]),
     });
     // The literal "@everyone" string is broken by a zero-width space, so
@@ -119,7 +119,7 @@ describe("buildYesterdayRecapEmbed content (mention vs plain-text)", () => {
         recapPlayer({ userId: "u-1", displayName: "One", guessesUsed: 3, status: "won" }),
         recapPlayer({ userId: "u-2", displayName: "Two", guessesUsed: 5, status: "won" }),
         recapPlayer({ userId: "u-3", displayName: "Three", guessesUsed: 6, status: "lost" }),
-      ],
+      ] as any,
       mutedUserIds: new Set(["u-2"]),
     });
     expect(content).toContain("<@u-1>");
@@ -128,5 +128,35 @@ describe("buildYesterdayRecapEmbed content (mention vs plain-text)", () => {
     expect(content).toContain("<@u-3>");
     // Crown still appears for the lowest-guess bucket.
     expect(content).toContain("👑");
+  });
+});
+
+const { buildActiveContent } = await import("../src/discord/embeds.js");
+
+describe("buildActiveContent", () => {
+  it("renders live-updating play context correctly based on participant counts", () => {
+    // 1 Player
+    expect(
+      buildActiveContent([
+        recapPlayer({ userId: "u-1", displayName: "Alice", guessesUsed: 2, status: "won" }),
+      ])
+    ).toBe("Alice is currently playing");
+
+    // 2 Players
+    expect(
+      buildActiveContent([
+        recapPlayer({ userId: "u-1", displayName: "Alice", guessesUsed: 2, status: "won" }),
+        recapPlayer({ userId: "u-2", displayName: "Bob", guessesUsed: 4, status: "playing" }),
+      ])
+    ).toBe("Bob and Alice are currently playing"); // Bob sorted first since 4 > 2
+
+    // 3 Players
+    expect(
+      buildActiveContent([
+        recapPlayer({ userId: "u-1", displayName: "Alice", guessesUsed: 2, status: "won" }),
+        recapPlayer({ userId: "u-2", displayName: "Bob", guessesUsed: 4, status: "playing" }),
+        recapPlayer({ userId: "u-3", displayName: "Charlie", guessesUsed: 1, status: "playing" }),
+      ])
+    ).toBe("Bob and 2 others are currently playing");
   });
 });

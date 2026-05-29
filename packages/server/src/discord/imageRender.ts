@@ -1,5 +1,5 @@
 import { createCanvas, loadImage, type SKRSContext2D } from "@napi-rs/canvas";
-import type { GuessDiff } from "@holodle/shared";
+import { BOARD_COLUMNS, type GuessDiff } from "@holodle/shared";
 
 // Renders the PNG attached to Now Playing + Recap embeds. Mirrors the Wordle
 // posted-message layout: a small "HOLO ✦ DLE No. N" title up top and a grid
@@ -319,17 +319,12 @@ interface CellRender {
   glyph?: string;
 }
 
+// Maps column states dynamically based on shared BOARD_COLUMNS, preventing alignment/typographical drift.
 function cellRenderAt(diff: GuessDiff | undefined, col: number): CellRender {
   if (!diff) return { fill: CELL_USED };
-  const cells = [
-    diff.branch,
-    diff.group,
-    diff.penlightColor,
-    diff.archetype,
-    diff.height,
-    diff.birthMonth,
-  ];
-  const c = cells[col];
+  const key = BOARD_COLUMNS[col];
+  if (!key) return { fill: CELL_USED };
+  const c = diff[key];
   if (!c) return { fill: CELL_USED };
   if (c.state === "equal") return { fill: CELL_EQUAL };
   if (c.state === "partial") return { fill: CELL_PARTIAL };
@@ -413,9 +408,6 @@ function roundedRect(
 // ---------- Legacy recap (kept for fallback) -----------------------------
 
 export function renderRecapImage(input: RecapImageInput): Buffer {
-  // The recap now reuses renderNowPlayingImage via buildYesterdayRecapEmbed.
-  // This sync helper remains for any caller that wants a plain bucket image;
-  // current callers route through the async path.
   void input;
   throw new Error(
     "renderRecapImage is deprecated — use renderNowPlayingImage with a subtitle for recap output.",

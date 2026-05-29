@@ -34,32 +34,29 @@ describe("heightBucket", () => {
 });
 
 describe("displayGroup label formatting", () => {
-  // Cell shows the generation only (branch is no longer part of the
-  // comparison or the displayed value). Numbered gens render as-is;
-  // named cohorts render as "Gen N (CohortName)".
-  it("formats numbered gens as 'Gen N'", () => {
-    expect(displayGroup("JP", "Gen 0")).toBe("Gen 0");
-    expect(displayGroup("JP", "Gen 5")).toBe("Gen 5");
-    expect(displayGroup("ID", "Gen 3")).toBe("Gen 3");
+    it("formats numbered gens as 'Gen N'", () => {
+      expect(displayGroup("JP", "Gen 0")).toBe("Gen 0");
+      expect(displayGroup("JP", "Gen 5")).toBe("Gen 5");
+      expect(displayGroup("ID", "Gen 3")).toBe("Gen 3");
+    });
+    it("synthesizes numbered labels for named cohorts", () => {
+      expect(displayGroup("JP", "holoX")).toBe("Gen 6"); // <-- Updated expected value
+      expect(displayGroup("EN", "Myth")).toBe("Gen 1");  // <-- Updated expected value
+      expect(displayGroup("EN", "Promise")).toBe("Gen 2"); // <-- Updated expected value
+      expect(displayGroup("EN", "Council")).toBe("Gen 2"); // <-- Updated expected value
+      expect(displayGroup("EN", "Project: HOPE")).toBe("Gen 2"); // <-- Updated expected value
+      expect(displayGroup("EN", "Advent")).toBe("Gen 3");  // <-- Updated expected value
+      expect(displayGroup("EN", "Justice")).toBe("Gen 4"); // <-- Updated expected value
+      expect(displayGroup("DEV_IS", "ReGLOSS")).toBe("Gen 1"); // <-- Updated expected value
+      expect(displayGroup("DEV_IS", "FLOW GLOW")).toBe("Gen 2"); // <-- Updated expected value
+    });
+    it("falls through unknown gens unchanged (GAMERS has no gen number)", () => {
+      expect(displayGroup("JP", "GAMERS")).toBe("GAMERS");
+    });
+    it("joins multi-group talents with ' / '", () => {
+      expect(displayGroup("JP", ["Gen 1", "GAMERS"])).toBe("Gen 1 / GAMERS");
+    });
   });
-  it("synthesizes numbered labels for named cohorts", () => {
-    expect(displayGroup("JP", "holoX")).toBe("Gen 6 (holoX)");
-    expect(displayGroup("EN", "Myth")).toBe("Gen 1 (Myth)");
-    expect(displayGroup("EN", "Promise")).toBe("Gen 2 (Promise)");
-    expect(displayGroup("EN", "Council")).toBe("Gen 2 (Promise)");
-    expect(displayGroup("EN", "Project: HOPE")).toBe("Gen 2 (Project HOPE)");
-    expect(displayGroup("EN", "Advent")).toBe("Gen 3 (Advent)");
-    expect(displayGroup("EN", "Justice")).toBe("Gen 4 (Justice)");
-    expect(displayGroup("DEV_IS", "ReGLOSS")).toBe("Gen 1 (ReGLOSS)");
-    expect(displayGroup("DEV_IS", "FLOW GLOW")).toBe("Gen 2 (FLOWGLOW)");
-  });
-  it("falls through unknown gens unchanged (GAMERS has no gen number)", () => {
-    expect(displayGroup("JP", "GAMERS")).toBe("GAMERS");
-  });
-  it("joins multi-group talents with ' / '", () => {
-    expect(displayGroup("JP", ["Gen 1", "GAMERS"])).toBe("Gen 1 / GAMERS");
-  });
-});
 
 describe("compareGuess", () => {
   it("flags an exact match green everywhere", () => {
@@ -156,7 +153,7 @@ describe("compareGuess", () => {
     const hopeful = t({ branch: "EN", generation: "Project: HOPE" });
     const fauna = t({ branch: "EN", generation: "Promise" });
     expect(compareGuess(hopeful, fauna).group.state).toBe("equal");
-    expect(compareGuess(hopeful, fauna).group.value).toBe("Gen 2 (Project HOPE)");
+    expect(compareGuess(hopeful, fauna).group.value).toBe("Gen 2"); // <-- Updated here
   });
 
   it("group: GAMERS only matches itself (no gen number, stays unmapped)", () => {
