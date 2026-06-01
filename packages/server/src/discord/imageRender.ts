@@ -202,8 +202,17 @@ function planLayout(n: number, hasSubtitle: boolean): RenderPlan {
     }
   }
 
+  // A single board renders at BOARD_SCALE of the space it could fill, so it
+  // isn't massive. That capped size is also the ceiling for every other count:
+  // with more than one board we let them fill the frame, but never larger than
+  // a single board would.
+  const soloCell = Math.max(
+    maxCellFor("horizontal", 1, 1, maxContentW, maxContentH),
+    maxCellFor("vertical", 1, 1, maxContentW, maxContentH),
+  );
+  const capCell = soloCell * BOARD_SCALE;
   // Floor (never raise above what fits) so the grid can't overflow.
-  const cell = Math.max(2, Math.floor(best.cell));
+  const cell = Math.max(2, Math.floor(Math.min(best.cell, capCell)));
   const cellGap = Math.max(2, Math.round(cell * CELL_GAP_RATIO));
   const gridSide = GRID_COLS * cell + (GRID_COLS - 1) * cellGap;
   const avatar = gridSide;
@@ -270,17 +279,10 @@ export async function renderNowPlayingImage(input: NowPlayingImageInput): Promis
   const contentW = layout.width - SIDE_PAD * 2;
   const contentAreaH = layout.height - layout.contentY - BOTTOM_PAD;
   const totalH = layout.rows * layout.slotH + (layout.rows - 1) * TILE_GAP;
-  // Vertically center the content within the content area (the grid may not
-  // fill the fixed 400×300 frame), then draw it at BOARD_SCALE, centered, so a
-  // single board doesn't fill the whole embed. The title stays full size.
+  // The board size cap is baked into the cell (see planLayout), so the content
+  // may not fill the fixed 400×300 frame — center it horizontally (per row)
+  // and vertically. The title stays full size at the top.
   const contentTop = layout.contentY + Math.max(0, (contentAreaH - totalH) / 2);
-
-  ctx.save();
-  const centerX = layout.width / 2;
-  const centerY = layout.contentY + contentAreaH / 2;
-  ctx.translate(centerX, centerY);
-  ctx.scale(BOARD_SCALE, BOARD_SCALE);
-  ctx.translate(-centerX, -centerY);
 
   for (let i = 0; i < n; i++) {
     const p = input.participants[i];
@@ -298,7 +300,6 @@ export async function renderNowPlayingImage(input: NowPlayingImageInput): Promis
     const by = slotY + INNER_PAD_Y;
     await drawTile(ctx, bx, by, layout, p);
   }
-  ctx.restore();
 
   return canvas.toBuffer("image/png");
 }
