@@ -171,10 +171,45 @@ describe("compareGuess", () => {
     expect(compareGuess(mumei, sana).group.state).toBe("equal");
   });
 
-  it("archetype: multi-archetype talents match on any shared label (Nerissa: Bird + Demon)", () => {
-    const nerissa = t({ archetype: ["Bird", "Demon"] });
-    expect(compareGuess(t({ archetype: "Bird" }), nerissa).archetype.state).toBe("equal");
-    expect(compareGuess(t({ archetype: "Demon" }), nerissa).archetype.state).toBe("equal");
+  it("archetype: exact match (same parent + sub) is equal", () => {
+    const bird = t({ archetype: "Animal (Bird)" });
+    expect(compareGuess(t({ archetype: "Animal (Bird)" }), bird).archetype.state).toBe("equal");
+    const human = t({ archetype: "Human" });
+    expect(compareGuess(t({ archetype: "Human" }), human).archetype.state).toBe("equal");
+  });
+
+  it("archetype: shared parent but different sub is partial (Animal subtype vs Animal subtype)", () => {
+    const bird = t({ archetype: "Animal (Bird)" });
+    expect(compareGuess(t({ archetype: "Animal (Fox)" }), bird).archetype.state).toBe("partial");
+    // The broad "Animal" parent guessed against a specific Animal subtype.
+    expect(compareGuess(t({ archetype: "Animal" }), bird).archetype.state).toBe("partial");
+    // Mythical subtypes likewise.
+    const demon = t({ archetype: "Mythical (Demon)" });
+    expect(compareGuess(t({ archetype: "Mythical (Kirin)" }), demon).archetype.state).toBe("partial");
+  });
+
+  it("archetype: different parent is wrong", () => {
+    const bird = t({ archetype: "Animal (Bird)" });
+    expect(compareGuess(t({ archetype: "Mythical (Demon)" }), bird).archetype.state).toBe("wrong");
+    expect(compareGuess(t({ archetype: "Human" }), bird).archetype.state).toBe("wrong");
+  });
+
+  it("archetype: tolerates inconsistent spacing in the data", () => {
+    // "Animal(Cat)" (no space) must still read as the same archetype as
+    // "Animal (Cat)".
+    const okayu = t({ archetype: "Animal(Cat)" });
+    expect(compareGuess(t({ archetype: "Animal (Cat)" }), okayu).archetype.state).toBe("equal");
+    expect(compareGuess(t({ archetype: "Animal (Cat)" }), okayu).archetype.value).toBe("Animal (Cat)");
+  });
+
+  it("archetype: multi-archetype talents take the best state across labels (Nerissa)", () => {
+    const nerissa = t({ archetype: ["Animal (Bird)", "Mythical (Demon)"] });
+    // Exact on one label → equal.
+    expect(compareGuess(t({ archetype: "Animal (Bird)" }), nerissa).archetype.state).toBe("equal");
+    expect(compareGuess(t({ archetype: "Mythical (Demon)" }), nerissa).archetype.state).toBe("equal");
+    // Shares the Animal parent but not the sub → partial.
+    expect(compareGuess(t({ archetype: "Animal (Fox)" }), nerissa).archetype.state).toBe("partial");
+    // Shares neither parent → wrong.
     expect(compareGuess(t({ archetype: "Human" }), nerissa).archetype.state).toBe("wrong");
   });
 });

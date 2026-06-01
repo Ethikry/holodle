@@ -107,6 +107,12 @@ describe("POST /api/guess", () => {
         payload: { talentId: wrong },
       });
       expect(r.statusCode).toBe(200);
+      if (i === 5) {
+        // The losing (6th) guess settles the day and must reveal the answer so
+        // the failure screen can show the talent's avatar + name (bug 9).
+        expect(r.json().status).toBe("lost");
+        expect(r.json().answer?.id).toBe(answer.id);
+      }
     }
     // 7th guess after a lost status: 409
     const r7 = await app.inject({

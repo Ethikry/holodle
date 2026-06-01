@@ -115,7 +115,7 @@ describe("upsertParticipant", () => {
       userId: "u1",
       displayName: "Alice-renamed",
     });
-    const ps = listParticipants("c1", "2026-05-19");
+    const ps = listParticipants("c1", "2026-05-19", 0);
     expect(ps).toHaveLength(1);
     expect(ps[0]).toMatchObject({
       userId: "u1",
@@ -179,7 +179,7 @@ describe("recordParticipantProgress token chaining", () => {
     );
 
     // Participant row still gets updated even when no patch fires.
-    const ps = listParticipants("c1", "2026-05-19");
+    const ps = listParticipants("c1", "2026-05-19", 0);
     expect(ps[0]).toMatchObject({ guessesUsed: 4, status: "won" });
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
@@ -309,6 +309,16 @@ describe("isStaleMessage", () => {
 });
 
 describe("syncChannelEmbed supersede flow", () => {
+  // Mark a participant settled so the wave reads as "no active players" and
+  // the time-staleness gate can actually trip.
+  const settle = (userId: string, status: "won" | "lost" = "won"): void => {
+    getDb()
+      .prepare(
+        `UPDATE channel_daily_participant SET status=? WHERE channel_id='c1' AND puzzle_id='2026-05-19' AND user_id=?`,
+      )
+      .run(status, userId);
+  };
+
   beforeEach(() => {
     upsertParticipant({
       channelId: "c1",
@@ -318,24 +328,83 @@ describe("syncChannelEmbed supersede flow", () => {
     });
   });
 
-  it("PATCHes old to past tense + POSTs new with message_reference when stale", async () => {
+  it("keeps the embed live (no supersede) while a player is still mid-game", async () => {
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(new Response("", { status: 200 })) // PATCH old
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ id: "new-msg", channel_id: "c1" }), { status: 200 }),
-      ); // POST new
+      .mockResolvedValue(new Response("", { status: 200 }));
     const now = 1_700_000_000;
     upsertChannelToken("c1", "2026-05-19", "tok-fresh", "app-1", now + 80 * 60);
     setChannelMessageId("c1", "2026-05-19", "old-msg", now);
 
-    // 80 minutes after the original post — past the 60-min age threshold.
+    // 80 minutes after the post — past the age threshold — but u1 is still
+    // 'playing', so the embed must NOT go stale: in-place PATCH, no supersede.
     await recordParticipantProgress(
       "u1",
       "c1",
       "2026-05-19",
       "Alice",
       stubDiffs(3),
+      "playing",
+      now + 80 * 60,
+    );
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(init.method).toBe("PATCH");
+    expect(url).toContain("/messages/old-msg");
+    expect(getChannelState("c1", "2026-05-19")?.messageId).toBe("old-msg");
+    fetchSpy.mockRestore();
+  });
+
+  it("lands a player's SETTLING guess on the same embed even after it timed out", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("", { status: 200 }));
+    const now = 1_700_000_000;
+    upsertChannelToken("c1", "2026-05-19", "tok-fresh", "app-1", now + 80 * 60);
+    setChannelMessageId("c1", "2026-05-19", "old-msg", now);
+
+    // u1 has been playing on this (now time-stale) embed and finally wins. The
+    // settling guess flips the wave to "no active players" — but keepAlive
+    // keeps it on the same embed instead of spawning a fresh one.
+    await recordParticipantProgress(
+      "u1",
+      "c1",
+      "2026-05-19",
+      "Alice",
+      stubDiffs(4),
+      "won",
+      now + 80 * 60,
+    );
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(init.method).toBe("PATCH");
+    expect(url).toContain("/messages/old-msg");
+    expect(getChannelState("c1", "2026-05-19")?.messageId).toBe("old-msg");
+    fetchSpy.mockRestore();
+  });
+
+  it("supersedes once the wave is fully settled and a DIFFERENT player guesses", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response("", { status: 200 })) // gray PATCH old
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "new-msg", channel_id: "c1" }), { status: 200 }),
+      ); // POST new
+    const now = 1_700_000_000;
+    upsertChannelToken("c1", "2026-05-19", "tok-fresh", "app-1", now + 80 * 60);
+    setChannelMessageId("c1", "2026-05-19", "old-msg", now);
+    settle("u1"); // wave 0 is now fully settled
+
+    // A brand-new player guesses 80 minutes later — past the age threshold,
+    // no active players left → supersede with a fresh embed.
+    await recordParticipantProgress(
+      "u2",
+      "c1",
+      "2026-05-19",
+      "Bob",
+      stubDiffs(1),
       "playing",
       now + 80 * 60,
     );
@@ -348,35 +417,35 @@ describe("syncChannelEmbed supersede flow", () => {
     expect(postInit.method).toBe("POST");
     expect(postUrl).toContain("/webhooks/app-1/tok-fresh?wait=true");
 
-    // POST payload was multipart (carries the PNG); the payload_json field
-    // inside has message_reference + the past-tense participants are
-    // implicit (we don't snapshot the body here, but state moves on).
     const next = getChannelState("c1", "2026-05-19");
     expect(next?.messageId).toBe("new-msg");
     expect(next?.messageCreatedAt).toBe(now + 80 * 60);
+    expect(next?.currentGen).toBe(1);
     fetchSpy.mockRestore();
   });
 
-  it("does NOT supersede a stale embed when allowSupersede is false (passive launch)", async () => {
+  it("grays a fully-settled stale embed on a passive launch without posting a fresh one", async () => {
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(new Response("", { status: 200 }));
     const now = 1_700_000_000;
     upsertChannelToken("c1", "2026-05-19", "tok-fresh", "app-1", now + 80 * 60);
     setChannelMessageId("c1", "2026-05-19", "old-msg", now);
+    settle("u1"); // fully settled → time-staleness can trip
 
-    // 80 minutes after the original post — stale by age. But this is a
-    // /launch-style sync (allowSupersede defaults to false), so the
-    // expected behavior is in-place PATCH, not supersede.
+    // /launch-style sync (allowSupersede defaults to false): gray the stale
+    // embed in place (single PATCH), do NOT post a fresh one.
     await syncChannelEmbed("c1", "2026-05-19", {}, now + 80 * 60);
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
     expect(init.method).toBe("PATCH");
     expect(url).toContain("/messages/old-msg");
-    // Same message_id retained.
+    // Same message_id retained; the gray patch must NOT bump message_updated_at
+    // (the embed has to stay stale so a later guess can still supersede it).
     const next = getChannelState("c1", "2026-05-19");
     expect(next?.messageId).toBe("old-msg");
+    expect(next?.messageUpdatedAt).toBe(now);
     fetchSpy.mockRestore();
   });
 
@@ -407,6 +476,120 @@ describe("syncChannelEmbed supersede flow", () => {
     const next = getChannelState("c1", "2026-05-19");
     expect(next?.messageId).toBe("msg-1");
     expect(next?.messageUpdatedAt).toBe(now + 5 * 60);
+    fetchSpy.mockRestore();
+  });
+});
+
+describe("embed wave (gen) scoping", () => {
+  const genOf = (
+    channelId: string,
+    puzzleId: string,
+    userId: string,
+  ): number | undefined => {
+    const row = getDb()
+      .prepare(
+        `SELECT gen FROM channel_daily_participant WHERE channel_id=? AND puzzle_id=? AND user_id=?`,
+      )
+      .get(channelId, puzzleId, userId) as { gen: number } | undefined;
+    return row?.gen;
+  };
+  const settle = (userId: string, status: "won" | "lost" = "won"): void => {
+    getDb()
+      .prepare(
+        `UPDATE channel_daily_participant SET status=? WHERE channel_id='c1' AND puzzle_id='2026-05-19' AND user_id=?`,
+      )
+      .run(status, userId);
+  };
+
+  it("new joiners on a live embed share the current wave (gen 0)", () => {
+    const now = 1_700_000_000;
+    upsertChannelToken("c1", "2026-05-19", "tok", "app-1", now);
+    setChannelMessageId("c1", "2026-05-19", "msg-1", now);
+    upsertParticipant({ channelId: "c1", puzzleId: "2026-05-19", userId: "a", displayName: "A", nowSec: now });
+    upsertParticipant({ channelId: "c1", puzzleId: "2026-05-19", userId: "b", displayName: "B", nowSec: now });
+    expect(genOf("c1", "2026-05-19", "a")).toBe(0);
+    expect(genOf("c1", "2026-05-19", "b")).toBe(0);
+    expect(listParticipants("c1", "2026-05-19", 0)).toHaveLength(2);
+  });
+
+  it("a joiner on a time-stale embed still joins the live wave while a player is mid-game", () => {
+    const now = 1_700_000_000;
+    upsertChannelToken("c1", "2026-05-19", "tok", "app-1", now + 80 * 60);
+    setChannelMessageId("c1", "2026-05-19", "old-msg", now);
+    // 'a' is still playing on the (time-stale) embed.
+    upsertParticipant({ channelId: "c1", puzzleId: "2026-05-19", userId: "a", displayName: "A", nowSec: now });
+    // 'b' joins 80 minutes later. Because 'a' is still playing the embed is
+    // not stale, so 'b' joins the SAME wave rather than splitting off.
+    upsertParticipant({ channelId: "c1", puzzleId: "2026-05-19", userId: "b", displayName: "B", nowSec: now + 80 * 60 });
+    expect(genOf("c1", "2026-05-19", "b")).toBe(0);
+  });
+
+  it("a guess superseding a fully-settled stale embed starts a fresh wave with only the triggerer (bug 2)", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response("", { status: 200 })) // gray PATCH old
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "new-msg", channel_id: "c1" }), { status: 200 }),
+      ); // POST fresh
+    const now = 1_700_000_000;
+    upsertChannelToken("c1", "2026-05-19", "tok", "app-1", now + 80 * 60);
+    setChannelMessageId("c1", "2026-05-19", "old-msg", now);
+    // Wave 0 had two players, both since finished.
+    upsertParticipant({ channelId: "c1", puzzleId: "2026-05-19", userId: "a", displayName: "A", nowSec: now });
+    upsertParticipant({ channelId: "c1", puzzleId: "2026-05-19", userId: "b", displayName: "B", nowSec: now });
+    settle("a");
+    settle("b");
+
+    // A new player 'c' guesses 80 minutes later — embed time-stale + nobody
+    // playing → supersede with a fresh wave containing only 'c'.
+    await recordParticipantProgress(
+      "c",
+      "c1",
+      "2026-05-19",
+      "C",
+      stubDiffs(2),
+      "playing",
+      now + 80 * 60,
+    );
+
+    expect(getChannelState("c1", "2026-05-19")?.currentGen).toBe(1);
+    expect(genOf("c1", "2026-05-19", "c")).toBe(1); // the new wave
+    expect(genOf("c1", "2026-05-19", "a")).toBe(0); // frozen in the old wave
+    expect(genOf("c1", "2026-05-19", "b")).toBe(0);
+    // The fresh embed (wave 1) renders only the triggerer, not the whole day.
+    expect(listParticipants("c1", "2026-05-19", 1).map((p) => p.userId)).toEqual(["c"]);
+    expect(getChannelState("c1", "2026-05-19")?.messageId).toBe("new-msg");
+    fetchSpy.mockRestore();
+  });
+
+  it("a Play-now click on a fully-settled stale embed does not add the clicker to that embed (bug 1)", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("", { status: 200 }));
+    const now = 1_700_000_000;
+    upsertChannelToken("c1", "2026-05-19", "tok", "app-1", now + 80 * 60);
+    setChannelMessageId("c1", "2026-05-19", "old-msg", now);
+    upsertParticipant({ channelId: "c1", puzzleId: "2026-05-19", userId: "a", displayName: "A", nowSec: now }); // wave 0
+    settle("a"); // nobody is mid-game, so the embed can actually go stale
+
+    // "Play now!" by a NEW user while the embed is stale: the interactions
+    // handler upserts the participant, then syncs passively (allowSupersede
+    // defaults to false).
+    upsertParticipant({
+      channelId: "c1",
+      puzzleId: "2026-05-19",
+      userId: "late",
+      displayName: "Late",
+      nowSec: now + 80 * 60,
+    });
+    await syncChannelEmbed("c1", "2026-05-19", {}, now + 80 * 60);
+
+    // 'late' is parked in the NEXT wave, never added to wave 0 / the old embed.
+    expect(genOf("c1", "2026-05-19", "late")).toBe(1);
+    expect(listParticipants("c1", "2026-05-19", 0).map((p) => p.userId)).toEqual(["a"]);
+    // Only the single gray PATCH happened — no fresh embed posted.
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect((fetchSpy.mock.calls[0]![1] as RequestInit).method).toBe("PATCH");
     fetchSpy.mockRestore();
   });
 });
@@ -602,6 +785,43 @@ describe("findMostRecentUnpostedRecapPuzzle (tz-aware safety gate)", () => {
     const lateNow = utcSec(2026, 5, 27, 6);
     expect(
       findMostRecentUnpostedRecapPuzzle("still-playing", "2026-05-27", lateNow),
+    ).toBe("2026-05-26");
+  });
+
+  it("waits on a recent neighbor-tz player who hasn't played the candidate puzzle (bug 5)", () => {
+    // Only a JP player played + settled puzzle 2026-05-26. A US-CST regular
+    // played the PREVIOUS puzzle (2026-05-25) but not 2026-05-26 yet. The
+    // recap must still wait for the CST player's local midnight rather than
+    // firing the instant JP rolls over.
+    upsertParticipant({
+      channelId: "broad",
+      puzzleId: "2026-05-26",
+      userId: "jp",
+      displayName: "JP Player",
+      tz: "Asia/Tokyo",
+    });
+    getDb()
+      .prepare(
+        `UPDATE channel_daily_participant SET status='won', guesses_used=3
+          WHERE channel_id='broad' AND puzzle_id='2026-05-26'`,
+      )
+      .run();
+    upsertParticipant({
+      channelId: "broad",
+      puzzleId: "2026-05-25",
+      userId: "us",
+      displayName: "US Player",
+      tz: "America/Chicago",
+    });
+
+    // 2026-05-26 16:00 UTC: JP already rolled over (15:00 UTC), but the
+    // recent CST regular hasn't. Old per-puzzle gate would have fired here.
+    expect(
+      findMostRecentUnpostedRecapPuzzle("broad", "2026-05-27", utcSec(2026, 5, 26, 16)),
+    ).toBeNull();
+    // 2026-05-27 06:00 UTC = CST midnight → now eligible.
+    expect(
+      findMostRecentUnpostedRecapPuzzle("broad", "2026-05-27", utcSec(2026, 5, 27, 6)),
     ).toBe("2026-05-26");
   });
 

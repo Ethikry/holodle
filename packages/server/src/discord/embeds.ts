@@ -49,13 +49,39 @@ export type MessageComponent = ActionRow;
 
 const COLOR_RECAP = 0x22b8e6;
 
-// Embed Side-Bar Color Constants
+// Embed Side-Bar Color Constants. An active "Now Playing" embed is always
+// green; it turns gray the moment it goes stale. (The old blue "no players
+// yet" state was dropped — see buildNowPlayingEmbed.)
 export const COLOR_STALE = 0x7f8c8d;   // Gray when stale/superseded
-export const COLOR_BLUE = 0x22b8e6;    // Sky blue when active with no players yet
-export const COLOR_GREEN = 0x3aa55d;   // Green when active and someone is playing
+export const COLOR_GREEN = 0x3aa55d;   // Green while the embed is live
 
 const NOW_PLAYING_FILENAME = "holodle-now-playing.png";
 const RECAP_FILENAME = "holodle-recap.png";
+
+// Attachment URL for the rendered board image. Exported so the supersede
+// path can re-reference the already-uploaded image when it grays out a
+// stale embed in place (no re-upload).
+export const NOW_PLAYING_IMAGE_URL = `attachment://${NOW_PLAYING_FILENAME}`;
+
+// The single blue "Play now!" action row carried under every embed (live,
+// stale, and recap). Centralized so the button never silently disappears —
+// e.g. the supersede path used to drop it. Click → MESSAGE_COMPONENT with
+// custom_id "launch" → server replies LAUNCH_ACTIVITY (type 12).
+export function buildPlayNowButtonRow(): MessageComponent[] {
+  const button: PrimaryButton = {
+    type: 2,
+    style: 1,
+    label: "Play now!",
+    custom_id: LAUNCH_BUTTON_CUSTOM_ID,
+  };
+  return [{ type: 1, components: [button] }];
+}
+
+// Minimal embed used to gray out a stale "Now Playing" message in place. It
+// references the existing image attachment so no re-upload is needed.
+export function buildStaleEmbed(): Embed {
+  return { color: COLOR_STALE, image: { url: NOW_PLAYING_IMAGE_URL } };
+}
 
 export interface NowPlayingParticipant {
   userId: string;
@@ -96,34 +122,18 @@ export async function buildNowPlayingEmbed({
     participants: imageParticipants,
   });
 
-  // Dynamically assign sidebar color based on criteria
-  let sidebarColor = COLOR_BLUE;
-  if (isStale) {
-    sidebarColor = COLOR_STALE;
-  } else if (participants.length > 0) {
-    sidebarColor = COLOR_GREEN;
-  }
-
+  // Green while the embed is live, gray once it goes stale. There is no
+  // longer a separate blue "no players yet" state (bug 3) — an embed always
+  // carries at least its launcher, and a live embed reads green regardless
+  // of count.
   const embed: Embed = {
-    color: sidebarColor,
-    image: { url: `attachment://${NOW_PLAYING_FILENAME}` },
+    color: isStale ? COLOR_STALE : COLOR_GREEN,
+    image: { url: NOW_PLAYING_IMAGE_URL },
   };
-
-  // Primary (blurple) button. Click → MESSAGE_COMPONENT interaction with
-  // custom_id "launch" → server responds with LAUNCH_ACTIVITY (type 12).
-  // Link buttons (style 5) can't be colored; primary + LAUNCH_ACTIVITY is
-  // the only way to get a blue "Play now!" button.
-  const button: PrimaryButton = {
-    type: 2,
-    style: 1,
-    label: "Play now!",
-    custom_id: LAUNCH_BUTTON_CUSTOM_ID,
-  };
-  const components: MessageComponent[] = [{ type: 1, components: [button] }];
 
   return {
     embed,
-    components,
+    components: buildPlayNowButtonRow(),
     file: { filename: NOW_PLAYING_FILENAME, data: png, contentType: "image/png" },
   };
 }
@@ -287,16 +297,6 @@ export async function buildYesterdayRecapEmbed({
     subtitle: answerName ? `Answer: ${answerName}` : "Yesterday's results",
   });
 
-  // Mirror the Now Playing button — same custom_id, same handler in
-  // interactions.ts, so the recap card invites a fresh /launch.
-  const button: PrimaryButton = {
-    type: 2,
-    style: 1,
-    label: "Play now!",
-    custom_id: LAUNCH_BUTTON_CUSTOM_ID,
-  };
-  const components: MessageComponent[] = [{ type: 1, components: [button] }];
-
   return {
     embed: {
       color: COLOR_RECAP,
@@ -304,7 +304,9 @@ export async function buildYesterdayRecapEmbed({
     },
     file: { filename: RECAP_FILENAME, data: png, contentType: "image/png" },
     content: buildRecapContent(players, puzzleId, streak, maxGuesses, mutedUserIds),
-    components,
+    // Mirror the Now Playing button — same custom_id, same handler in
+    // interactions.ts, so the recap card invites a fresh /launch.
+    components: buildPlayNowButtonRow(),
   };
 }
 

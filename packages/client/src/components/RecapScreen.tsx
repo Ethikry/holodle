@@ -22,8 +22,10 @@ function cellClass(state: CellState | "empty"): string {
     case "partial":
       return "bg-amber-300/70 border-amber-500/70";
     case "wrong":
-      return "bg-holo-bad border-holo-badBd";
+      // Muted/desaturated so the green "correct" cells draw the eye (bug 6).
+      return "bg-holo-bad/45 border-holo-badBd/70";
     default:
+      // No-guess blocks fill with the background so they read as empty.
       return "bg-holo-bg border-holo-muted/20";
   }
 }

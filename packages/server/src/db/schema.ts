@@ -55,6 +55,11 @@ CREATE TABLE IF NOT EXISTS channel_daily_state (
   -- message has been posted yet for this puzzle.
   message_created_at   INTEGER,
   message_updated_at   INTEGER,
+  -- Monotonic "wave" counter for this channel-day. Each time a stale embed
+  -- is superseded by a freshly-posted one, current_gen advances. Embeds and
+  -- participants are grouped by gen so a new embed only renders the players
+  -- of its own wave instead of every player who ever played today.
+  current_gen          INTEGER NOT NULL DEFAULT 0,
   latest_token         TEXT NOT NULL,
   latest_token_app_id  TEXT NOT NULL,
   latest_token_exp     INTEGER NOT NULL,
@@ -98,6 +103,10 @@ CREATE TABLE IF NOT EXISTS channel_daily_participant (
   -- a US-CST participant is still mid-day. NULL on legacy rows; the gate
   -- treats NULL as the most conservative tz (UTC-12).
   tz           TEXT,
+  -- The embed "wave" (channel_daily_state.current_gen) this participant
+  -- joined under. An embed renders only the participants of its own gen, so
+  -- a superseded embed freezes its wave and the fresh one starts clean.
+  gen          INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (channel_id, puzzle_id, user_id)
 );
 
@@ -163,6 +172,17 @@ export const ADDITIVE_MIGRATIONS: Array<{ table: string; column: string; ddl: st
     table: "channel_daily_participant",
     column: "tz",
     ddl: "ALTER TABLE channel_daily_participant ADD COLUMN tz TEXT",
+  },
+  // Embed "wave" grouping. See schema comments on current_gen / gen.
+  {
+    table: "channel_daily_state",
+    column: "current_gen",
+    ddl: "ALTER TABLE channel_daily_state ADD COLUMN current_gen INTEGER NOT NULL DEFAULT 0",
+  },
+  {
+    table: "channel_daily_participant",
+    column: "gen",
+    ddl: "ALTER TABLE channel_daily_participant ADD COLUMN gen INTEGER NOT NULL DEFAULT 0",
   },
   // Theming: visible-only client preference, but persisted server-side so
   // it survives device reinstalls. Older user_prefs rows (created before

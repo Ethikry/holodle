@@ -6,7 +6,8 @@ import {
   buildSupersededContent,
   buildActiveContent, // Imported our new active subtitle helper
   buildYesterdayRecapEmbed,
-  COLOR_STALE,
+  buildPlayNowButtonRow,
+  buildStaleEmbed,
   type NowPlayingParticipant,
   type RecapPlayer,
 } from "../discord/embeds.js";
@@ -34,6 +35,8 @@ export interface ChannelDailyState {
   // freshly-created rows that haven't been posted yet.
   messageCreatedAt: number | null;
   messageUpdatedAt: number | null;
+  // Monotonic wave counter (see schema). Advances on each supersede-post.
+  currentGen: number;
   latestToken: string;
   latestTokenAppId: string;
   latestTokenExp: number;
@@ -45,6 +48,7 @@ interface StateRow {
   message_id: string | null;
   message_created_at: number | null;
   message_updated_at: number | null;
+  current_gen: number;
   latest_token: string;
   latest_token_app_id: string;
   latest_token_exp: number;
@@ -52,7 +56,7 @@ interface StateRow {
 
 const STATE_COLUMNS =
   "channel_id, puzzle_id, message_id, message_created_at, message_updated_at, " +
-  "latest_token, latest_token_app_id, latest_token_exp";
+  "current_gen, latest_token, latest_token_app_id, latest_token_exp";
 
 function rowToState(row: StateRow): ChannelDailyState {
   return {
@@ -61,6 +65,7 @@ function rowToState(row: StateRow): ChannelDailyState {
     messageId: row.message_id,
     messageCreatedAt: row.message_created_at,
     messageUpdatedAt: row.message_updated_at,
+    currentGen: row.current_gen,
     latestToken: row.latest_token,
     latestTokenAppId: row.latest_token_app_id,
     latestTokenExp: row.latest_token_exp,
@@ -104,6 +109,57 @@ export function isStaleMessage(
     return true;
   }
   return false;
+}
+
+// True when any participant in the given wave is still mid-game ('playing').
+// Used to keep an embed alive past its time threshold — see isEmbedStale.
+function waveHasActivePlayer(channelId: string, puzzleId: string, gen: number): boolean {
+  const row = getDb()
+    .prepare(
+      `SELECT 1 FROM channel_daily_participant
+        WHERE channel_id = ? AND puzzle_id = ? AND gen = ? AND status = 'playing'
+        LIMIT 1`,
+    )
+    .get(channelId, puzzleId, gen);
+  return !!row;
+}
+
+// Participant-aware staleness. An embed is only "stale" (eligible to be
+// grayed/superseded) when it is BOTH time-stale (isStaleMessage) AND has no
+// current-wave player still mid-game. Keeping a live game's embed fresh means
+// a player who started on it still finishes on it instead of having their
+// final board spawned onto a brand-new embed.
+export function isEmbedStale(
+  state: ChannelDailyState,
+  nowSec: number = Math.floor(Date.now() / 1000),
+): boolean {
+  if (!isStaleMessage(state, nowSec)) return false;
+  return !waveHasActivePlayer(state.channelId, state.puzzleId, state.currentGen);
+}
+
+// The embed "wave" a participant joining right now belongs to. While the
+// current message is live (or there's no message yet) that's the current
+// gen; once it's gone stale, joiners belong to the NEXT wave — the one that
+// gets posted on the next supersede. Stable across the whole stale window
+// because current_gen only advances when a supersede actually posts. Uses
+// the participant-aware staleness so a join while someone is still playing
+// lands in the live wave rather than splitting off a new one.
+export function activeGenForJoin(
+  state: ChannelDailyState | null,
+  nowSec: number = Math.floor(Date.now() / 1000),
+): number {
+  if (!state) return 0;
+  if (state.messageId && isEmbedStale(state, nowSec)) return state.currentGen + 1;
+  return state.currentGen;
+}
+
+// Advances the persisted wave counter after a supersede posts a fresh embed.
+export function setChannelGen(channelId: string, puzzleId: string, gen: number): void {
+  getDb()
+    .prepare(
+      `UPDATE channel_daily_state SET current_gen = ? WHERE channel_id = ? AND puzzle_id = ?`,
+    )
+    .run(gen, channelId, puzzleId);
 }
 
 // Refresh (or create) the row's freshest token. messageId is preserved if
@@ -235,6 +291,10 @@ export interface UpsertParticipantInput {
   // leaves the column unchanged on update; the recap gate treats unknown
   // tz as UTC-12.
   tz?: string | null;
+  // Wall-clock used to decide which embed wave this join lands in. Defaults
+  // to real time; recordParticipantProgress threads its own nowSec so the
+  // gen it stamps matches the nowSec it later hands syncChannelEmbed.
+  nowSec?: number;
 }
 
 // Idempotent. Seeds (or refreshes) the channel row from the user's most
@@ -250,27 +310,36 @@ export function upsertParticipant({
   displayName,
   avatarUrl,
   tz,
+  nowSec,
 }: UpsertParticipantInput): void {
   const progress = findRecentUserDayProgress(userId);
   const guessesJson = progress ? JSON.stringify(progress.history) : "[]";
   const guessesUsed = progress ? progress.history.length : 0;
   const status = progress ? progress.status : "playing";
 
+  // The wave this join belongs to. While the live embed is fresh this is the
+  // current gen (so an existing player re-stamps to the same value — a
+  // no-op); once it's stale, the joiner — including the player whose guess
+  // is about to supersede it — moves into the next wave so the fresh embed
+  // renders the new group, not the whole day.
+  const gen = activeGenForJoin(getChannelState(channelId, puzzleId), nowSec);
+
   // On CONFLICT, only backfill progress when the existing channel row has
   // none and user_day has some. That preserves any in-channel progress
   // recordParticipantProgress has already written, while still healing rows
   // that pre-date this channel for the user. The tz column follows the
   // same "only overwrite when fresher info arrives" rule — passing NULL
-  // keeps whatever was there.
+  // keeps whatever was there. gen always re-stamps to the active wave.
   getDb()
     .prepare(
       `INSERT INTO channel_daily_participant
-         (channel_id, puzzle_id, user_id, display_name, avatar_url, guesses_used, guesses_json, status, joined_at, tz)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now'), ?)
+         (channel_id, puzzle_id, user_id, display_name, avatar_url, guesses_used, guesses_json, status, joined_at, tz, gen)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%s','now'), ?, ?)
        ON CONFLICT(channel_id, puzzle_id, user_id) DO UPDATE SET
          display_name = excluded.display_name,
          avatar_url   = COALESCE(excluded.avatar_url, channel_daily_participant.avatar_url),
          tz           = COALESCE(excluded.tz, channel_daily_participant.tz),
+         gen          = excluded.gen,
          guesses_used = CASE
            WHEN channel_daily_participant.guesses_used = 0 AND excluded.guesses_used > 0
            THEN excluded.guesses_used ELSE channel_daily_participant.guesses_used
@@ -294,6 +363,7 @@ export function upsertParticipant({
       guessesJson,
       status,
       tz ?? null,
+      gen,
     );
 }
 
@@ -320,18 +390,22 @@ function findRecentUserDayProgress(
   return { history, status: row.status };
 }
 
+// Participants of a single embed wave. `gen` scopes the result to one
+// "Now Playing" message so a superseded embed keeps its frozen group and a
+// freshly-posted one only shows the new wave (not every player of the day).
 export function listParticipants(
   channelId: string,
   puzzleId: string,
+  gen: number,
 ): NowPlayingParticipant[] {
   const rows = getDb()
     .prepare(
       `SELECT user_id, display_name, avatar_url, guesses_used, guesses_json, status
          FROM channel_daily_participant
-        WHERE channel_id = ? AND puzzle_id = ?
+        WHERE channel_id = ? AND puzzle_id = ? AND gen = ?
         ORDER BY joined_at ASC`,
     )
-    .all(channelId, puzzleId) as Array<{
+    .all(channelId, puzzleId, gen) as Array<{
     user_id: string;
     display_name: string;
     avatar_url: string | null;
@@ -358,74 +432,70 @@ function parseGuesses(json: string): GuessDiff[] {
   }
 }
 
+// How far back (in days) a channel participant can have last played and
+// still count as "recent" for the recap safety gate. Cross-tz neighbors are
+// at most ~1 calendar day apart (UTC+14 → UTC-12), so 2 days gives margin
+// while keeping a long-vanished member from blocking the recap forever.
+const RECENT_TZ_WINDOW_DAYS = 2;
+
 // Returns the most-recent puzzle_id in this channel that:
 //   1) has at least one settled (won/lost) participant,
 //   2) hasn't been recapped yet,
 //   3) is strictly older than `todayPuzzleId`, AND
-//   4) is "globally safe" to recap — every participant's local day has
-//      rolled over past that puzzle's end (max(puzzleEndUtcSecs(puzzle_id,
-//      participant.tz)) ≤ now). Participants with a NULL tz are treated
-//      as UTC-12 for maximum safety.
+//   4) is "globally safe" to recap — the local day has rolled over past that
+//      puzzle's end for EVERY recent channel participant (not just the ones
+//      who played that exact puzzle): max(puzzleEndUtcSecs(puzzleId, tz)) over
+//      all recent participants' timezones ≤ now. NULL tz → UTC-12.
 //
-// The safety gate is the fix for mixed-tz channels: a JP-tz /launch at
-// 00:00 UTC won't pop a recap for a US-CST participant who is still in
-// their own "today" until 06:00 UTC. Channels with no further activity
-// after the safe moment silently skip the recap — same constraint the
-// current design has, since we can only post via fresh interaction
-// tokens.
+// (4) is the fix for the "fires too early" bug: a lone early-tz (e.g. JP)
+// player who happens to be the only one to have played a puzzle would
+// otherwise trip the recap the instant THEIR midnight passes — mid-day for
+// the rest of the channel. By gating on every recent member's timezone we
+// hold the recap until the slowest of them has rolled over.
 export function findMostRecentUnpostedRecapPuzzle(
   channelId: string,
   todayPuzzleId: string,
   nowSec: number = Math.floor(Date.now() / 1000),
 ): string | null {
-  // Pull every candidate (puzzle_id, tz) row in one query. We need ALL
-  // participants per puzzle (not just settled ones) to gate on the latest
-  // tz — an unsettled mid-day player is exactly who we're protecting
-  // against firing the recap on top of. The "at least one settled play"
-  // requirement is enforced in the JS reduce below.
-  const rows = getDb()
+  // Candidate puzzles: older than today, not yet recapped, with ≥1 settled
+  // play. (Staleness/tz gating is applied per-candidate below.)
+  const candRows = getDb()
     .prepare(
-      `SELECT puzzle_id, tz, status FROM channel_daily_participant
+      `SELECT DISTINCT puzzle_id FROM channel_daily_participant
         WHERE channel_id = ?
           AND puzzle_id < ?
+          AND status IN ('won','lost')
           AND puzzle_id NOT IN (
             SELECT puzzle_id FROM channel_recap_posted WHERE channel_id = ?
           )`,
     )
-    .all(channelId, todayPuzzleId, channelId) as Array<{
-    puzzle_id: string;
-    tz: string | null;
-    status: "playing" | "won" | "lost";
-  }>;
+    .all(channelId, todayPuzzleId, channelId) as Array<{ puzzle_id: string }>;
+  if (candRows.length === 0) return null;
 
-  // Per-puzzle reduce: track max(safe-at) and "any settled play exists".
-  interface Agg {
-    safeAt: number;
-    hasSettled: boolean;
-  }
-  const agg = new Map<string, Agg>();
-  for (const r of rows) {
-    const safeAt = puzzleEndUtcSecs(r.puzzle_id, r.tz);
-    const existing = agg.get(r.puzzle_id);
-    const settled = r.status === "won" || r.status === "lost";
-    if (existing) {
-      if (safeAt > existing.safeAt) existing.safeAt = safeAt;
-      if (settled) existing.hasSettled = true;
-    } else {
-      agg.set(r.puzzle_id, { safeAt, hasSettled: settled });
-    }
-  }
+  const tzRowsBetween = getDb().prepare(
+    `SELECT DISTINCT tz FROM channel_daily_participant
+       WHERE channel_id = ? AND puzzle_id >= ? AND puzzle_id <= ?`,
+  );
 
-  // Pick the most recent puzzle id that's both safe and has settled plays.
-  let bestPuzzleId: string | null = null;
-  for (const [puzzleId, { safeAt, hasSettled }] of agg) {
-    if (!hasSettled) continue;
-    if (safeAt > nowSec) continue;
-    if (bestPuzzleId === null || puzzleId > bestPuzzleId) {
-      bestPuzzleId = puzzleId;
+  // Newest candidate first; return the first one whose broadened safe-at has
+  // passed.
+  const sorted = candRows.map((r) => r.puzzle_id).sort().reverse();
+  for (const puzzleId of sorted) {
+    // Recent window: participants who played from (puzzleId − N days) through
+    // today. Their timezones drive when `puzzleId` is safe to recap.
+    let lower = puzzleId;
+    for (let i = 0; i < RECENT_TZ_WINDOW_DAYS; i++) lower = prevPuzzleId(lower);
+    const tzRows = tzRowsBetween.all(channelId, lower, todayPuzzleId) as Array<{
+      tz: string | null;
+    }>;
+    let safeAt = 0;
+    for (const { tz } of tzRows) {
+      const s = puzzleEndUtcSecs(puzzleId, tz);
+      if (s > safeAt) safeAt = s;
     }
+    if (safeAt <= nowSec) return puzzleId;
   }
-  return bestPuzzleId;
+  return null;
 }
 
 export function listYesterdayRecapPlayers(
@@ -522,13 +592,21 @@ export function computeChannelStreak(
 // false so a passive "open the activity" action never clutters the channel
 // with a fresh embed, even if the existing one is hours old; in that case
 // we just PATCH in place (or no-op if nothing to update).
+//
+// `keepAlive` forces the in-place (non-stale) path even when the embed is
+// time-stale. recordParticipantProgress sets it when the guessing player
+// already belongs to the live wave, so the guess that SETTLES their game
+// (which would otherwise flip the wave to "no active players" → stale) still
+// lands on the embed they've been playing on, rather than spawning a fresh
+// one.
 export async function syncChannelEmbed(
   channelId: string,
   puzzleId: string,
-  options: { allowSupersede?: boolean } = {},
+  options: { allowSupersede?: boolean; keepAlive?: boolean } = {},
   nowSec: number = Math.floor(Date.now() / 1000),
 ): Promise<void> {
   const allowSupersede = options.allowSupersede === true;
+  const keepAlive = options.keepAlive === true;
 
   let state = getChannelState(channelId, puzzleId);
 
@@ -543,13 +621,77 @@ export async function syncChannelEmbed(
 
   if (state.latestTokenExp <= nowSec) return; // token expired — no-op
 
-  const participants = listParticipants(channelId, puzzleId);
+  // An embed is only stale while no current-wave player is still mid-game
+  // (isEmbedStale), and never on a keep-alive sync (the live player's own
+  // settling guess).
+  const stale =
+    state.messageId !== null && !keepAlive && isEmbedStale(state, nowSec);
+
+  // ── Stale path ─────────────────────────────────────────────────────────
+  // The live message has aged out. Freeze it: gray the sidebar, switch to
+  // past-tense text, but KEEP the Play-now button (bug 7) and the original
+  // board image (no re-upload — we don't pass `files`). We intentionally do
+  // NOT bump message_updated_at here, so the message stays "stale" and a
+  // later guess can still supersede it. Then:
+  //   - guess (allowSupersede): post a fresh embed for the NEXT wave.
+  //   - passive launch: stop. The clicker was recorded in the next wave but
+  //     is not added to this frozen embed (bug 1); their board appears when
+  //     they actually guess.
+  if (stale) {
+    const oldMessageId = state.messageId as string;
+    const frozen = listParticipants(channelId, puzzleId, state.currentGen);
+    try {
+      await patchFollowup(state.latestTokenAppId, state.latestToken, oldMessageId, {
+        content: buildSupersededContent(frozen),
+        embeds: [buildStaleEmbed()],
+        components: buildPlayNowButtonRow(),
+      });
+    } catch (err) {
+      console.error("[channelState] syncChannelEmbed supersede-patch failed:", err);
+    }
+
+    if (!allowSupersede) return; // passive launch — leave the frozen embed
+
+    const newGen = state.currentGen + 1;
+    const fresh = listParticipants(channelId, puzzleId, newGen);
+    const { embed, components, file } = await buildNowPlayingEmbed({
+      puzzleId,
+      participants: fresh,
+      applicationId: state.latestTokenAppId,
+    });
+    // Even if the patch above failed, post the fresh embed — losing both is
+    // worse than a stale message keeping its old text.
+    try {
+      const posted = await postFollowup(
+        state.latestTokenAppId,
+        state.latestToken,
+        {
+          content: buildActiveContent(fresh),
+          embeds: [embed],
+          components,
+          files: [file],
+          message_reference: { message_id: oldMessageId, fail_if_not_exists: false },
+        },
+        { wait: true },
+      );
+      if (posted) {
+        setChannelGen(channelId, puzzleId, newGen);
+        setChannelMessageId(channelId, puzzleId, posted.id, nowSec);
+      }
+    } catch (err) {
+      console.error("[channelState] syncChannelEmbed supersede-post failed:", err);
+    }
+    return;
+  }
+
+  // ── Live path ──────────────────────────────────────────────────────────
+  // Render only the current wave.
+  const participants = listParticipants(channelId, puzzleId, state.currentGen);
   const { embed, components, file } = await buildNowPlayingEmbed({
     puzzleId,
     participants,
     applicationId: state.latestTokenAppId,
   });
-
   const activeContent = buildActiveContent(participants);
 
   // No message yet for this puzzle → POST a new one (no reply context).
@@ -564,55 +706,6 @@ export async function syncChannelEmbed(
       if (posted) setChannelMessageId(channelId, puzzleId, posted.id, nowSec);
     } catch (err) {
       console.error("[channelState] syncChannelEmbed post failed:", err);
-    }
-    return;
-  }
-
-  // Message exists but it's been around too long — finalize it as a
-  // "X was playing" snapshot and post a fresh one as a reply. Only do
-  // this for play-triggered syncs; passive launches fall through to the
-  // in-place PATCH below.
-  if (allowSupersede && isStaleMessage(state, nowSec)) {
-    const oldMessageId = state.messageId;
-    const supersededContent = buildSupersededContent(participants);
-
-    // 1. ADD THIS STALE EMBED OBJECT:
-    const staleEmbed = {
-      color: COLOR_STALE, // <-- Applies the stale gray color
-      image: { url: "attachment://holodle-now-playing.png" } // <-- Retains your original board image
-    };
-
-    try {
-      // PATCH the old message: update text, drop the button, and set the side line to gray.
-      await patchFollowup(state.latestTokenAppId, state.latestToken, oldMessageId, {
-        content: supersededContent,
-        embeds: [staleEmbed], // <-- ADD THIS LINE to pass the stale color
-        components: [],
-      });
-    } catch (err) {
-      console.error("[channelState] syncChannelEmbed supersede-patch failed:", err);
-    }
-    // Even if the patch failed, proceed to post the new message — losing
-    // both is worse than the old one keeping its old text.
-    try {
-      const posted = await postFollowup(
-        state.latestTokenAppId,
-        state.latestToken,
-        {
-          content: activeContent,
-          embeds: [embed],
-          components,
-          files: [file],
-          message_reference: { message_id: oldMessageId, fail_if_not_exists: false },
-        },
-        { wait: true },
-      );
-      if (posted) {
-        clearChannelMessage(channelId, puzzleId);
-        setChannelMessageId(channelId, puzzleId, posted.id, nowSec);
-      }
-    } catch (err) {
-      console.error("[channelState] syncChannelEmbed supersede-post failed:", err);
     }
     return;
   }
@@ -648,8 +741,21 @@ export async function recordParticipantProgress(
   // and will backfill from user_day. The user may be playing a puzzle in
   // this channel that they never explicitly /launched (e.g. they crossed
   // midnight mid-game). tz threads through so the recap eligibility gate
-  // sees the freshest known timezone for each participant.
-  upsertParticipant({ channelId, puzzleId, userId, displayName, tz });
+  // sees the freshest known timezone for each participant. nowSec threads
+  // through so the stamped gen matches the staleness decision syncChannelEmbed
+  // makes below at the same instant.
+  upsertParticipant({ channelId, puzzleId, userId, displayName, tz, nowSec });
+
+  // Is this guesser already part of the live wave? upsertParticipant stamped
+  // their gen just now: while they were still mid-game the embed wasn't stale
+  // (isEmbedStale is playing-aware), so they kept the current gen. If so, the
+  // guess we're about to record — even the one that settles their game — must
+  // stay on this same embed (keepAlive), not flip it to "no active players"
+  // and supersede.
+  const postState = getChannelState(channelId, puzzleId);
+  const keepAlive =
+    postState !== null &&
+    getParticipantGen(channelId, puzzleId, userId) === postState.currentGen;
 
   const guessesUsed = history.length;
   const guessesJson = JSON.stringify(history);
@@ -661,7 +767,22 @@ export async function recordParticipantProgress(
     )
     .run(guessesUsed, guessesJson, status, channelId, puzzleId, userId);
 
-  await syncChannelEmbed(channelId, puzzleId, { allowSupersede: true }, nowSec);
+  await syncChannelEmbed(channelId, puzzleId, { allowSupersede: true, keepAlive }, nowSec);
+}
+
+// The wave a participant is currently tagged to, or null if they have no row.
+function getParticipantGen(
+  channelId: string,
+  puzzleId: string,
+  userId: string,
+): number | null {
+  const row = getDb()
+    .prepare(
+      `SELECT gen FROM channel_daily_participant
+        WHERE channel_id = ? AND puzzle_id = ? AND user_id = ?`,
+    )
+    .get(channelId, puzzleId, userId) as { gen: number } | undefined;
+  return row ? row.gen : null;
 }
 
 // Used by the boards panel: every channel participant for this puzzle,
