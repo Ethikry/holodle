@@ -57,7 +57,7 @@ describe("renderNowPlayingImage sizing", () => {
     }
   });
 
-  it("uses a vertical (portrait-ish) card for a single player", async () => {
+  it("uses a horizontal (landscape) card for a single player", async () => {
     const { width, height } = dimensions(
       await renderNowPlayingImage({
         puzzleId: "2026-05-26",
@@ -65,7 +65,8 @@ describe("renderNowPlayingImage sizing", () => {
         participants: [participant(4)],
       }),
     );
-    // A solo vertical card (avatar over grid) is taller than it is wide.
-    expect(height).toBeGreaterThan(width);
+    // A lone board goes horizontal (avatar left of grid) so it fills the
+    // wider-than-tall embed — wider than it is tall.
+    expect(width).toBeGreaterThan(height);
   });
 });

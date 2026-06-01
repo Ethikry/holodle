@@ -156,9 +156,11 @@ function maxCellFor(
 
 // Choose the arrangement (columns × rows) AND card orientation that maximizes
 // the per-card cell size within the embed's max box, then size the canvas to
-// wrap that content. A single row of players uses the vertical card (avatar
-// over grid) — it fills the space better; multi-row layouts pick whichever of
-// vertical/horizontal yields the largest grid.
+// wrap that content. Both orientations are always considered and the largest
+// grid wins, which falls out the way you'd want: a lone board goes horizontal
+// (avatar left of grid) so it fills the wider-than-tall embed; a single row of
+// several players goes vertical (narrow avatar-over-grid cards pack tighter
+// across); bigger groups pick whichever orientation packs largest.
 function planLayout(n: number, hasSubtitle: boolean): RenderPlan {
   const contentY = TITLE_BAND_H + (hasSubtitle ? SUBTITLE_BAND_H : 0);
   const maxContentW = MAX_CANVAS_W - SIDE_PAD * 2;
@@ -186,8 +188,7 @@ function planLayout(n: number, hasSubtitle: boolean): RenderPlan {
   let best = { cols: 1, rows: 1, orientation: "vertical" as CardOrientation, cell: -1 };
   for (let cols = 1; cols <= n; cols++) {
     const rows = Math.ceil(n / cols);
-    const orientations: CardOrientation[] =
-      rows === 1 ? ["vertical"] : ["vertical", "horizontal"];
+    const orientations: CardOrientation[] = ["vertical", "horizontal"];
     for (const orientation of orientations) {
       const cell = maxCellFor(orientation, cols, rows, maxContentW, maxContentH);
       if (cell > best.cell) best = { cols, rows, orientation, cell };
