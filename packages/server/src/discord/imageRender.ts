@@ -87,21 +87,27 @@ export interface RecapImageInput {
 // high-DPI / retina displays (a 1× image gets upscaled there and looks
 // fuzzy). Discord caps how large an embed image *displays*, so the larger
 // pixel buffer buys sharpness, not display size.
-const MAX_CANVAS_W = 392;
-const MAX_CANVAS_H = 294;
-const MIN_CANVAS_W = 184; // keep room for the title on narrow layouts
+const MAX_CANVAS_W = 560;
+const MAX_CANVAS_H = 420;
+const MIN_CANVAS_W = 260; // keep room for the title on narrow layouts
 const SUPERSAMPLE = 3;
 
-const TITLE_BAND_H = 32;
-const SUBTITLE_BAND_H = 14;
-const BOTTOM_PAD = 12;
-const SIDE_PAD = 13;
-const TILE_GAP = 7;
+// The board is drawn at this fraction of the space it could fill, centered in
+// the (otherwise unchanged) canvas. Discord scales the whole image to its
+// embed box regardless of pixel size, so shrinking the canvas wouldn't shrink
+// the *displayed* board — leaving margin inside a same-size canvas does.
+const BOARD_SCALE = 0.7;
+
+const TITLE_BAND_H = 44;
+const SUBTITLE_BAND_H = 20;
+const BOTTOM_PAD = 16;
+const SIDE_PAD = 18;
+const TILE_GAP = 10;
 
 // Per-card padding + the gap between the avatar and the grid beside it.
-const INNER_PAD_X = 7;
-const INNER_PAD_Y = 7;
-const AVATAR_GRID_GAP = 7;
+const INNER_PAD_X = 10;
+const INNER_PAD_Y = 10;
+const AVATAR_GRID_GAP = 10;
 const CELL_GAP_RATIO = 0.12;
 
 // Width (and height) of a 6×N grid expressed as a multiple of one cell, when
@@ -168,8 +174,8 @@ function planLayout(n: number, hasSubtitle: boolean): RenderPlan {
 
   if (n <= 0) {
     return {
-      width: 300,
-      height: contentY + 90 + BOTTOM_PAD,
+      width: 400,
+      height: contentY + 120 + BOTTOM_PAD,
       contentY,
       cols: 0,
       rows: 0,
@@ -247,7 +253,7 @@ export async function renderNowPlayingImage(input: NowPlayingImageInput): Promis
 
   if (hasSubtitle && input.subtitle) {
     ctx.fillStyle = SUBTEXT;
-    ctx.font = "500 9px sans-serif";
+    ctx.font = "500 11px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(input.subtitle, layout.width / 2, TITLE_BAND_H + SUBTITLE_BAND_H / 2);
@@ -255,7 +261,7 @@ export async function renderNowPlayingImage(input: NowPlayingImageInput): Promis
 
   if (n === 0) {
     ctx.fillStyle = SUBTEXT;
-    ctx.font = "500 10px sans-serif";
+    ctx.font = "500 13px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText("Waiting for players…", layout.width / 2, layout.height / 2);
@@ -263,6 +269,15 @@ export async function renderNowPlayingImage(input: NowPlayingImageInput): Promis
   }
 
   const contentW = layout.width - SIDE_PAD * 2;
+
+  // Draw the board at BOARD_SCALE, centered in the content region, so a single
+  // board doesn't fill the whole (same-size) embed. The title stays full size.
+  ctx.save();
+  const centerX = layout.width / 2;
+  const centerY = layout.contentY + (layout.height - layout.contentY - BOTTOM_PAD) / 2;
+  ctx.translate(centerX, centerY);
+  ctx.scale(BOARD_SCALE, BOARD_SCALE);
+  ctx.translate(-centerX, -centerY);
 
   for (let i = 0; i < n; i++) {
     const p = input.participants[i];
@@ -280,6 +295,7 @@ export async function renderNowPlayingImage(input: NowPlayingImageInput): Promis
     const by = slotY + INNER_PAD_Y;
     await drawTile(ctx, bx, by, layout, p);
   }
+  ctx.restore();
 
   return canvas.toBuffer("image/png");
 }
@@ -298,8 +314,8 @@ function drawTitle(
   const numberLabel = puzzleNumber !== undefined ? `${puzzleNumber}` : fallbackPuzzleId;
   const suffix = `  No. ${numberLabel}`;
 
-  const wordFont = "800 17px sans-serif";
-  const numFont = "600 13px sans-serif";
+  const wordFont = "800 24px sans-serif";
+  const numFont = "600 18px sans-serif";
 
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";

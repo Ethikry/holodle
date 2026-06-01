@@ -36,8 +36,8 @@ function dimensions(buf: Buffer): { width: number; height: number } {
 // so it's no longer a single fixed size — but it must always stay within the
 // embed's max box (× the supersample factor).
 const SUPERSAMPLE = 3;
-const MAX_W = 392 * SUPERSAMPLE;
-const MAX_H = 294 * SUPERSAMPLE;
+const MAX_W = 560 * SUPERSAMPLE;
+const MAX_H = 420 * SUPERSAMPLE;
 
 describe("renderNowPlayingImage sizing", () => {
   it("never exceeds the max embed box for any participant count", async () => {
