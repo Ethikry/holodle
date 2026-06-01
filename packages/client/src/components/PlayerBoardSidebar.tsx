@@ -16,7 +16,8 @@ function cellClass(state: CellState | "empty"): string {
     case "equal":
       return "bg-holo-ok border-holo-okBd";
     case "partial":
-      return "bg-amber-300/70 border-amber-500/70";
+      // Solid yellow block (like the green) so a partial reads clearly.
+      return "bg-amber-400 border-amber-500";
     case "wrong":
       // Muted/desaturated so the green "correct" cells draw the eye (bug 6).
       return "bg-holo-bad/45 border-holo-badBd/70";

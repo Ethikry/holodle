@@ -26,8 +26,8 @@ const CELL_WRONG_BD = "#5b3f47";      // slightly darker outline
 const CELL_EQUAL_BG = "#3aa55d";      // Soft green background for correct matches
 const CELL_EQUAL_BD = "#1a6532";      // Darker green outline for correct matches
 
-const CELL_PARTIAL_BG = "#c89b3f";    // Amber/yellow background for partial matches
-const CELL_PARTIAL_BD = "#8f671c";    // Darker yellow outline for partial matches
+const CELL_PARTIAL_BG = "#e6b93e";    // Bright yellow background for partial matches
+const CELL_PARTIAL_BD = "#a07d1c";    // Darker yellow outline for partial matches
 
 const CELL_BORDER = "#1c1c1f";
 
