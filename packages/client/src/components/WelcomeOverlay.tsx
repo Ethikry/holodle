@@ -4,15 +4,17 @@ import { useGame } from "../state/game.js";
 import { GuessRow } from "./GuessRow.js";
 
 // Synthetic GuessDiff rows for the example board. The hypothetical
-// "answer" is Ceres Fauna (EN, Promise → Gen 2, Kirin, Light Green,
-// 164cm Tall, March).
+// "answer" is Ceres Fauna (EN, Promise → Gen 2, Mythical (Kirin),
+// Light Green, 164cm Tall, March). Calliope's row shows a YELLOW partial
+// archetype: Mythical (Reaper) shares the Mythical parent with the answer's
+// Mythical (Kirin) but not the exact species.
 const EXAMPLE_ROWS: GuessDiff[] = [
   {
     talentId: "usada-pekora",
     branch: { value: "JP", state: "wrong" },
     group: { value: "Gen 3", state: "wrong" },
     penlightColor: { value: "Light Blue", state: "wrong" },
-    archetype: { value: "Animal", state: "wrong" },
+    archetype: { value: "Animal (Rabbit)", state: "wrong" },
     height: { value: "Med", state: "wrong" },
     birthMonth: { value: "January", state: "wrong" },
   },
@@ -21,25 +23,27 @@ const EXAMPLE_ROWS: GuessDiff[] = [
     branch: { value: "ID", state: "wrong" },
     group: { value: "Gen 2", state: "equal" },
     penlightColor: { value: "Yellow", state: "wrong" },
-    archetype: { value: "Dagger", state: "wrong" },
+    archetype: { value: "Unique (Dagger)", state: "wrong" },
     height: { value: "Smol", state: "wrong" },
     birthMonth: { value: "March", state: "equal" },
   },
   {
-    talentId: "takanashi-kiara",
+    talentId: "mori-calliope",
     branch: { value: "EN", state: "equal" },
-    group: { value: "Gen 1", state: "wrong" }, // <-- Updated to clean "Gen 1"
-    penlightColor: { value: "Orange", state: "wrong" },
-    archetype: { value: "Bird", state: "wrong" },
+    group: { value: "Gen 1", state: "wrong" },
+    penlightColor: { value: "Light Pink", state: "wrong" },
+    // Shares the "Mythical" parent with the answer's Mythical (Kirin) but a
+    // different sub-archetype → yellow partial.
+    archetype: { value: "Mythical (Reaper)", state: "partial" },
     height: { value: "Tall", state: "equal" },
-    birthMonth: { value: "July", state: "wrong" },
+    birthMonth: { value: "April", state: "wrong" },
   },
   {
     talentId: "ceres-fauna",
     branch: { value: "EN", state: "equal" },
-    group: { value: "Gen 2", state: "equal" }, // <-- Updated to clean "Gen 2"
+    group: { value: "Gen 2", state: "equal" },
     penlightColor: { value: "Light Green", state: "equal" },
-    archetype: { value: "Kirin", state: "equal" },
+    archetype: { value: "Mythical (Kirin)", state: "equal" },
     height: { value: "Tall", state: "equal" },
     birthMonth: { value: "March", state: "equal" },
   },
@@ -93,7 +97,7 @@ export function WelcomeOverlay(): JSX.Element | null {
         </h1>
         <p className="mt-3 text-center text-sm sm:text-base">
           Guess today's Hololive talent in six tries. Each guess grades
-          six attributes — every cell lands green or red.
+          six attributes — every cell lands green, yellow, or red.
         </p>
 
         {/* Colour key — same copy + chips as HelpModal so the two
@@ -104,6 +108,10 @@ export function WelcomeOverlay(): JSX.Element | null {
             <span className="text-sm">Exact match.</span>
           </li>
           <li className="flex items-center gap-3">
+            <span className="cell-partial w-24 shrink-0">Yellow</span>
+            <span className="text-sm">Partial — right category, wrong specifics.</span>
+          </li>
+          <li className="flex items-center gap-3">
             <span className="cell-wrong w-24 shrink-0">Red</span>
             <span className="text-sm">No match.</span>
           </li>
@@ -111,12 +119,17 @@ export function WelcomeOverlay(): JSX.Element | null {
         <p className="mx-auto mt-3 max-w-md text-center text-xs text-holo-muted">
           Generation matches across branches — Aqua's{" "}
           <span className="font-semibold">Gen 2</span> matches Fauna's{" "}
-          <span className="font-semibold">Gen 2 (Promise)</span>.
+          <span className="font-semibold">Gen 2 (Promise)</span>.{" "}
+          <span className="font-semibold">Archetype</span> turns yellow when you
+          share the broad type but not the exact one — a{" "}
+          <span className="font-semibold">Mythical (Reaper)</span> guess against a{" "}
+          <span className="font-semibold">Mythical (Kirin)</span> answer.
         </p>
 
-        {/* Example board — three synthetic rows showing the progression
-            from a complete miss (Aqua) → narrowing in (Kiara, partial
-            group + equal height) → solved (Fauna). */}
+        {/* Example board — four synthetic rows showing the progression
+            from a complete miss (Pekora) → narrowing in (Anya: equal gen +
+            month; Calliope: equal branch + height, and a YELLOW partial
+            archetype) → solved (Fauna). */}
         <section className="mt-6">
           <h2 className="px-1 text-center text-xs font-semibold uppercase tracking-wider text-holo-muted">
             Example — the answer is Ceres Fauna

@@ -77,6 +77,10 @@ export function HelpModal(): JSX.Element | null {
             <span>Exact match.</span>
           </li>
           <li className="flex items-center gap-2">
+            <span className="cell-partial w-24 shrink-0">Yellow</span>
+            <span>Partial — right category, wrong specifics.</span>
+          </li>
+          <li className="flex items-center gap-2">
             <span className="cell-wrong w-24 shrink-0">Red</span>
             <span>No match.</span>
           </li>
@@ -85,9 +89,18 @@ export function HelpModal(): JSX.Element | null {
           <span className="font-semibold">Generation</span> matches across
           branches — Aqua's <span className="font-semibold">Gen 2</span>
           {" "}matches Fauna's <span className="font-semibold">Gen 2
-          (Promise)</span>. <span className="font-semibold">Archetype</span>
-          {" "}counts as a match if any of the talent's archetypes overlap
-          (Nerissa's "Bird / Demon" matches both Bird and Demon guesses).
+          (Promise)</span>.
+        </p>
+        <p className="mt-2 text-xs text-holo-muted">
+          <span className="font-semibold">Archetype</span> is green on an exact
+          match and <span className="font-semibold">yellow</span> when your
+          guess shares the broad type but not the exact one — an{" "}
+          <span className="font-semibold">Animal (Bird)</span> guess against an{" "}
+          <span className="font-semibold">Animal (Fox)</span> answer, or a{" "}
+          <span className="font-semibold">Mythical (Reaper)</span> against a{" "}
+          <span className="font-semibold">Mythical (Kirin)</span>.
+          Multi-archetype talents match if any overlaps (Nerissa is{" "}
+          <span className="font-semibold">Animal (Bird) / Mythical (Demon)</span>).
         </p>
         <p className="mt-2 text-xs text-holo-muted">
           A new puzzle drops at midnight in your timezone. Streaks roll
