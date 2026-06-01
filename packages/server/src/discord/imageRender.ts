@@ -13,11 +13,15 @@ const TILE_BG = "transparent";
 const TILE_BORDER = "#3a3b40";
 
 // Color definitions matching the in-frame player grids (adapted for dark mode readability):
-const CELL_EMPTY_BG = "#2a2b2f";      // Sleek dark gray for unused/empty cells
-const CELL_EMPTY_BD = "#3e4046";      // Muted gray outline for empty cells
+// No-guess cells fill with the card background so they read as "empty" rather
+// than as a distinct gray block (bug 6).
+const CELL_EMPTY_BG = BG;             // matches the background
+const CELL_EMPTY_BD = "#2f3034";      // very subtle outline so the grid is still legible
 
-const CELL_WRONG_BG = "#dc5a82";      // Soft red background for wrong guesses
-const CELL_WRONG_BD = "#982a4d";      // Darker red outline for wrong guesses
+// Wrong guesses use a muted, desaturated red so the eye is drawn to the green
+// "correct" cells instead (bug 6).
+const CELL_WRONG_BG = "#79555f";      // muted, desaturated red
+const CELL_WRONG_BD = "#5b3f47";      // slightly darker outline
 
 const CELL_EQUAL_BG = "#3aa55d";      // Soft green background for correct matches
 const CELL_EQUAL_BD = "#1a6532";      // Darker green outline for correct matches
@@ -66,117 +70,114 @@ export interface RecapImageInput {
 }
 
 // ---------- Layout planning ---------------------------------------------
+//
+// The output image is a FIXED size regardless of how many boards it carries
+// (bug 4). We lay the N participant cards into a grid that fills the content
+// area and scale every card uniformly to fit — one board fills the canvas,
+// many boards each shrink, but the embed's footprint in Discord never moves.
 
-interface TileMetrics {
+// Fixed canvas footprint. Sized to roughly match Wordle's shared result
+// image (~512×280) so the embed sits at a comfortable, consistent size in
+// Discord — which scales the PNG to the client's layout, so a fixed pixel
+// size reads "relatively sized" across devices/resolutions.
+const CANVAS_W = 512;
+const CANVAS_H = 280;
+
+const TITLE_BAND_H = 44;
+const SUBTITLE_BAND_H = 20;
+const BOTTOM_PAD = 16;
+const SIDE_PAD = 18;
+const TILE_GAP = 10;
+
+// Per-card padding + the gap between the avatar and the grid beneath it.
+const INNER_PAD_X = 8;
+const INNER_PAD_Y = 8;
+const AVATAR_GRID_GAP = 8;
+const CELL_GAP_RATIO = 0.16;
+
+// Width (and height) of a 6×N grid expressed as a multiple of one cell, when
+// the inter-cell gap is CELL_GAP_RATIO × cell. gridW = cell·K.
+const GRID_SPAN_K = GRID_COLS + (GRID_COLS - 1) * CELL_GAP_RATIO;
+
+interface RenderPlan {
   width: number;
   height: number;
+  contentY: number;
   cols: number;
   rows: number;
-  avatar: number;
+  slotW: number;
+  slotH: number;
   cell: number;
   cellGap: number;
-  gridPadTop: number;
-  layout: "horizontal" | "vertical";
+  gridW: number;
+  gridH: number;
+  avatar: number;
 }
 
-interface OverallLayout {
-  width: number;
-  height: number;
-  tile: TileMetrics;
-  tileCols: number; // tiles per row
-  tileGap: number;
-  contentY: number; // y-coord where tiles start
-  padX: number;
-}
-
-const TITLE_BAND_H = 64;
-const SUBTITLE_BAND_H = 26;
-const BOTTOM_PAD = 24;
-const SIDE_PAD = 24;
-const TILE_GAP = 14;
-
-function planLayout(n: number, hasSubtitle: boolean): OverallLayout {
-  if (n <= 1) {
-    // Single wide horizontal tile, like Wordle's solo card.
-    const tile: TileMetrics = {
-      width: 700,
-      height: 360,
-      cols: GRID_COLS,
-      rows: GRID_ROWS,
-      avatar: 220,
-      cell: 38,
-      cellGap: 6,
-      gridPadTop: 0,
-      layout: "horizontal",
-    };
-    return wrapLayout([tile], 1, hasSubtitle);
-  }
-  if (n === 2) {
-    const tile = verticalTile({ avatar: 150, cell: 36 });
-    return wrapLayout([tile, tile], 2, hasSubtitle);
-  }
-  if (n === 3) {
-    const tile = verticalTile({ avatar: 130, cell: 32 });
-    return wrapLayout([tile, tile, tile], 3, hasSubtitle);
-  }
-  if (n <= 6) {
-    const tile = verticalTile({ avatar: 96, cell: 22 });
-    return wrapLayout(repeat(tile, n), 3, hasSubtitle);
-  }
-  if (n <= 12) {
-    const tile = verticalTile({ avatar: 76, cell: 18 });
-    const cols = Math.min(6, Math.ceil(n / 2));
-    return wrapLayout(repeat(tile, n), cols, hasSubtitle);
-  }
-  // 13+ — pack 7-per-row like the Wordle group-of-13 screenshot.
-  const tile = verticalTile({ avatar: 64, cell: 14 });
-  const cols = 7;
-  return wrapLayout(repeat(tile, n), cols, hasSubtitle);
-}
-
-function verticalTile(opts: { avatar: number; cell: number }): TileMetrics {
-  const cellGap = Math.max(2, Math.round(opts.cell * 0.16));
-  const gridW = GRID_COLS * opts.cell + (GRID_COLS - 1) * cellGap;
-  const gridH = GRID_ROWS * opts.cell + (GRID_ROWS - 1) * cellGap;
-  // Tile padding: 12px around content; avatar above grid with a small gap.
-  const innerPadY = 14;
-  const innerPadX = 12;
-  const avatarGridGap = 12;
-  const width = Math.max(opts.avatar + innerPadX * 2, gridW + innerPadX * 2);
-  const height = innerPadY * 2 + opts.avatar + avatarGridGap + gridH;
-  return {
-    width,
-    height,
-    cols: GRID_COLS,
-    rows: GRID_ROWS,
-    avatar: opts.avatar,
-    cell: opts.cell,
-    cellGap,
-    gridPadTop: innerPadY + opts.avatar + avatarGridGap,
-    layout: "vertical",
-  };
-}
-
-function repeat<T>(value: T, n: number): T[] {
-  return Array.from({ length: n }, () => value);
-}
-
-function wrapLayout(tiles: TileMetrics[], cols: number, hasSubtitle: boolean): OverallLayout {
-  const first = tiles[0]!;
-  const rows = Math.ceil(tiles.length / cols);
-  const tilesWidth = cols * first.width + (cols - 1) * TILE_GAP;
-  const tilesHeight = rows * first.height + (rows - 1) * TILE_GAP;
-  const width = SIDE_PAD * 2 + tilesWidth;
+// Choose the column count (1..n) that maximizes the per-card cell size, so
+// the boards are as large as the fixed content area allows. Cards are
+// uniform: a square avatar stacked above a 6×6 grid, both the same width.
+function planLayout(n: number, hasSubtitle: boolean): RenderPlan {
   const contentY = TITLE_BAND_H + (hasSubtitle ? SUBTITLE_BAND_H : 0);
-  const height = contentY + tilesHeight + BOTTOM_PAD;
-  return {
-    width,
-    height,
-    tile: first,
-    tileCols: cols,
-    tileGap: TILE_GAP,
+  const contentW = CANVAS_W - SIDE_PAD * 2;
+  const contentH = CANVAS_H - contentY - BOTTOM_PAD;
+
+  const base: RenderPlan = {
+    width: CANVAS_W,
+    height: CANVAS_H,
     contentY,
-    padX: SIDE_PAD,
+    cols: 0,
+    rows: 0,
+    slotW: 0,
+    slotH: 0,
+    cell: 0,
+    cellGap: 2,
+    gridW: 0,
+    gridH: 0,
+    avatar: 0,
+  };
+  if (n <= 0) return base;
+
+  let bestCols = 1;
+  let bestSlotW = 0;
+  let bestSlotH = 0;
+  let bestCell = -1;
+  for (let cols = 1; cols <= n; cols++) {
+    const rows = Math.ceil(n / cols);
+    const slotW = (contentW - (cols - 1) * TILE_GAP) / cols;
+    const slotH = (contentH - (rows - 1) * TILE_GAP) / rows;
+    if (slotW <= 0 || slotH <= 0) continue;
+    const innerW = slotW - INNER_PAD_X * 2;
+    const innerH = slotH - INNER_PAD_Y * 2;
+    // Width limit: gridW = cell·K must fit innerW.
+    const cellFromW = innerW / GRID_SPAN_K;
+    // Height limit: avatar (= gridW = cell·K) + gap + gridH (= cell·K).
+    const cellFromH = (innerH - AVATAR_GRID_GAP) / (2 * GRID_SPAN_K);
+    const cell = Math.min(cellFromW, cellFromH);
+    if (cell > bestCell) {
+      bestCell = cell;
+      bestCols = cols;
+      bestSlotW = slotW;
+      bestSlotH = slotH;
+    }
+  }
+
+  // Floor (never raise above what fits) so the grid can't overflow the slot.
+  const cell = Math.max(2, Math.floor(bestCell));
+  const cellGap = Math.max(2, Math.round(cell * CELL_GAP_RATIO));
+  const gridW = GRID_COLS * cell + (GRID_COLS - 1) * cellGap;
+  const gridH = GRID_ROWS * cell + (GRID_ROWS - 1) * cellGap;
+  return {
+    ...base,
+    cols: bestCols,
+    rows: Math.ceil(n / bestCols),
+    slotW: bestSlotW,
+    slotH: bestSlotH,
+    cell,
+    cellGap,
+    gridW,
+    gridH,
+    avatar: gridW,
   };
 }
 
@@ -184,7 +185,8 @@ function wrapLayout(tiles: TileMetrics[], cols: number, hasSubtitle: boolean): O
 
 export async function renderNowPlayingImage(input: NowPlayingImageInput): Promise<Buffer> {
   const hasSubtitle = !!input.subtitle;
-  const layout = planLayout(input.participants.length, hasSubtitle);
+  const n = input.participants.length;
+  const layout = planLayout(n, hasSubtitle);
   const canvas = createCanvas(layout.width, layout.height);
   const ctx = canvas.getContext("2d");
 
@@ -195,30 +197,40 @@ export async function renderNowPlayingImage(input: NowPlayingImageInput): Promis
 
   if (hasSubtitle && input.subtitle) {
     ctx.fillStyle = SUBTEXT;
-    ctx.font = "500 14px sans-serif";
+    ctx.font = "500 11px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(input.subtitle, layout.width / 2, TITLE_BAND_H + SUBTITLE_BAND_H / 2);
   }
 
-  if (input.participants.length === 0) {
+  if (n === 0) {
     ctx.fillStyle = SUBTEXT;
-    ctx.font = "500 16px sans-serif";
+    ctx.font = "500 13px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText("Waiting for players…", layout.width / 2, layout.height / 2);
     return canvas.toBuffer("image/png");
   }
 
-  // Draw tiles.
-  for (let i = 0; i < input.participants.length; i++) {
+  const contentW = CANVAS_W - SIDE_PAD * 2;
+  const blockW = layout.gridW; // avatar and grid share this width
+  const blockH = layout.avatar + AVATAR_GRID_GAP + layout.gridH;
+
+  for (let i = 0; i < n; i++) {
     const p = input.participants[i];
     if (!p) continue;
-    const col = i % layout.tileCols;
-    const row = Math.floor(i / layout.tileCols);
-    const tx = layout.padX + col * (layout.tile.width + layout.tileGap);
-    const ty = layout.contentY + row * (layout.tile.height + layout.tileGap);
-    await drawTile(ctx, tx, ty, layout.tile, p);
+    const col = i % layout.cols;
+    const row = Math.floor(i / layout.cols);
+    // Center the (possibly short) final row.
+    const rowCount = row === layout.rows - 1 ? n - row * layout.cols : layout.cols;
+    const rowWidth = rowCount * layout.slotW + (rowCount - 1) * TILE_GAP;
+    const rowStartX = SIDE_PAD + (contentW - rowWidth) / 2;
+    const slotX = rowStartX + col * (layout.slotW + TILE_GAP);
+    const slotY = layout.contentY + row * (layout.slotH + TILE_GAP);
+    // Center the card content within its slot.
+    const bx = slotX + (layout.slotW - blockW) / 2;
+    const by = slotY + (layout.slotH - blockH) / 2;
+    await drawTile(ctx, bx, by, blockW, blockH, layout, p);
   }
 
   return canvas.toBuffer("image/png");
@@ -238,8 +250,8 @@ function drawTitle(
   const numberLabel = puzzleNumber !== undefined ? `${puzzleNumber}` : fallbackPuzzleId;
   const suffix = `  No. ${numberLabel}`;
 
-  const wordFont = "800 28px sans-serif";
-  const numFont = "600 22px sans-serif";
+  const wordFont = "800 21px sans-serif";
+  const numFont = "600 16px sans-serif";
 
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
@@ -266,15 +278,24 @@ function drawTitle(
 
 // ---------- Tiles --------------------------------------------------------
 
+// Draws one participant card: a rounded border around (avatar + grid), the
+// circular avatar on top, and the 6×6 guess grid beneath. (bx, by) is the
+// top-left of the content block; blockW/blockH bound it.
 async function drawTile(
   ctx: SKRSContext2D,
-  x: number,
-  y: number,
-  tile: TileMetrics,
+  bx: number,
+  by: number,
+  blockW: number,
+  blockH: number,
+  plan: RenderPlan,
   p: NowPlayingImageParticipant,
 ): Promise<void> {
-  // Rounded border around the whole tile (Wordle uses a thin grey outline).
-  roundedRect(ctx, x, y, tile.width, tile.height, 18);
+  // Rounded border around the card, padded out from the content block.
+  const cardX = bx - INNER_PAD_X;
+  const cardY = by - INNER_PAD_Y;
+  const cardW = blockW + INNER_PAD_X * 2;
+  const cardH = blockH + INNER_PAD_Y * 2;
+  roundedRect(ctx, cardX, cardY, cardW, cardH, 18);
   if (TILE_BG !== "transparent") {
     ctx.fillStyle = TILE_BG;
     ctx.fill();
@@ -283,27 +304,13 @@ async function drawTile(
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  if (tile.layout === "horizontal") {
-    const innerPadX = 28;
-    const innerPadY = (tile.height - tile.avatar) / 2;
-    await drawAvatarCircle(ctx, p.avatarUrl, x + innerPadX, y + innerPadY, tile.avatar);
-    const gridW = GRID_COLS * tile.cell + (GRID_COLS - 1) * tile.cellGap;
-    const gridH = GRID_ROWS * tile.cell + (GRID_ROWS - 1) * tile.cellGap;
-    const gridX = x + tile.width - innerPadX - gridW;
-    const gridY = y + (tile.height - gridH) / 2;
-    drawGuessGrid(ctx, gridX, gridY, tile.cell, tile.cellGap, p.history);
-    return;
-  }
+  // Avatar centered up top, grid centered below.
+  const avatarX = bx + (blockW - plan.avatar) / 2;
+  await drawAvatarCircle(ctx, p.avatarUrl, avatarX, by, plan.avatar);
 
-  // Vertical tile: avatar centered up top, grid centered below.
-  const avatarX = x + (tile.width - tile.avatar) / 2;
-  const avatarY = y + 14;
-  await drawAvatarCircle(ctx, p.avatarUrl, avatarX, avatarY, tile.avatar);
-
-  const gridW = GRID_COLS * tile.cell + (GRID_COLS - 1) * tile.cellGap;
-  const gridX = x + (tile.width - gridW) / 2;
-  const gridY = y + tile.gridPadTop;
-  drawGuessGrid(ctx, gridX, gridY, tile.cell, tile.cellGap, p.history);
+  const gridX = bx + (blockW - plan.gridW) / 2;
+  const gridY = by + plan.avatar + AVATAR_GRID_GAP;
+  drawGuessGrid(ctx, gridX, gridY, plan.cell, plan.cellGap, p.history);
 }
 
 function drawGuessGrid(

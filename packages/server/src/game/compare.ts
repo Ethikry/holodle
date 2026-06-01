@@ -25,15 +25,49 @@ function asList(v: string | string[]): string[] {
   return Array.isArray(v) ? v : [v];
 }
 
-// Multi-valued exact match: matches when the guess's value set intersects
-// the target's value set. The cell value carries the guess's value(s),
-// joined for display so the pill shows "Bird / Demon" for Nerissa rather
-// than dropping one of the labels.
-function multiCell(guess: string | string[], target: string | string[]): AttrCell<string> {
-  const guessSet = asList(guess);
-  const targetSet = new Set(asList(target));
-  const equal = guessSet.some((g) => targetSet.has(g));
-  return { value: guessSet.join(" / "), state: equal ? "equal" : "wrong" };
+// Archetype labels are encoded as "Parent (Sub)" — e.g. "Animal (Bird)",
+// "Mythical (Demon)" — or a bare parent ("Human", "Robot", "Alien"). Some
+// entries are sloppily spaced ("Animal(Cat)"), so we parse tolerantly and
+// compare on the normalized (parent, sub) pair rather than the raw string.
+interface ParsedArchetype {
+  parent: string;
+  sub: string | null;
+}
+
+function parseArchetype(label: string): ParsedArchetype {
+  const m = label.match(/^\s*([^(]+?)\s*(?:\(\s*(.+?)\s*\))?\s*$/);
+  if (!m || !m[1]) return { parent: label.trim(), sub: null };
+  return { parent: m[1].trim(), sub: m[2] ? m[2].trim() : null };
+}
+
+function archetypeLabel(p: ParsedArchetype): string {
+  return p.sub ? `${p.parent} (${p.sub})` : p.parent;
+}
+
+// Archetype cell with three states:
+//   - "equal":   guess and target share a full archetype (same parent AND
+//                sub) — e.g. both "Animal (Bird)".
+//   - "partial": they share a PARENT archetype but differ on the sub —
+//                e.g. guess "Animal (Fox)" against a "Animal (Bird)" target,
+//                or the broad "Animal" guessed against any "Animal (X)".
+//   - "wrong":   no shared parent.
+// Multi-archetype talents (Nerissa: "Animal (Bird)" + "Mythical (Demon)")
+// take the best state across any of their labels. The display value carries
+// the guess's label(s), normalized + joined with " / ".
+function archetypeCell(guess: string | string[], target: string | string[]): AttrCell<string> {
+  const guessList = asList(guess).map(parseArchetype);
+  const targetList = asList(target).map(parseArchetype);
+  const value = guessList.map(archetypeLabel).join(" / ");
+
+  const exact = guessList.some((g) =>
+    targetList.some((tt) => g.parent === tt.parent && g.sub === tt.sub),
+  );
+  if (exact) return { value, state: "equal" };
+
+  const sharedParent = guessList.some((g) =>
+    targetList.some((tt) => g.parent === tt.parent),
+  );
+  return { value, state: sharedParent ? "partial" : "wrong" };
 }
 
 function penlightColorCell(
@@ -127,7 +161,7 @@ export function compareGuess(guess: Talent, target: Talent): GuessDiff {
     branch: exactCell<Branch>(guess.branch, guess.branch === target.branch),
     group: groupCell(guess, target),
     penlightColor: penlightColorCell(guess.penlightColor, target.penlightColor),
-    archetype: multiCell(guess.archetype, target.archetype),
+    archetype: archetypeCell(guess.archetype, target.archetype),
     height: exactCell(heightBucket(guess.heightCm), heightBucket(guess.heightCm) === heightBucket(target.heightCm)),
     birthMonth: birthMonthCell(guess.birthMonth, target.birthMonth),
   };
