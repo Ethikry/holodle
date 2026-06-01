@@ -32,45 +32,40 @@ function dimensions(buf: Buffer): { width: number; height: number } {
   return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
 }
 
-describe("renderNowPlayingImage fixed sizing (bug 4)", () => {
-  it("produces an identically-sized image regardless of participant count", async () => {
+// The canvas now adapts (orientation + arrangement) to maximize the grid size,
+// so it's no longer a single fixed size — but it must always stay within the
+// embed's max box (× the supersample factor).
+const SUPERSAMPLE = 3;
+const MAX_W = 560 * SUPERSAMPLE;
+const MAX_H = 420 * SUPERSAMPLE;
+
+describe("renderNowPlayingImage sizing", () => {
+  it("never exceeds the max embed box for any participant count", async () => {
     const counts = [0, 1, 2, 3, 6, 13, 24];
-    const sizes = await Promise.all(
-      counts.map(async (n) => {
-        const participants = Array.from({ length: n }, () => participant(3));
-        const buf = await renderNowPlayingImage({
-          puzzleId: "2026-05-26",
-          puzzleNumber: 7,
-          participants,
-        });
-        return dimensions(buf);
-      }),
-    );
-    const first = sizes[0]!;
-    for (const s of sizes) {
-      expect(s).toEqual(first);
+    for (const n of counts) {
+      const participants = Array.from({ length: n }, () => participant(3));
+      const buf = await renderNowPlayingImage({
+        puzzleId: "2026-05-26",
+        puzzleNumber: 7,
+        participants,
+      });
+      const { width, height } = dimensions(buf);
+      expect(width).toBeLessThanOrEqual(MAX_W);
+      expect(height).toBeLessThanOrEqual(MAX_H);
+      expect(width).toBeGreaterThan(0);
+      expect(height).toBeGreaterThan(0);
     }
   });
 
-  it("keeps the same size with a subtitle (recap path)", async () => {
-    const noSub = dimensions(
+  it("uses a vertical (portrait-ish) card for a single player", async () => {
+    const { width, height } = dimensions(
       await renderNowPlayingImage({
         puzzleId: "2026-05-26",
         puzzleNumber: 7,
         participants: [participant(4)],
       }),
     );
-    const withSub = dimensions(
-      await renderNowPlayingImage({
-        puzzleId: "2026-05-26",
-        puzzleNumber: 7,
-        participants: [participant(4)],
-        subtitle: "Answer: Somebody",
-      }),
-    );
-    // Width is always fixed; height is fixed too (the subtitle eats into the
-    // content area rather than growing the canvas).
-    expect(noSub.width).toBe(withSub.width);
-    expect(noSub.height).toBe(withSub.height);
+    // A solo vertical card (avatar over grid) is taller than it is wide.
+    expect(height).toBeGreaterThan(width);
   });
 });

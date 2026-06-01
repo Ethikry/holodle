@@ -23,7 +23,8 @@ function cellClass(state: CellState | "empty"): string {
       // Solid yellow block (like the green) so a partial reads clearly.
       return "bg-amber-400 border-amber-500";
     case "wrong":
-      return "bg-holo-bad border-holo-badBd";
+      // Muted/desaturated red so the green "correct" cells draw the eye.
+      return "bg-holo-bad/45 border-holo-badBd/70";
     default:
       // No-guess blocks fill with the background so they read as empty.
       return "bg-holo-bg border-holo-muted/20";

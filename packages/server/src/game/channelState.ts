@@ -21,7 +21,7 @@ import {
 // existing "Now Playing" message, we instead supersede: PATCH the old to
 // past-tense and POST a brand new message as a reply.
 const STALE_AGE_SEC = 60 * 60; // original message older than 1h
-const STALE_IDLE_SEC = 45 * 60; // last edit older than 45min
+const STALE_IDLE_SEC = 30 * 60; // last edit older than 30min
 
 // Interaction tokens are valid for 15 minutes from issuance. We persist
 // the absolute expiry so we never have to remember "when was this issued".

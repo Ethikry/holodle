@@ -20,9 +20,10 @@ const TILE_BORDER = "#3a3b40";
 const CELL_EMPTY_BG = "#3a3a3c";
 const CELL_EMPTY_BD = "#4d4d50";
 
-// Wrong: a clear, saturated red.
-const CELL_WRONG_BG = "#c4453a";
-const CELL_WRONG_BD = "#8c2e26";
+// Wrong: a muted red — between the desaturated mauve and the fully-saturated
+// red, so it reads clearly red without overpowering the green/yellow.
+const CELL_WRONG_BG = "#9f4d4d";
+const CELL_WRONG_BD = "#733636";
 
 // Correct: vivid green.
 const CELL_EQUAL_BG = "#4ca455";
@@ -79,14 +80,16 @@ export interface RecapImageInput {
 // area and scale every card uniformly to fit — one board fills the canvas,
 // many boards each shrink, but the embed's footprint in Discord never moves.
 
-// Fixed logical canvas footprint (landscape, ~1.8:1, like Wordle's shared
-// card). The PNG is rendered at SUPERSAMPLE× this so it stays crisp when
-// Discord scales it up on high-DPI / retina displays — a 1× image gets
-// upscaled there and looks fuzzy. Discord caps how large an embed image
-// *displays* (it scales the PNG to fit the embed's media box), so a bigger
+// Maximum embed image footprint (logical px). The canvas wraps the chosen
+// layout's actual content but never exceeds this box, which is sized to fill
+// as much of Discord's embed media area as it will display. The PNG is
+// rendered at SUPERSAMPLE× so it stays crisp when Discord scales it up on
+// high-DPI / retina displays (a 1× image gets upscaled there and looks
+// fuzzy). Discord caps how large an embed image *displays*, so the larger
 // pixel buffer buys sharpness, not display size.
-const CANVAS_W = 540;
-const CANVAS_H = 300;
+const MAX_CANVAS_W = 560;
+const MAX_CANVAS_H = 420;
+const MIN_CANVAS_W = 260; // keep room for the title on narrow (single-card) layouts
 const SUPERSAMPLE = 3;
 
 const TITLE_BAND_H = 44;
@@ -105,85 +108,120 @@ const CELL_GAP_RATIO = 0.12;
 // the inter-cell gap is CELL_GAP_RATIO × cell. gridW = cell·K.
 const GRID_SPAN_K = GRID_COLS + (GRID_COLS - 1) * CELL_GAP_RATIO;
 
+type CardOrientation = "vertical" | "horizontal";
+
 interface RenderPlan {
   width: number;
   height: number;
   contentY: number;
   cols: number;
   rows: number;
-  slotW: number;
-  slotH: number;
+  orientation: CardOrientation;
   cell: number;
   cellGap: number;
-  gridW: number;
-  gridH: number;
-  avatar: number;
+  gridSide: number; // the 6×6 grid is square
+  avatar: number; // avatar diameter = gridSide
+  blockW: number; // avatar+grid content block (no card padding)
+  blockH: number;
+  slotW: number; // card = block + inner padding
+  slotH: number;
 }
 
-// Choose the column count (1..n) that maximizes the per-card cell size, so
-// the boards are as large as the fixed content area allows. Cards are
-// horizontal: a circular avatar on the LEFT, the 6×6 guess grid on the RIGHT,
-// the avatar sized to the grid's height (Wordle-style).
+// Largest cell size (px) that fits a cols×rows grid of `orientation` cards
+// within the given content box. Returns 0 if it can't fit at all.
+// A card is a square avatar + the 6×6 grid: stacked for "vertical" (avatar on
+// top), side-by-side for "horizontal" (avatar on the left). The avatar always
+// matches the grid's side, and gridSide ≈ cell·K (K = GRID_SPAN_K).
+function maxCellFor(
+  orientation: CardOrientation,
+  cols: number,
+  rows: number,
+  maxContentW: number,
+  maxContentH: number,
+): number {
+  const perW = (maxContentW - (cols - 1) * TILE_GAP) / cols - INNER_PAD_X * 2;
+  const perH = (maxContentH - (rows - 1) * TILE_GAP) / rows - INNER_PAD_Y * 2;
+  if (perW <= 0 || perH <= 0) return 0;
+  if (orientation === "vertical") {
+    // block: w = gridSide (= cell·K); h = avatar + gap + gridSide (= 2·cell·K + gap)
+    const cellFromW = perW / GRID_SPAN_K;
+    const cellFromH = (perH - AVATAR_GRID_GAP) / (2 * GRID_SPAN_K);
+    return Math.min(cellFromW, cellFromH);
+  }
+  // horizontal: block w = 2·cell·K + gap; h = cell·K
+  const cellFromW = (perW - AVATAR_GRID_GAP) / (2 * GRID_SPAN_K);
+  const cellFromH = perH / GRID_SPAN_K;
+  return Math.min(cellFromW, cellFromH);
+}
+
+// Choose the arrangement (columns × rows) AND card orientation that maximizes
+// the per-card cell size within the embed's max box, then size the canvas to
+// wrap that content. A single row of players uses the vertical card (avatar
+// over grid) — it fills the space better; multi-row layouts pick whichever of
+// vertical/horizontal yields the largest grid.
 function planLayout(n: number, hasSubtitle: boolean): RenderPlan {
   const contentY = TITLE_BAND_H + (hasSubtitle ? SUBTITLE_BAND_H : 0);
-  const contentW = CANVAS_W - SIDE_PAD * 2;
-  const contentH = CANVAS_H - contentY - BOTTOM_PAD;
+  const maxContentW = MAX_CANVAS_W - SIDE_PAD * 2;
+  const maxContentH = MAX_CANVAS_H - contentY - BOTTOM_PAD;
 
-  const base: RenderPlan = {
-    width: CANVAS_W,
-    height: CANVAS_H,
-    contentY,
-    cols: 0,
-    rows: 0,
-    slotW: 0,
-    slotH: 0,
-    cell: 0,
-    cellGap: 2,
-    gridW: 0,
-    gridH: 0,
-    avatar: 0,
-  };
-  if (n <= 0) return base;
+  if (n <= 0) {
+    return {
+      width: 400,
+      height: contentY + 120 + BOTTOM_PAD,
+      contentY,
+      cols: 0,
+      rows: 0,
+      orientation: "vertical",
+      cell: 0,
+      cellGap: 2,
+      gridSide: 0,
+      avatar: 0,
+      blockW: 0,
+      blockH: 0,
+      slotW: 0,
+      slotH: 0,
+    };
+  }
 
-  let bestCols = 1;
-  let bestSlotW = 0;
-  let bestSlotH = 0;
-  let bestCell = -1;
+  let best = { cols: 1, rows: 1, orientation: "vertical" as CardOrientation, cell: -1 };
   for (let cols = 1; cols <= n; cols++) {
     const rows = Math.ceil(n / cols);
-    const slotW = (contentW - (cols - 1) * TILE_GAP) / cols;
-    const slotH = (contentH - (rows - 1) * TILE_GAP) / rows;
-    if (slotW <= 0 || slotH <= 0) continue;
-    const innerW = slotW - INNER_PAD_X * 2;
-    const innerH = slotH - INNER_PAD_Y * 2;
-    // Horizontal card: avatar (= grid side = cell·K) + gap + grid (= cell·K)
-    // across; height is just the grid side (cell·K).
-    const cellFromW = (innerW - AVATAR_GRID_GAP) / (2 * GRID_SPAN_K);
-    const cellFromH = innerH / GRID_SPAN_K;
-    const cell = Math.min(cellFromW, cellFromH);
-    if (cell > bestCell) {
-      bestCell = cell;
-      bestCols = cols;
-      bestSlotW = slotW;
-      bestSlotH = slotH;
+    const orientations: CardOrientation[] =
+      rows === 1 ? ["vertical"] : ["vertical", "horizontal"];
+    for (const orientation of orientations) {
+      const cell = maxCellFor(orientation, cols, rows, maxContentW, maxContentH);
+      if (cell > best.cell) best = { cols, rows, orientation, cell };
     }
   }
 
-  // Floor (never raise above what fits) so the grid can't overflow the slot.
-  const cell = Math.max(2, Math.floor(bestCell));
+  // Floor (never raise above what fits) so the grid can't overflow.
+  const cell = Math.max(2, Math.floor(best.cell));
   const cellGap = Math.max(2, Math.round(cell * CELL_GAP_RATIO));
   const gridSide = GRID_COLS * cell + (GRID_COLS - 1) * cellGap;
+  const avatar = gridSide;
+  const blockW =
+    best.orientation === "vertical" ? gridSide : avatar + AVATAR_GRID_GAP + gridSide;
+  const blockH =
+    best.orientation === "vertical" ? avatar + AVATAR_GRID_GAP + gridSide : gridSide;
+  const slotW = blockW + INNER_PAD_X * 2;
+  const slotH = blockH + INNER_PAD_Y * 2;
+  const totalW = best.cols * slotW + (best.cols - 1) * TILE_GAP;
+  const totalH = best.rows * slotH + (best.rows - 1) * TILE_GAP;
   return {
-    ...base,
-    cols: bestCols,
-    rows: Math.ceil(n / bestCols),
-    slotW: bestSlotW,
-    slotH: bestSlotH,
+    width: Math.min(MAX_CANVAS_W, Math.max(MIN_CANVAS_W, totalW + SIDE_PAD * 2)),
+    height: Math.min(MAX_CANVAS_H, contentY + totalH + BOTTOM_PAD),
+    contentY,
+    cols: best.cols,
+    rows: best.rows,
+    orientation: best.orientation,
     cell,
     cellGap,
-    gridW: gridSide,
-    gridH: gridSide,
-    avatar: gridSide, // avatar diameter matches the grid height
+    gridSide,
+    avatar,
+    blockW,
+    blockH,
+    slotW,
+    slotH,
   };
 }
 
@@ -223,10 +261,7 @@ export async function renderNowPlayingImage(input: NowPlayingImageInput): Promis
     return canvas.toBuffer("image/png");
   }
 
-  const contentW = CANVAS_W - SIDE_PAD * 2;
-  // Horizontal card: avatar + gap + grid across; height is the grid side.
-  const blockW = layout.avatar + AVATAR_GRID_GAP + layout.gridW;
-  const blockH = Math.max(layout.avatar, layout.gridH);
+  const contentW = layout.width - SIDE_PAD * 2;
 
   for (let i = 0; i < n; i++) {
     const p = input.participants[i];
@@ -239,10 +274,10 @@ export async function renderNowPlayingImage(input: NowPlayingImageInput): Promis
     const rowStartX = SIDE_PAD + (contentW - rowWidth) / 2;
     const slotX = rowStartX + col * (layout.slotW + TILE_GAP);
     const slotY = layout.contentY + row * (layout.slotH + TILE_GAP);
-    // Center the card content within its slot.
-    const bx = slotX + (layout.slotW - blockW) / 2;
-    const by = slotY + (layout.slotH - blockH) / 2;
-    await drawTile(ctx, bx, by, blockW, blockH, layout, p);
+    // (bx, by) = top-left of the content block inside the card padding.
+    const bx = slotX + INNER_PAD_X;
+    const by = slotY + INNER_PAD_Y;
+    await drawTile(ctx, bx, by, layout, p);
   }
 
   return canvas.toBuffer("image/png");
@@ -290,25 +325,22 @@ function drawTitle(
 
 // ---------- Tiles --------------------------------------------------------
 
-// Draws one participant card: a rounded border around (avatar + grid), with the
-// circular avatar on the LEFT and the 6×6 guess grid on the RIGHT, both
-// vertically centered. (bx, by) is the top-left of the content block;
-// blockW/blockH bound it.
+// Draws one participant card: a rounded border around the avatar + 6×6 grid.
+// "vertical" puts the avatar above the grid; "horizontal" puts it to the left.
+// (bx, by) is the top-left of the content block (inside the card padding).
 async function drawTile(
   ctx: SKRSContext2D,
   bx: number,
   by: number,
-  blockW: number,
-  blockH: number,
   plan: RenderPlan,
   p: NowPlayingImageParticipant,
 ): Promise<void> {
   // Rounded border around the card, padded out from the content block.
   const cardX = bx - INNER_PAD_X;
   const cardY = by - INNER_PAD_Y;
-  const cardW = blockW + INNER_PAD_X * 2;
-  const cardH = blockH + INNER_PAD_Y * 2;
-  const radius = Math.min(18, cardH / 4);
+  const cardW = plan.blockW + INNER_PAD_X * 2;
+  const cardH = plan.blockH + INNER_PAD_Y * 2;
+  const radius = Math.min(18, Math.min(cardW, cardH) / 4);
   roundedRect(ctx, cardX, cardY, cardW, cardH, radius);
   if (TILE_BG !== "transparent") {
     ctx.fillStyle = TILE_BG;
@@ -318,12 +350,21 @@ async function drawTile(
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  // Avatar on the left, grid on the right, both vertically centered.
-  const avatarY = by + (blockH - plan.avatar) / 2;
-  await drawAvatarCircle(ctx, p.avatarUrl, bx, avatarY, plan.avatar);
+  if (plan.orientation === "vertical") {
+    // Avatar centered on top, grid centered below.
+    const avatarX = bx + (plan.blockW - plan.avatar) / 2;
+    await drawAvatarCircle(ctx, p.avatarUrl, avatarX, by, plan.avatar);
+    const gridX = bx + (plan.blockW - plan.gridSide) / 2;
+    const gridY = by + plan.avatar + AVATAR_GRID_GAP;
+    drawGuessGrid(ctx, gridX, gridY, plan.cell, plan.cellGap, p.history);
+    return;
+  }
 
+  // Horizontal: avatar on the left, grid on the right, both vertically centered.
+  const avatarY = by + (plan.blockH - plan.avatar) / 2;
+  await drawAvatarCircle(ctx, p.avatarUrl, bx, avatarY, plan.avatar);
   const gridX = bx + plan.avatar + AVATAR_GRID_GAP;
-  const gridY = by + (blockH - plan.gridH) / 2;
+  const gridY = by + (plan.blockH - plan.gridSide) / 2;
   drawGuessGrid(ctx, gridX, gridY, plan.cell, plan.cellGap, p.history);
 }
 

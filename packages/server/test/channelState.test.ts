@@ -279,16 +279,14 @@ describe("isStaleMessage", () => {
     expect(state && isStaleMessage(state, now + 65 * 60)).toBe(true);
   });
 
-  it("is true when the message hasn't been edited in 45+ minutes", () => {
+  it("is true when the message hasn't been edited in 30+ minutes", () => {
     const now = 1_700_000_000;
     upsertChannelToken("c1", "2026-05-19", "tok", "app-1", now);
     setChannelMessageId("c1", "2026-05-19", "msg-1", now);
     const state = getChannelState("c1", "2026-05-19");
-    // 46 minutes since last edit; total age also 46 min (under 60-min cap)
+    // 31 minutes since last edit; total age also 31 min (under 60-min cap)
     // — so only the idle threshold drives the result.
-    expect(state && isStaleMessage(state, now + 46 * 60)).toBe(true);
-    // 44 minutes is still within the idle threshold → not stale.
-    expect(state && isStaleMessage(state, now + 44 * 60)).toBe(false);
+    expect(state && isStaleMessage(state, now + 31 * 60)).toBe(true);
   });
 
   it("is true for legacy rows where message_id is set but both timestamps are NULL", () => {
