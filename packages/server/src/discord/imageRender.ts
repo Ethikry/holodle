@@ -8,28 +8,31 @@ import { BOARD_COLUMNS, type GuessDiff } from "@holodle/shared";
 // count: a wide horizontal panel for one player, narrow vertical cards for
 // 2–3, and a tile grid for larger groups.
 
-const BG = "#1c1c1f";
+const BG = "#1a1a1b";
 const TILE_BG = "transparent";
 const TILE_BORDER = "#3a3b40";
 
-// Color definitions matching the in-frame player grids (adapted for dark mode readability):
-// No-guess cells fill with the card background so they read as "empty" rather
-// than as a distinct gray block (bug 6).
-const CELL_EMPTY_BG = BG;             // matches the background
-const CELL_EMPTY_BD = "#2f3034";      // very subtle outline so the grid is still legible
+// Cell colors. High-contrast, saturated fills with a darker same-hue outline so
+// every block reads crisply against the near-black background.
+//
+// Empty / no-guess cells are a distinct dark gray (Wordle-style) rather than the
+// background color — that contrast is what makes the grid look sharp.
+const CELL_EMPTY_BG = "#3a3a3c";
+const CELL_EMPTY_BD = "#4d4d50";
 
-// Wrong guesses use a muted, desaturated red so the eye is drawn to the green
-// "correct" cells instead (bug 6).
-const CELL_WRONG_BG = "#79555f";      // muted, desaturated red
-const CELL_WRONG_BD = "#5b3f47";      // slightly darker outline
+// Wrong: a clear, saturated red.
+const CELL_WRONG_BG = "#c4453a";
+const CELL_WRONG_BD = "#8c2e26";
 
-const CELL_EQUAL_BG = "#3aa55d";      // Soft green background for correct matches
-const CELL_EQUAL_BD = "#1a6532";      // Darker green outline for correct matches
+// Correct: vivid green.
+const CELL_EQUAL_BG = "#4ca455";
+const CELL_EQUAL_BD = "#2c7838";
 
-const CELL_PARTIAL_BG = "#e6b93e";    // Bright yellow background for partial matches
-const CELL_PARTIAL_BD = "#a07d1c";    // Darker yellow outline for partial matches
+// Partial: clear yellow.
+const CELL_PARTIAL_BG = "#d9b441";
+const CELL_PARTIAL_BD = "#a07d1c";
 
-const CELL_BORDER = "#1c1c1f";
+const CELL_BORDER = "#1a1a1b";
 
 const TITLE_INK = "#ffffff";
 const SUBTEXT = "#b5b8bf";
@@ -76,12 +79,15 @@ export interface RecapImageInput {
 // area and scale every card uniformly to fit — one board fills the canvas,
 // many boards each shrink, but the embed's footprint in Discord never moves.
 
-// Fixed canvas footprint. Sized to roughly match Wordle's shared result
-// image (~512×280) so the embed sits at a comfortable, consistent size in
-// Discord — which scales the PNG to the client's layout, so a fixed pixel
-// size reads "relatively sized" across devices/resolutions.
-const CANVAS_W = 512;
-const CANVAS_H = 280;
+// Fixed logical canvas footprint (landscape, ~1.8:1, like Wordle's shared
+// card). The PNG is rendered at SUPERSAMPLE× this so it stays crisp when
+// Discord scales it up on high-DPI / retina displays — a 1× image gets
+// upscaled there and looks fuzzy. Discord caps how large an embed image
+// *displays* (it scales the PNG to fit the embed's media box), so a bigger
+// pixel buffer buys sharpness, not display size.
+const CANVAS_W = 540;
+const CANVAS_H = 300;
+const SUPERSAMPLE = 3;
 
 const TITLE_BAND_H = 44;
 const SUBTITLE_BAND_H = 20;
@@ -89,11 +95,11 @@ const BOTTOM_PAD = 16;
 const SIDE_PAD = 18;
 const TILE_GAP = 10;
 
-// Per-card padding + the gap between the avatar and the grid beneath it.
-const INNER_PAD_X = 8;
-const INNER_PAD_Y = 8;
-const AVATAR_GRID_GAP = 8;
-const CELL_GAP_RATIO = 0.16;
+// Per-card padding + the gap between the avatar and the grid beside it.
+const INNER_PAD_X = 10;
+const INNER_PAD_Y = 10;
+const AVATAR_GRID_GAP = 10;
+const CELL_GAP_RATIO = 0.12;
 
 // Width (and height) of a 6×N grid expressed as a multiple of one cell, when
 // the inter-cell gap is CELL_GAP_RATIO × cell. gridW = cell·K.
@@ -116,7 +122,8 @@ interface RenderPlan {
 
 // Choose the column count (1..n) that maximizes the per-card cell size, so
 // the boards are as large as the fixed content area allows. Cards are
-// uniform: a square avatar stacked above a 6×6 grid, both the same width.
+// horizontal: a circular avatar on the LEFT, the 6×6 guess grid on the RIGHT,
+// the avatar sized to the grid's height (Wordle-style).
 function planLayout(n: number, hasSubtitle: boolean): RenderPlan {
   const contentY = TITLE_BAND_H + (hasSubtitle ? SUBTITLE_BAND_H : 0);
   const contentW = CANVAS_W - SIDE_PAD * 2;
@@ -149,10 +156,10 @@ function planLayout(n: number, hasSubtitle: boolean): RenderPlan {
     if (slotW <= 0 || slotH <= 0) continue;
     const innerW = slotW - INNER_PAD_X * 2;
     const innerH = slotH - INNER_PAD_Y * 2;
-    // Width limit: gridW = cell·K must fit innerW.
-    const cellFromW = innerW / GRID_SPAN_K;
-    // Height limit: avatar (= gridW = cell·K) + gap + gridH (= cell·K).
-    const cellFromH = (innerH - AVATAR_GRID_GAP) / (2 * GRID_SPAN_K);
+    // Horizontal card: avatar (= grid side = cell·K) + gap + grid (= cell·K)
+    // across; height is just the grid side (cell·K).
+    const cellFromW = (innerW - AVATAR_GRID_GAP) / (2 * GRID_SPAN_K);
+    const cellFromH = innerH / GRID_SPAN_K;
     const cell = Math.min(cellFromW, cellFromH);
     if (cell > bestCell) {
       bestCell = cell;
@@ -165,8 +172,7 @@ function planLayout(n: number, hasSubtitle: boolean): RenderPlan {
   // Floor (never raise above what fits) so the grid can't overflow the slot.
   const cell = Math.max(2, Math.floor(bestCell));
   const cellGap = Math.max(2, Math.round(cell * CELL_GAP_RATIO));
-  const gridW = GRID_COLS * cell + (GRID_COLS - 1) * cellGap;
-  const gridH = GRID_ROWS * cell + (GRID_ROWS - 1) * cellGap;
+  const gridSide = GRID_COLS * cell + (GRID_COLS - 1) * cellGap;
   return {
     ...base,
     cols: bestCols,
@@ -175,9 +181,9 @@ function planLayout(n: number, hasSubtitle: boolean): RenderPlan {
     slotH: bestSlotH,
     cell,
     cellGap,
-    gridW,
-    gridH,
-    avatar: gridW,
+    gridW: gridSide,
+    gridH: gridSide,
+    avatar: gridSide, // avatar diameter matches the grid height
   };
 }
 
@@ -187,8 +193,13 @@ export async function renderNowPlayingImage(input: NowPlayingImageInput): Promis
   const hasSubtitle = !!input.subtitle;
   const n = input.participants.length;
   const layout = planLayout(n, hasSubtitle);
-  const canvas = createCanvas(layout.width, layout.height);
+  // Render at SUPERSAMPLE× and let Discord downscale → crisp on retina. All
+  // drawing below stays in logical (un-scaled) coordinates.
+  const canvas = createCanvas(layout.width * SUPERSAMPLE, layout.height * SUPERSAMPLE);
   const ctx = canvas.getContext("2d");
+  ctx.scale(SUPERSAMPLE, SUPERSAMPLE);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
 
   ctx.fillStyle = BG;
   ctx.fillRect(0, 0, layout.width, layout.height);
@@ -213,8 +224,9 @@ export async function renderNowPlayingImage(input: NowPlayingImageInput): Promis
   }
 
   const contentW = CANVAS_W - SIDE_PAD * 2;
-  const blockW = layout.gridW; // avatar and grid share this width
-  const blockH = layout.avatar + AVATAR_GRID_GAP + layout.gridH;
+  // Horizontal card: avatar + gap + grid across; height is the grid side.
+  const blockW = layout.avatar + AVATAR_GRID_GAP + layout.gridW;
+  const blockH = Math.max(layout.avatar, layout.gridH);
 
   for (let i = 0; i < n; i++) {
     const p = input.participants[i];
@@ -250,8 +262,8 @@ function drawTitle(
   const numberLabel = puzzleNumber !== undefined ? `${puzzleNumber}` : fallbackPuzzleId;
   const suffix = `  No. ${numberLabel}`;
 
-  const wordFont = "800 21px sans-serif";
-  const numFont = "600 16px sans-serif";
+  const wordFont = "800 24px sans-serif";
+  const numFont = "600 18px sans-serif";
 
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
@@ -278,9 +290,10 @@ function drawTitle(
 
 // ---------- Tiles --------------------------------------------------------
 
-// Draws one participant card: a rounded border around (avatar + grid), the
-// circular avatar on top, and the 6×6 guess grid beneath. (bx, by) is the
-// top-left of the content block; blockW/blockH bound it.
+// Draws one participant card: a rounded border around (avatar + grid), with the
+// circular avatar on the LEFT and the 6×6 guess grid on the RIGHT, both
+// vertically centered. (bx, by) is the top-left of the content block;
+// blockW/blockH bound it.
 async function drawTile(
   ctx: SKRSContext2D,
   bx: number,
@@ -295,7 +308,8 @@ async function drawTile(
   const cardY = by - INNER_PAD_Y;
   const cardW = blockW + INNER_PAD_X * 2;
   const cardH = blockH + INNER_PAD_Y * 2;
-  roundedRect(ctx, cardX, cardY, cardW, cardH, 18);
+  const radius = Math.min(18, cardH / 4);
+  roundedRect(ctx, cardX, cardY, cardW, cardH, radius);
   if (TILE_BG !== "transparent") {
     ctx.fillStyle = TILE_BG;
     ctx.fill();
@@ -304,12 +318,12 @@ async function drawTile(
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  // Avatar centered up top, grid centered below.
-  const avatarX = bx + (blockW - plan.avatar) / 2;
-  await drawAvatarCircle(ctx, p.avatarUrl, avatarX, by, plan.avatar);
+  // Avatar on the left, grid on the right, both vertically centered.
+  const avatarY = by + (blockH - plan.avatar) / 2;
+  await drawAvatarCircle(ctx, p.avatarUrl, bx, avatarY, plan.avatar);
 
-  const gridX = bx + (blockW - plan.gridW) / 2;
-  const gridY = by + plan.avatar + AVATAR_GRID_GAP;
+  const gridX = bx + plan.avatar + AVATAR_GRID_GAP;
+  const gridY = by + (blockH - plan.gridH) / 2;
   drawGuessGrid(ctx, gridX, gridY, plan.cell, plan.cellGap, p.history);
 }
 

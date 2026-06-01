@@ -18,6 +18,7 @@ import {
   advanceEndless,
   getLatestUserTz,
   getMutedRecapUserIds,
+  loadUserDay,
   resetToday,
 } from "../db/client.js";
 
@@ -270,6 +271,14 @@ async function handleLaunch(payload: InteractionPayload): Promise<void> {
   //    that way recordParticipantProgress calls from /api/guess will use
   //    the latest one immediately.
   upsertChannelToken(channelId, puzzleId, token, applicationId);
+
+  // If this user has already finished today's puzzle, a "Play now!" click is
+  // just them re-opening the activity (e.g. to view the recap) — they aren't
+  // "now playing". Don't register them as a participant or sync the embed, or
+  // their completed board would get injected onto the live/next embed wave.
+  // (Their board still shows in the end-of-day recap, where it belongs.)
+  const todayStatus = loadUserDay(user.id, dayIndexFor(nowMs, tz)).status;
+  if (todayStatus !== "playing") return;
 
   // 3) Register this user as a participant (idempotent — keeps their
   //    progress). Pass through the user's most-recent tz so the recap
