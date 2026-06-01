@@ -32,15 +32,13 @@ function dimensions(buf: Buffer): { width: number; height: number } {
   return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
 }
 
-// The canvas now adapts (orientation + arrangement) to maximize the grid size,
-// so it's no longer a single fixed size — but it must always stay within the
-// embed's max box (× the supersample factor).
-const SUPERSAMPLE = 3;
-const MAX_W = 560 * SUPERSAMPLE;
-const MAX_H = 420 * SUPERSAMPLE;
+// Fixed 400×300 canvas (the embed's max display size) rendered at 4× → a clean
+// 1600×1200 PNG for every participant count.
+const EXPECTED_W = 1600;
+const EXPECTED_H = 1200;
 
 describe("renderNowPlayingImage sizing", () => {
-  it("never exceeds the max embed box for any participant count", async () => {
+  it("renders a fixed 1600×1200 image for any participant count", async () => {
     const counts = [0, 1, 2, 3, 6, 13, 24];
     for (const n of counts) {
       const participants = Array.from({ length: n }, () => participant(3));
@@ -50,23 +48,8 @@ describe("renderNowPlayingImage sizing", () => {
         participants,
       });
       const { width, height } = dimensions(buf);
-      expect(width).toBeLessThanOrEqual(MAX_W);
-      expect(height).toBeLessThanOrEqual(MAX_H);
-      expect(width).toBeGreaterThan(0);
-      expect(height).toBeGreaterThan(0);
+      expect(width).toBe(EXPECTED_W);
+      expect(height).toBe(EXPECTED_H);
     }
-  });
-
-  it("uses a horizontal (landscape) card for a single player", async () => {
-    const { width, height } = dimensions(
-      await renderNowPlayingImage({
-        puzzleId: "2026-05-26",
-        puzzleNumber: 7,
-        participants: [participant(4)],
-      }),
-    );
-    // A lone board goes horizontal (avatar left of grid) so it fills the
-    // wider-than-tall embed — wider than it is tall.
-    expect(width).toBeGreaterThan(height);
   });
 });

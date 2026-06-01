@@ -87,27 +87,28 @@ export interface RecapImageInput {
 // high-DPI / retina displays (a 1× image gets upscaled there and looks
 // fuzzy). Discord caps how large an embed image *displays*, so the larger
 // pixel buffer buys sharpness, not display size.
-const MAX_CANVAS_W = 560;
-const MAX_CANVAS_H = 420;
-const MIN_CANVAS_W = 260; // keep room for the title on narrow layouts
-const SUPERSAMPLE = 3;
+// Discord displays embed images at up to 400×300, so the canvas is a fixed
+// 400×300 frame rendered at SUPERSAMPLE× → a 1600×1200 PNG that Discord
+// downscales cleanly (a 4× integer ratio) to the embed box, staying crisp on
+// high-DPI / retina displays.
+const CANVAS_W = 400;
+const CANVAS_H = 300;
+const SUPERSAMPLE = 4;
 
 // The board is drawn at this fraction of the space it could fill, centered in
-// the (otherwise unchanged) canvas. Discord scales the whole image to its
-// embed box regardless of pixel size, so shrinking the canvas wouldn't shrink
-// the *displayed* board — leaving margin inside a same-size canvas does.
+// the canvas, so a single board doesn't fill the whole frame.
 const BOARD_SCALE = 0.7;
 
-const TITLE_BAND_H = 44;
-const SUBTITLE_BAND_H = 20;
-const BOTTOM_PAD = 16;
-const SIDE_PAD = 18;
-const TILE_GAP = 10;
+const TITLE_BAND_H = 32;
+const SUBTITLE_BAND_H = 14;
+const BOTTOM_PAD = 12;
+const SIDE_PAD = 13;
+const TILE_GAP = 7;
 
 // Per-card padding + the gap between the avatar and the grid beside it.
-const INNER_PAD_X = 10;
-const INNER_PAD_Y = 10;
-const AVATAR_GRID_GAP = 10;
+const INNER_PAD_X = 7;
+const INNER_PAD_Y = 7;
+const AVATAR_GRID_GAP = 7;
 const CELL_GAP_RATIO = 0.12;
 
 // Width (and height) of a 6×N grid expressed as a multiple of one cell, when
@@ -161,21 +162,21 @@ function maxCellFor(
 }
 
 // Choose the arrangement (columns × rows) AND card orientation that maximizes
-// the per-card cell size within the embed's max box, then size the canvas to
-// wrap that content. Both orientations are always considered and the largest
-// grid wins, which falls out the way you'd want: a lone board goes horizontal
-// (avatar left of grid) so it fills the wider-than-tall embed; a single row of
-// several players goes vertical (narrow avatar-over-grid cards pack tighter
-// across); bigger groups pick whichever orientation packs largest.
+// the per-card cell size within the fixed 400×300 canvas. Both orientations are
+// always considered and the largest grid wins, which falls out the way you'd
+// want: a lone board goes horizontal (avatar left of grid) so it fills the
+// wider-than-tall embed; a single row of several players goes vertical (narrow
+// avatar-over-grid cards pack tighter across); bigger groups pick whichever
+// orientation packs largest. The content is then drawn at BOARD_SCALE, centered.
 function planLayout(n: number, hasSubtitle: boolean): RenderPlan {
   const contentY = TITLE_BAND_H + (hasSubtitle ? SUBTITLE_BAND_H : 0);
-  const maxContentW = MAX_CANVAS_W - SIDE_PAD * 2;
-  const maxContentH = MAX_CANVAS_H - contentY - BOTTOM_PAD;
+  const maxContentW = CANVAS_W - SIDE_PAD * 2;
+  const maxContentH = CANVAS_H - contentY - BOTTOM_PAD;
 
   if (n <= 0) {
     return {
-      width: 400,
-      height: contentY + 120 + BOTTOM_PAD,
+      width: CANVAS_W,
+      height: CANVAS_H,
       contentY,
       cols: 0,
       rows: 0,
@@ -212,11 +213,9 @@ function planLayout(n: number, hasSubtitle: boolean): RenderPlan {
     best.orientation === "vertical" ? avatar + AVATAR_GRID_GAP + gridSide : gridSide;
   const slotW = blockW + INNER_PAD_X * 2;
   const slotH = blockH + INNER_PAD_Y * 2;
-  const totalW = best.cols * slotW + (best.cols - 1) * TILE_GAP;
-  const totalH = best.rows * slotH + (best.rows - 1) * TILE_GAP;
   return {
-    width: Math.min(MAX_CANVAS_W, Math.max(MIN_CANVAS_W, totalW + SIDE_PAD * 2)),
-    height: Math.min(MAX_CANVAS_H, contentY + totalH + BOTTOM_PAD),
+    width: CANVAS_W,
+    height: CANVAS_H,
     contentY,
     cols: best.cols,
     rows: best.rows,
@@ -253,7 +252,7 @@ export async function renderNowPlayingImage(input: NowPlayingImageInput): Promis
 
   if (hasSubtitle && input.subtitle) {
     ctx.fillStyle = SUBTEXT;
-    ctx.font = "500 11px sans-serif";
+    ctx.font = "500 9px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(input.subtitle, layout.width / 2, TITLE_BAND_H + SUBTITLE_BAND_H / 2);
@@ -261,7 +260,7 @@ export async function renderNowPlayingImage(input: NowPlayingImageInput): Promis
 
   if (n === 0) {
     ctx.fillStyle = SUBTEXT;
-    ctx.font = "500 13px sans-serif";
+    ctx.font = "500 10px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText("Waiting for players…", layout.width / 2, layout.height / 2);
@@ -269,12 +268,16 @@ export async function renderNowPlayingImage(input: NowPlayingImageInput): Promis
   }
 
   const contentW = layout.width - SIDE_PAD * 2;
+  const contentAreaH = layout.height - layout.contentY - BOTTOM_PAD;
+  const totalH = layout.rows * layout.slotH + (layout.rows - 1) * TILE_GAP;
+  // Vertically center the content within the content area (the grid may not
+  // fill the fixed 400×300 frame), then draw it at BOARD_SCALE, centered, so a
+  // single board doesn't fill the whole embed. The title stays full size.
+  const contentTop = layout.contentY + Math.max(0, (contentAreaH - totalH) / 2);
 
-  // Draw the board at BOARD_SCALE, centered in the content region, so a single
-  // board doesn't fill the whole (same-size) embed. The title stays full size.
   ctx.save();
   const centerX = layout.width / 2;
-  const centerY = layout.contentY + (layout.height - layout.contentY - BOTTOM_PAD) / 2;
+  const centerY = layout.contentY + contentAreaH / 2;
   ctx.translate(centerX, centerY);
   ctx.scale(BOARD_SCALE, BOARD_SCALE);
   ctx.translate(-centerX, -centerY);
@@ -289,7 +292,7 @@ export async function renderNowPlayingImage(input: NowPlayingImageInput): Promis
     const rowWidth = rowCount * layout.slotW + (rowCount - 1) * TILE_GAP;
     const rowStartX = SIDE_PAD + (contentW - rowWidth) / 2;
     const slotX = rowStartX + col * (layout.slotW + TILE_GAP);
-    const slotY = layout.contentY + row * (layout.slotH + TILE_GAP);
+    const slotY = contentTop + row * (layout.slotH + TILE_GAP);
     // (bx, by) = top-left of the content block inside the card padding.
     const bx = slotX + INNER_PAD_X;
     const by = slotY + INNER_PAD_Y;
@@ -314,8 +317,8 @@ function drawTitle(
   const numberLabel = puzzleNumber !== undefined ? `${puzzleNumber}` : fallbackPuzzleId;
   const suffix = `  No. ${numberLabel}`;
 
-  const wordFont = "800 24px sans-serif";
-  const numFont = "600 18px sans-serif";
+  const wordFont = "800 17px sans-serif";
+  const numFont = "600 13px sans-serif";
 
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
