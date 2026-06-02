@@ -411,16 +411,20 @@ function drawGuessGrid(
 interface CellRender {
   fill: string;
   border?: string; // Optional outline color
+  borderWidth?: number; // Optional outline width (defaults to 1.5)
   glyph?: string;
 }
 
+// No-guess cells use a thinner outline than the (invisible) colored-cell borders.
+const EMPTY_CELL: CellRender = { fill: CELL_EMPTY_BG, border: CELL_EMPTY_BD, borderWidth: 0.75 };
+
 // Maps column states dynamically based on shared BOARD_COLUMNS.
 function cellRenderAt(diff: GuessDiff | undefined, col: number): CellRender {
-  if (!diff) return { fill: CELL_EMPTY_BG, border: CELL_EMPTY_BD };
+  if (!diff) return EMPTY_CELL;
   const key = BOARD_COLUMNS[col];
-  if (!key) return { fill: CELL_EMPTY_BG, border: CELL_EMPTY_BD };
+  if (!key) return EMPTY_CELL;
   const c = diff[key];
-  if (!c) return { fill: CELL_EMPTY_BG, border: CELL_EMPTY_BD };
+  if (!c) return EMPTY_CELL;
   
   if (c.state === "equal") {
     return { fill: CELL_EQUAL_BG, border: CELL_EQUAL_BD };
@@ -447,7 +451,7 @@ function drawGuessCell(
 
   // Stroke cell border
   ctx.strokeStyle = r.border ?? CELL_BORDER;
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = r.borderWidth ?? 1.5;
   roundedRect(ctx, x, y, size, size, borderRadius);
   ctx.stroke();
 
