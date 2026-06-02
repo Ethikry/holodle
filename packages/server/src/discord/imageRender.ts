@@ -26,13 +26,13 @@ const CELL_EMPTY_BD = "#4d4d50";
 const CELL_WRONG_BG = "#9f4d4d";
 const CELL_WRONG_BD = "#9f4d4d";
 
-// Correct: vivid green.
+// Correct: vivid green. No outline (border matches the fill).
 const CELL_EQUAL_BG = "#4ca455";
-const CELL_EQUAL_BD = "#6fbc78";
+const CELL_EQUAL_BD = "#4ca455";
 
-// Partial: clear yellow.
+// Partial: clear yellow. No outline (border matches the fill).
 const CELL_PARTIAL_BG = "#d9b441";
-const CELL_PARTIAL_BD = "#e6c868";
+const CELL_PARTIAL_BD = "#d9b441";
 
 const CELL_BORDER = "#1a1a1b";
 
