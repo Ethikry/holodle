@@ -88,7 +88,13 @@ export const useGame = create<GameState & GameActions>((set) => ({
   answer: null,
   maxGuesses: MAX_GUESSES,
 
-  stats: { streak: 0, best: 0, played: 0, winRate: 0 },
+  stats: {
+    streak: 0,
+    best: 0,
+    played: 0,
+    winRate: 0,
+    guessDistribution: { wins: {}, losses: 0 },
+  },
   players: new Map(),
 
   prefs: { recapPingMuted: false, theme: "sky", welcomed: false },

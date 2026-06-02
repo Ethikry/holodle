@@ -50,6 +50,20 @@ describe("GET /api/admin/stats", () => {
     expect(stats).toHaveProperty("dailyPickFrequency");
     expect(stats).toHaveProperty("attributeAccuracy");
     expect(stats).toHaveProperty("activityByDate");
+    expect(stats).toHaveProperty("perAnswerTalent");
+    expect(Array.isArray(stats.perAnswerTalent)).toBe(true);
+    expect(stats).toHaveProperty("firstGuessFrequency");
+    expect(Array.isArray(stats.firstGuessFrequency)).toBe(true);
+    expect(stats).toHaveProperty("firstGuessEffectiveness");
+    expect(Array.isArray(stats.firstGuessEffectiveness)).toBe(true);
+    expect(stats).toHaveProperty("attributeBreakdown");
+    expect(stats).toHaveProperty("reach");
+    expect(stats.reach).toMatchObject({
+      uniquePlayers: 0,
+      distinctChannels: 0,
+      soloGames: 0,
+      channelGames: 0,
+    });
   });
 
   it("rejects requests without admin token with 401", async () => {
