@@ -15,15 +15,16 @@ const TILE_BORDER = "#3a3b40";
 // Cell colors. High-contrast, saturated fills with a slightly LIGHTER same-hue
 // outline so every block reads crisply against the near-black background.
 //
-// Empty / no-guess cells are a distinct dark gray (Wordle-style) rather than the
-// background color — that contrast is what makes the grid look sharp.
-const CELL_EMPTY_BG = "#3a3a3c";
+// Empty / no-guess cells: fill matches the background (so they read as blank),
+// with just a faint outline marking the grid.
+const CELL_EMPTY_BG = BG;
 const CELL_EMPTY_BD = "#4d4d50";
 
 // Wrong: a muted red — between the desaturated mauve and the fully-saturated
-// red, so it reads clearly red without overpowering the green/yellow.
+// red, so it reads clearly red without overpowering the green/yellow. No
+// outline (border matches the fill).
 const CELL_WRONG_BG = "#9f4d4d";
-const CELL_WRONG_BD = "#b87070";
+const CELL_WRONG_BD = "#9f4d4d";
 
 // Correct: vivid green.
 const CELL_EQUAL_BG = "#4ca455";
