@@ -137,9 +137,15 @@ describe("POST /api/guess", () => {
     const answer = pickDaily(getRegistry().activePool)!;
     const auth = { Authorization: "Bearer dev:statscheck" };
 
-    // Pre-win: stats are zero.
+    // Pre-win: stats are zero and the guess distribution is empty.
     const before = await app.inject({ method: "GET", url: "/api/stats", headers: auth });
-    expect(before.json()).toEqual({ streak: 0, best: 0, played: 0, winRate: 0 });
+    expect(before.json()).toEqual({
+      streak: 0,
+      best: 0,
+      played: 0,
+      winRate: 0,
+      guessDistribution: { wins: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 }, losses: 0 },
+    });
 
     const r = await app.inject({
       method: "POST",
@@ -150,8 +156,15 @@ describe("POST /api/guess", () => {
     expect(r.json().status).toBe("won");
     expect(r.json().answer?.id).toBe(answer.id);
 
+    // Post-win: the single-guess win lands in the "1" bucket.
     const after = await app.inject({ method: "GET", url: "/api/stats", headers: auth });
-    expect(after.json()).toEqual({ streak: 1, best: 1, played: 1, winRate: 1 });
+    expect(after.json()).toEqual({
+      streak: 1,
+      best: 1,
+      played: 1,
+      winRate: 1,
+      guessDistribution: { wins: { 1: 1, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 }, losses: 0 },
+    });
   });
 
   it("/api/daily returns the in-progress history for a user", async () => {

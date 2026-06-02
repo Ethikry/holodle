@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Holodle — Admin Stats</title>
+    <style>
+      :root {
+        --bg: #0f1422;
+        --panel: #181f33;
+        --panel-2: #1f2740;
+        --line: #2a3350;
+        --ink: #e7ecf7;
+        --muted: #8b97b5;
+        --accent: #4fd0e8;
+        --ok: #3fd07a;
+        --warn: #f2c14e;
+        --bad: #ef5d6b;
+        --partial: #d9a441;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--ink);
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+      a { color: var(--accent); }
+      .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 20px 80px; }
+
+      header.top {
+        display: flex; align-items: baseline; justify-content: space-between;
+        flex-wrap: wrap; gap: 12px; margin-bottom: 4px;
+      }
+      header.top h1 { font-size: 22px; margin: 0; letter-spacing: 0.2px; }
+      header.top h1 .dot { color: var(--accent); }
+      .meta { color: var(--muted); font-size: 12px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+      .btn {
+        background: var(--accent); color: #06222a; border: 0; border-radius: 8px;
+        padding: 8px 14px; font-weight: 700; cursor: pointer; font-size: 13px;
+      }
+      .btn:hover { filter: brightness(1.08); }
+      .btn.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+      .btn.ghost:hover { color: var(--ink); }
+
+      /* Token gate */
+      .gate {
+        max-width: 420px; margin: 12vh auto 0; background: var(--panel);
+        border: 1px solid var(--line); border-radius: 14px; padding: 28px;
+      }
+      .gate h1 { margin: 0 0 6px; font-size: 20px; }
+      .gate p { color: var(--muted); margin: 0 0 18px; }
+      .gate input {
+        width: 100%; padding: 11px 13px; border-radius: 9px; border: 1px solid var(--line);
+        background: var(--bg); color: var(--ink); font-size: 14px; margin-bottom: 14px;
+      }
+      .gate .btn { width: 100%; padding: 11px; }
+      .gate .err { color: var(--bad); font-size: 13px; margin: -6px 0 12px; min-height: 18px; }
+
+      /* Sections */
+      section { margin-top: 28px; }
+      section > h2 {
+        font-size: 13px; text-transform: uppercase; letter-spacing: 1.2px;
+        color: var(--muted); margin: 0 0 12px; font-weight: 700;
+      }
+      .panel {
+        background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+        padding: 18px 20px;
+      }
+
+      /* Summary cards */
+      .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+      .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+      .card .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; }
+      .card .value { font-size: 26px; font-weight: 800; margin-top: 4px; }
+      .card .sub { color: var(--muted); font-size: 11px; margin-top: 2px; }
+
+      .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+      @media (max-width: 860px) { .grid-2 { grid-template-columns: 1fr; } }
+
+      /* Bar chart (guess distribution / first guess) */
+      .bars { display: flex; align-items: flex-end; gap: 12px; height: 200px; padding-top: 8px; }
+      .bars .col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+      .bars .bar { width: 100%; max-width: 56px; background: var(--accent); border-radius: 6px 6px 0 0; min-height: 2px; transition: height .3s; }
+      .bars .n { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+      .bars .x { color: var(--muted); font-size: 12px; margin-top: 6px; }
+
+      /* Attribute stacked bars */
+      .attr-row { display: grid; grid-template-columns: 130px 1fr 60px; align-items: center; gap: 12px; margin-bottom: 10px; }
+      .attr-row .name { color: var(--ink); font-size: 13px; }
+      .attr-row .track { height: 22px; border-radius: 6px; overflow: hidden; display: flex; background: var(--panel-2); }
+      .attr-row .seg { height: 100%; }
+      .attr-row .seg.equal { background: var(--ok); }
+      .attr-row .seg.partial { background: var(--partial); }
+      .attr-row .seg.wrong { background: var(--bad); opacity: 0.55; }
+      .attr-row .pct { text-align: right; color: var(--muted); font-size: 12px; }
+      .legend { display: flex; gap: 16px; color: var(--muted); font-size: 12px; margin-top: 14px; }
+      .legend .sw { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+
+      /* Tables */
+      table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+      th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; }
+      th.sortable { cursor: pointer; user-select: none; }
+      th.sortable:hover { color: var(--ink); }
+      th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+      tbody tr:hover { background: var(--panel-2); }
+      .talent { display: flex; align-items: center; gap: 9px; }
+      .talent img { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; background: var(--panel-2); }
+      .talent .tid { color: var(--muted); font-size: 11px; }
+      .scroll { max-height: 460px; overflow: auto; }
+      .winrate { font-weight: 700; }
+      .empty { color: var(--muted); padding: 20px 4px; text-align: center; }
+
+      /* SVG line chart */
+      .chart-svg { width: 100%; height: 220px; display: block; }
+      .chart-svg .area { fill: rgba(79, 208, 232, 0.14); }
+      .chart-svg .line { fill: none; stroke: var(--accent); stroke-width: 2; }
+      .chart-svg .axis { stroke: var(--line); stroke-width: 1; }
+      .chart-svg .lbl { fill: var(--muted); font-size: 10px; }
+
+      .hidden { display: none !important; }
+      .note { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+    </style>
+  </head>
+  <body>
+    <!-- Token gate -->
+    <div id="gate" class="gate hidden">
+      <h1>Holodle Admin</h1>
+      <p>Enter the admin token to view game statistics.</p>
+      <input id="token-input" type="password" placeholder="ADMIN_TOKEN" autocomplete="off" />
+      <div id="gate-err" class="err"></div>
+      <button class="btn" id="gate-btn">View stats</button>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dash" class="wrap hidden">
+      <header class="top">
+        <h1>Holodle <span class="dot">·</span> Admin Stats</h1>
+        <div class="meta">
+          <span id="generated"></span>
+          <button class="btn" id="refresh">Refresh</button>
+          <button class="btn ghost" id="signout">Sign out</button>
+        </div>
+      </header>
+
+      <section>
+        <div id="cards" class="cards"></div>
+      </section>
+
+      <section>
+        <h2>Reach</h2>
+        <div class="panel">
+          <div id="reach-cards" class="cards"></div>
+          <div id="reach-split" style="margin-top:16px"></div>
+        </div>
+        <p class="note">Every game — solo or launched from a Discord channel — counts here; channel play is mirrored from the same record, so totals are de-duplicated.</p>
+      </section>
+
+      <section class="grid-2">
+        <div>
+          <h2>Guess Distribution</h2>
+          <div class="panel"><div id="dist" class="bars"></div></div>
+          <p class="note">How many guesses settled games took (1–6).</p>
+        </div>
+        <div>
+          <h2>Attribute Difficulty</h2>
+          <div class="panel">
+            <div id="attrs"></div>
+            <div class="legend">
+              <span><span class="sw" style="background:var(--ok)"></span>Exact</span>
+              <span><span class="sw" style="background:var(--partial)"></span>Partial</span>
+              <span><span class="sw" style="background:var(--bad);opacity:.55"></span>Miss</span>
+            </div>
+          </div>
+          <p class="note">Share of cell states per attribute across all guesses — high "miss" means a hard-to-read clue.</p>
+        </div>
+      </section>
+
+      <section>
+        <h2>Activity Over Time</h2>
+        <div class="panel"><div id="activity"></div></div>
+        <p class="note">Settled games per day.</p>
+      </section>
+
+      <section>
+        <h2>Answer Difficulty</h2>
+        <div class="panel">
+          <div class="scroll">
+            <table id="answers">
+              <thead>
+                <tr>
+                  <th>Talent (as answer)</th>
+                  <th class="num sortable" data-key="plays">Plays</th>
+                  <th class="num sortable" data-key="wins">Wins</th>
+                  <th class="num sortable" data-key="winRate">Win&nbsp;rate</th>
+                  <th class="num sortable" data-key="avgGuesses">Avg&nbsp;guesses</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+        <p class="note">Per-answer outcomes. Sorted by lowest win rate (hardest answers) by default — click a header to re-sort.</p>
+      </section>
+
+      <section class="grid-2">
+        <div>
+          <h2>Most-Guessed Talents</h2>
+          <div class="panel"><div class="scroll"><table id="guessed"><tbody></tbody></table></div></div>
+        </div>
+        <div>
+          <h2>Opening Guesses</h2>
+          <div class="panel"><div class="scroll"><table id="firstguess"><tbody></tbody></table></div></div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Best Opening Guesses</h2>
+        <div class="panel">
+          <div class="scroll">
+            <table id="bestopener">
+              <thead>
+                <tr>
+                  <th>Opening guess</th>
+                  <th class="num sortable" data-key="plays">Plays</th>
+                  <th class="num sortable" data-key="wins">Wins</th>
+                  <th class="num sortable" data-key="winRate">Win&nbsp;rate</th>
+                  <th class="num sortable" data-key="avgGuessesToWin">Avg&nbsp;guesses&nbsp;to&nbsp;win</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+        <p class="note">Which openers lead to the best outcomes in practice. Ranked by win rate (then sample size) — click a header to re-sort. Openers with few plays are statistically noisy.</p>
+      </section>
+
+      <section class="grid-2">
+        <div>
+          <h2>Most-Picked Answers</h2>
+          <div class="panel"><div class="scroll"><table id="picks"><tbody></tbody></table></div></div>
+          <p class="note">How often each talent has been the daily answer.</p>
+        </div>
+        <div></div>
+      </section>
+    </div>
+
+    <script>
+      "use strict";
+      const TOKEN_KEY = "holodle_admin_token";
+      const ATTR_LABELS = {
+        branch: "Branch",
+        group: "Generation",
+        penlightColor: "Penlight color",
+        archetype: "Archetype",
+        height: "Height",
+        birthMonth: "Birth month",
+      };
+
+      const $ = (id) => document.getElementById(id);
+      const gate = $("gate");
+      const dash = $("dash");
+
+      let talentMap = {}; // id -> { name, avatarUrl }
+      let answersSort = { key: "winRate", dir: "asc" }; // hardest first
+      let openersSort = { key: "winRate", dir: "desc" }; // best first
+      let lastStats = null;
+
+      function esc(s) {
+        return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+      }
+      function pct(x) { return (x * 100).toFixed(1) + "%"; }
+      function num(x, d = 2) { return Number(x).toFixed(d); }
+
+      function talentName(id) { return (talentMap[id] && talentMap[id].name) || id; }
+      function talentCell(id) {
+        const t = talentMap[id];
+        const img = t && t.avatarUrl ? `<img src="${esc(t.avatarUrl)}" alt="" loading="lazy" />` : `<img alt="" />`;
+        const name = t ? esc(t.name) : `<span class="tid">${esc(id)}</span>`;
+        return `<div class="talent">${img}<span>${name}</span></div>`;
+      }
+
+      function showGate(msg) {
+        dash.classList.add("hidden");
+        gate.classList.remove("hidden");
+        $("gate-err").textContent = msg || "";
+        $("token-input").focus();
+      }
+
+      async function load() {
+        const token = sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
+        if (!token) { showGate(); return; }
+        try {
+          const [statsRes, talentsRes] = await Promise.all([
+            fetch("/api/admin/stats", { headers: { "x-admin-token": token } }),
+            fetch("/api/talents"),
+          ]);
+          if (statsRes.status === 401) { localStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(TOKEN_KEY); showGate("Invalid token."); return; }
+          if (statsRes.status === 404) { showGate("Admin stats are disabled (ADMIN_TOKEN not set on the server)."); return; }
+          if (!statsRes.ok) { showGate("Failed to load stats (" + statsRes.status + ")."); return; }
+
+          const stats = await statsRes.json();
+          lastStats = stats;
+          if (talentsRes.ok) {
+            const talents = await talentsRes.json();
+            talentMap = {};
+            for (const t of talents) talentMap[t.id] = { name: t.name, avatarUrl: t.avatarUrl };
+          }
+          gate.classList.add("hidden");
+          dash.classList.remove("hidden");
+          render(stats);
+        } catch (e) {
+          showGate("Network error: " + (e && e.message ? e.message : String(e)));
+        }
+      }
+
+      function render(s) {
+        $("generated").textContent = "Generated " + new Date(s.generatedAt * 1000).toLocaleString();
+        renderCards(s);
+        renderReach(s.reach);
+        renderDistribution(s.guessDistribution);
+        renderAttributes(s.attributeBreakdown);
+        renderActivity(s.activityByDate);
+        renderAnswers(s.perAnswerTalent);
+        renderBestOpeners(s.firstGuessEffectiveness);
+        renderFreqTable("guessed", s.talentGuessFrequency, "Guesses");
+        renderFreqTable("firstguess", s.firstGuessFrequency, "Opens");
+        renderFreqTable("picks", s.dailyPickFrequency, "Times answer");
+      }
+
+      function renderCards(s) {
+        const cards = [
+          { label: "Total games", value: s.totalGames.toLocaleString() },
+          { label: "Win rate", value: pct(s.winRate), sub: `${s.totalWins.toLocaleString()} W · ${s.totalLosses.toLocaleString()} L` },
+          { label: "Avg guesses / game", value: num(s.averageGuessesPerGame) },
+          { label: "Avg guesses / win", value: num(s.averageGuessesPerWin) },
+          { label: "Avg guesses / loss", value: num(s.averageGuessesPerLoss) },
+          { label: "Active days", value: s.activityByDate.length.toLocaleString() },
+        ];
+        $("cards").innerHTML = cards
+          .map((c) => `<div class="card"><div class="label">${esc(c.label)}</div><div class="value">${esc(c.value)}</div>${c.sub ? `<div class="sub">${esc(c.sub)}</div>` : ""}</div>`)
+          .join("");
+      }
+
+      function renderReach(r) {
+        if (!r) { $("reach-cards").innerHTML = ""; $("reach-split").innerHTML = ""; return; }
+        const cards = [
+          { label: "Unique players", value: r.uniquePlayers.toLocaleString() },
+          { label: "Discord channels", value: r.distinctChannels.toLocaleString() },
+          { label: "Solo games", value: r.soloGames.toLocaleString() },
+          { label: "Channel games", value: r.channelGames.toLocaleString() },
+        ];
+        $("reach-cards").innerHTML = cards
+          .map((c) => `<div class="card"><div class="label">${esc(c.label)}</div><div class="value">${esc(c.value)}</div></div>`)
+          .join("");
+        const total = r.soloGames + r.channelGames;
+        if (total > 0) {
+          const solo = (r.soloGames / total) * 100;
+          const chan = (r.channelGames / total) * 100;
+          $("reach-split").innerHTML = `<div class="attr-row">
+            <div class="name">Solo vs channel</div>
+            <div class="track">
+              <div class="seg" style="width:${solo}%;background:var(--muted)" title="Solo ${solo.toFixed(1)}%"></div>
+              <div class="seg" style="width:${chan}%;background:var(--accent)" title="Channel ${chan.toFixed(1)}%"></div>
+            </div>
+            <div class="pct">${chan.toFixed(0)}% ch</div>
+          </div>
+          <div class="legend">
+            <span><span class="sw" style="background:var(--muted)"></span>Solo</span>
+            <span><span class="sw" style="background:var(--accent)"></span>Channel</span>
+          </div>`;
+        } else {
+          $("reach-split").innerHTML = "";
+        }
+      }
+
+      function renderDistribution(dist) {
+        const entries = [1, 2, 3, 4, 5, 6].map((k) => [k, dist[k] || 0]);
+        const max = Math.max(1, ...entries.map(([, v]) => v));
+        $("dist").innerHTML = entries
+          .map(([k, v]) => {
+            const h = Math.round((v / max) * 100);
+            return `<div class="col"><div class="n">${v}</div><div class="bar" style="height:${h}%"></div><div class="x">${k}</div></div>`;
+          })
+          .join("");
+      }
+
+      function renderAttributes(breakdown) {
+        const keys = ["branch", "group", "penlightColor", "archetype", "height", "birthMonth"];
+        const rows = keys
+          .filter((k) => breakdown && breakdown[k])
+          .map((k) => {
+            const b = breakdown[k];
+            const total = b.equal + b.partial + b.wrong || 1;
+            const e = (b.equal / total) * 100;
+            const p = (b.partial / total) * 100;
+            const w = (b.wrong / total) * 100;
+            return `<div class="attr-row">
+              <div class="name">${esc(ATTR_LABELS[k] || k)}</div>
+              <div class="track">
+                <div class="seg equal" style="width:${e}%" title="Exact ${e.toFixed(1)}%"></div>
+                <div class="seg partial" style="width:${p}%" title="Partial ${p.toFixed(1)}%"></div>
+                <div class="seg wrong" style="width:${w}%" title="Miss ${w.toFixed(1)}%"></div>
+              </div>
+              <div class="pct">${e.toFixed(0)}%</div>
+            </div>`;
+          })
+          .join("");
+        $("attrs").innerHTML = rows || `<div class="empty">No guesses yet.</div>`;
+      }
+
+      function renderActivity(data) {
+        const host = $("activity");
+        if (!data || data.length === 0) { host.innerHTML = `<div class="empty">No activity yet.</div>`; return; }
+        const W = 1000, H = 220, padL = 34, padB = 24, padT = 12, padR = 10;
+        const max = Math.max(1, ...data.map((d) => d.games));
+        const n = data.length;
+        const x = (i) => padL + (n === 1 ? (W - padL - padR) / 2 : (i / (n - 1)) * (W - padL - padR));
+        const y = (v) => padT + (1 - v / max) * (H - padT - padB);
+        const pts = data.map((d, i) => [x(i), y(d.games)]);
+        const line = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+        const area = `M${pts[0][0].toFixed(1)} ${(H - padB).toFixed(1)} ` +
+          pts.map((p) => "L" + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ") +
+          ` L${pts[pts.length - 1][0].toFixed(1)} ${(H - padB).toFixed(1)} Z`;
+        // y gridlines at 0 and max
+        const yLines = [0, max].map((v) => `<line class="axis" x1="${padL}" y1="${y(v).toFixed(1)}" x2="${W - padR}" y2="${y(v).toFixed(1)}" /><text class="lbl" x="2" y="${(y(v) + 3).toFixed(1)}">${v}</text>`).join("");
+        const xLabels = (() => {
+          const idxs = n <= 6 ? data.map((_, i) => i) : [0, Math.floor((n - 1) / 2), n - 1];
+          return idxs.map((i) => `<text class="lbl" x="${x(i).toFixed(1)}" y="${H - 8}" text-anchor="middle">${esc(data[i].date.slice(5))}</text>`).join("");
+        })();
+        host.innerHTML = `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+          ${yLines}<path class="area" d="${area}" /><path class="line" d="${line}" />${xLabels}</svg>`;
+      }
+
+      function winRateColor(r) {
+        // green (easy) → red (hard)
+        if (r >= 0.66) return "var(--ok)";
+        if (r >= 0.4) return "var(--warn)";
+        return "var(--bad)";
+      }
+
+      function renderAnswers(rows) {
+        const tbody = $("answers").querySelector("tbody");
+        if (!rows || rows.length === 0) { tbody.innerHTML = `<tr><td colspan="5" class="empty">No settled games on logged answer days yet.</td></tr>`; return; }
+        const { key, dir } = answersSort;
+        const sorted = rows.slice().sort((a, b) => {
+          const av = key === "talentId" ? talentName(a.talentId) : a[key];
+          const bv = key === "talentId" ? talentName(b.talentId) : b[key];
+          if (av < bv) return dir === "asc" ? -1 : 1;
+          if (av > bv) return dir === "asc" ? 1 : -1;
+          return 0;
+        });
+        tbody.innerHTML = sorted
+          .map((r) => `<tr>
+            <td>${talentCell(r.talentId)}</td>
+            <td class="num">${r.plays}</td>
+            <td class="num">${r.wins}</td>
+            <td class="num winrate" style="color:${winRateColor(r.winRate)}">${pct(r.winRate)}</td>
+            <td class="num">${num(r.avgGuesses)}</td>
+          </tr>`)
+          .join("");
+      }
+
+      function renderBestOpeners(rows) {
+        const tbody = $("bestopener").querySelector("tbody");
+        if (!rows || rows.length === 0) { tbody.innerHTML = `<tr><td colspan="5" class="empty">No games played yet.</td></tr>`; return; }
+        const { key, dir } = openersSort;
+        const sorted = rows.slice().sort((a, b) => {
+          const av = key === "talentId" ? talentName(a.talentId) : a[key];
+          const bv = key === "talentId" ? talentName(b.talentId) : b[key];
+          if (av < bv) return dir === "asc" ? -1 : 1;
+          if (av > bv) return dir === "asc" ? 1 : -1;
+          return b.plays - a.plays; // stable tie-break: better-sampled first
+        });
+        tbody.innerHTML = sorted
+          .map((r) => `<tr>
+            <td>${talentCell(r.talentId)}</td>
+            <td class="num">${r.plays}</td>
+            <td class="num">${r.wins}</td>
+            <td class="num winrate" style="color:${winRateColor(r.winRate)}">${pct(r.winRate)}</td>
+            <td class="num">${r.wins > 0 ? num(r.avgGuessesToWin) : "—"}</td>
+          </tr>`)
+          .join("");
+      }
+
+      function renderFreqTable(id, rows, countLabel) {
+        const tbody = $(id).querySelector("tbody");
+        if (!rows || rows.length === 0) { tbody.innerHTML = `<tr><td class="empty">No data yet.</td></tr>`; return; }
+        const max = Math.max(1, ...rows.map((r) => r.count));
+        tbody.innerHTML =
+          `<tr><th>Talent</th><th class="num">${esc(countLabel)}</th></tr>` +
+          rows
+            .map((r) => `<tr><td>${talentCell(r.talentId)}</td><td class="num">${r.count.toLocaleString()}</td></tr>`)
+            .join("");
+        void max;
+      }
+
+      // Sortable answer-difficulty headers
+      $("answers").querySelectorAll("th.sortable").forEach((th) => {
+        th.addEventListener("click", () => {
+          const key = th.dataset.key;
+          if (answersSort.key === key) answersSort.dir = answersSort.dir === "asc" ? "desc" : "asc";
+          else answersSort = { key, dir: key === "winRate" ? "asc" : "desc" };
+          if (lastStats) renderAnswers(lastStats.perAnswerTalent);
+        });
+      });
+
+      // Sortable best-opener headers
+      $("bestopener").querySelectorAll("th.sortable").forEach((th) => {
+        th.addEventListener("click", () => {
+          const key = th.dataset.key;
+          if (openersSort.key === key) openersSort.dir = openersSort.dir === "asc" ? "desc" : "asc";
+          else openersSort = { key, dir: "desc" };
+          if (lastStats) renderBestOpeners(lastStats.firstGuessEffectiveness);
+        });
+      });
+
+      // Gate interactions
+      function submitToken() {
+        const v = $("token-input").value.trim();
+        if (!v) { $("gate-err").textContent = "Token required."; return; }
+        sessionStorage.setItem(TOKEN_KEY, v);
+        $("token-input").value = "";
+        load();
+      }
+      $("gate-btn").addEventListener("click", submitToken);
+      $("token-input").addEventListener("keydown", (e) => { if (e.key === "Enter") submitToken(); });
+      $("refresh").addEventListener("click", load);
+      $("signout").addEventListener("click", () => {
+        sessionStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(TOKEN_KEY);
+        showGate();
+      });
+
+      load();
+    </script>
+  </body>
+</html>

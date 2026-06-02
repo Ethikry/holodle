@@ -1,4 +1,4 @@
-import type { BoardRow, CellState, GameStatus, PlayerSnapshot } from "@holodle/shared";
+import type { BoardRow, CellState, GameStatus, PlayerSnapshot, UserStats } from "@holodle/shared";
 import { MAX_GUESSES } from "@holodle/shared";
 import { useGame } from "../state/game.js";
 import { AnswerAvatar } from "./AnswerAvatar.js";
@@ -120,6 +120,50 @@ function PlayerTile({
   );
 }
 
+// Wordle-style lifetime guess-count histogram: a bar per winning guess
+// count (1-6) plus a flat "X" bar for losses. The just-finished game's bar
+// is highlighted so the player can see where today landed.
+function GuessDistribution({
+  dist,
+  highlightWin,
+  highlightLoss,
+}: {
+  dist: UserStats["guessDistribution"];
+  highlightWin: number | null;
+  highlightLoss: boolean;
+}): JSX.Element {
+  const wins = dist?.wins ?? {};
+  const losses = dist?.losses ?? 0;
+  const rows: Array<{ label: string; count: number; highlight: boolean; loss: boolean }> = [];
+  for (let n = 1; n <= MAX_GUESSES; n++) {
+    rows.push({ label: String(n), count: wins[n] ?? 0, highlight: highlightWin === n, loss: false });
+  }
+  rows.push({ label: "X", count: losses, highlight: highlightLoss, loss: true });
+  const max = Math.max(1, ...rows.map((r) => r.count));
+
+  return (
+    <div className="mt-2 space-y-1.5">
+      {rows.map((r) => (
+        <div key={r.label} className="flex items-center gap-2">
+          <span className="w-4 text-right text-xs font-semibold tabular-nums text-holo-muted">
+            {r.label}
+          </span>
+          <div className="flex-1">
+            <div
+              className={`flex h-5 min-w-[1.5rem] items-center justify-end rounded px-1.5 text-[11px] font-bold text-white ${
+                r.highlight ? "bg-holo-accent" : r.loss ? "bg-holo-bad/55" : "bg-holo-ok"
+              }`}
+              style={{ width: `${(r.count / max) * 100}%` }}
+            >
+              {r.count}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function RecapScreen(): JSX.Element | null {
   const {
     recapOpen,
@@ -235,6 +279,14 @@ export function RecapScreen(): JSX.Element | null {
               <p className="text-xl font-bold">{stats.best}</p>
               <p className="text-[10px] uppercase tracking-wider text-holo-muted">Best Streak</p>
             </div>
+          </div>
+          <div className="card mt-3 p-3">
+            <p className="text-[10px] uppercase tracking-wider text-holo-muted">Guess Distribution</p>
+            <GuessDistribution
+              dist={stats.guessDistribution}
+              highlightWin={won ? Math.min(Math.max(guesses, 1), MAX_GUESSES) : null}
+              highlightLoss={status === "lost"}
+            />
           </div>
         </section>
 

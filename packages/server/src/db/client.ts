@@ -438,7 +438,37 @@ export function markExitEmbedPosted(userId: string, dayIndex: number): void {
     .run(userId, dayIndex);
 }
 
-export function loadStats(userId: string): UserStats & { lastDayIndex: number | null } {
+// Per-user lifetime guess-count distribution for the result screen: wins
+// bucketed by how many guesses they took (1-6) plus a flat losses count.
+// Read straight from user_day (the canonical per-game record) so it reflects
+// every settled game, including the one that just finished.
+export function getUserGuessDistribution(userId: string): {
+  wins: Record<number, number>;
+  losses: number;
+} {
+  const rows = getDb()
+    .prepare(
+      `SELECT status, guesses_json FROM user_day
+        WHERE user_id = ? AND status IN ('won','lost')`,
+    )
+    .all(userId) as Array<{ status: "won" | "lost"; guesses_json: string }>;
+  const wins: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+  let losses = 0;
+  for (const r of rows) {
+    if (r.status === "lost") {
+      losses++;
+      continue;
+    }
+    const len = (JSON.parse(r.guesses_json) as unknown[]).length;
+    const bucket = Math.min(Math.max(len, 1), 6);
+    wins[bucket] = (wins[bucket] ?? 0) + 1;
+  }
+  return { wins, losses };
+}
+
+export function loadStats(
+  userId: string,
+): Omit<UserStats, "guessDistribution"> & { lastDayIndex: number | null } {
   const row = getDb()
     .prepare(
       `SELECT streak, best, played, wins, last_day_index FROM user_stats WHERE user_id = ?`,
@@ -751,4 +781,168 @@ export function getActivityByDate(): Array<{ date: string; games: number }> {
   return Array.from(dateMap.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, games]) => ({ date, games }));
+}
+
+// Per-answer-talent difficulty: for each talent that has been a daily answer,
+// how many settled games landed on its day, how many were won, the win rate,
+// and the average guesses spent. This is the headline "which answers are too
+// hard / too easy" signal for tuning the talent pool. Games are joined to the
+// day's answer via the day_index → talent_id map in daily_pick_log.
+export interface PerAnswerTalentStat {
+  talentId: string;
+  plays: number;
+  wins: number;
+  winRate: number; // 0..1
+  avgGuesses: number;
+}
+
+export function getPerAnswerTalentStats(): PerAnswerTalentStat[] {
+  const pickRows = getDb()
+    .prepare(`SELECT day_index, talent_id FROM daily_pick_log`)
+    .all() as Array<{ day_index: number; talent_id: string }>;
+  const dayToTalent = new Map<number, string>();
+  for (const r of pickRows) dayToTalent.set(r.day_index, r.talent_id);
+
+  const agg = new Map<string, { plays: number; wins: number; totalGuesses: number }>();
+  for (const game of getAllSettledGames()) {
+    const talentId = dayToTalent.get(game.dayIndex);
+    if (!talentId) continue; // game on a day with no logged answer — skip
+    const stat = agg.get(talentId) ?? { plays: 0, wins: 0, totalGuesses: 0 };
+    stat.plays++;
+    stat.totalGuesses += game.guesses.length;
+    if (game.status === "won") stat.wins++;
+    agg.set(talentId, stat);
+  }
+
+  return Array.from(agg.entries())
+    .map(([talentId, s]) => ({
+      talentId,
+      plays: s.plays,
+      wins: s.wins,
+      winRate: s.plays > 0 ? s.wins / s.plays : 0,
+      avgGuesses: s.plays > 0 ? s.totalGuesses / s.plays : 0,
+    }))
+    .sort((a, b) => b.plays - a.plays);
+}
+
+// Count how many times each talent was used as a player's opening guess.
+export function getFirstGuessFrequency(): Map<string, number> {
+  const freq = new Map<string, number>();
+  for (const game of getAllSettledGames()) {
+    const first = game.guesses[0]?.talentId;
+    if (first) freq.set(first, (freq.get(first) ?? 0) + 1);
+  }
+  return freq;
+}
+
+// How effective each opening guess is in practice: for every talent used as
+// a first guess, the win rate of games that opened with it and the average
+// guesses those games took to win. This answers "which openers actually lead
+// to the best outcomes" rather than just which are popular. Sorted best-first
+// (highest win rate, then most plays as a tie-breaker so a 1-game 100% opener
+// doesn't outrank a well-sampled strong one).
+export interface FirstGuessEffectivenessStat {
+  talentId: string;
+  plays: number;
+  wins: number;
+  winRate: number; // 0..1
+  avgGuessesToWin: number; // 0 when no wins
+}
+
+export function getFirstGuessEffectiveness(): FirstGuessEffectivenessStat[] {
+  const agg = new Map<string, { plays: number; wins: number; winGuesses: number }>();
+  for (const game of getAllSettledGames()) {
+    const first = game.guesses[0]?.talentId;
+    if (!first) continue;
+    const stat = agg.get(first) ?? { plays: 0, wins: 0, winGuesses: 0 };
+    stat.plays++;
+    if (game.status === "won") {
+      stat.wins++;
+      stat.winGuesses += game.guesses.length;
+    }
+    agg.set(first, stat);
+  }
+  return Array.from(agg.entries())
+    .map(([talentId, s]) => ({
+      talentId,
+      plays: s.plays,
+      wins: s.wins,
+      winRate: s.plays > 0 ? s.wins / s.plays : 0,
+      avgGuessesToWin: s.wins > 0 ? s.winGuesses / s.wins : 0,
+    }))
+    .sort((a, b) => b.winRate - a.winRate || b.plays - a.plays);
+}
+
+// Richer sibling of getAttributeAccuracy: tally all three cell states
+// (equal / partial / wrong) per attribute so we can see not just how often an
+// attribute matches, but how often it gives a partial hint vs a flat miss.
+export function getAttributeBreakdown(): Record<
+  string,
+  { equal: number; partial: number; wrong: number }
+> {
+  const attributes: Array<keyof Omit<GuessDiff, "talentId">> = [
+    "branch",
+    "group",
+    "penlightColor",
+    "archetype",
+    "height",
+    "birthMonth",
+  ];
+  const breakdown: Record<string, { equal: number; partial: number; wrong: number }> = {};
+  for (const attr of attributes) {
+    breakdown[String(attr)] = { equal: 0, partial: 0, wrong: 0 };
+  }
+
+  for (const game of getAllSettledGames()) {
+    for (const guess of game.guesses) {
+      for (const attr of attributes) {
+        const cell = guess[attr];
+        if (!cell) continue;
+        const bucket = breakdown[String(attr)];
+        if (!bucket) continue;
+        if (cell.state === "equal") bucket.equal++;
+        else if (cell.state === "partial") bucket.partial++;
+        else bucket.wrong++;
+      }
+    }
+  }
+
+  return breakdown;
+}
+
+// Reach across all settled games. Every game (solo or channel-launched)
+// lands in user_day — channel play merely mirrors a copy into
+// channel_daily_participant for embed rendering — so user_day is the
+// complete, de-duplicated source. The channel_id column distinguishes
+// channel-launched games (non-null) from solo play (null).
+export interface ReachStats {
+  uniquePlayers: number;
+  distinctChannels: number;
+  soloGames: number;
+  channelGames: number;
+}
+
+export function getReachStats(): ReachStats {
+  const row = getDb()
+    .prepare(
+      `SELECT
+         COUNT(DISTINCT user_id) AS uniquePlayers,
+         COUNT(DISTINCT channel_id) AS distinctChannels,
+         COALESCE(SUM(CASE WHEN channel_id IS NULL THEN 1 ELSE 0 END), 0) AS soloGames,
+         COALESCE(SUM(CASE WHEN channel_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS channelGames
+       FROM user_day
+       WHERE status IN ('won','lost')`,
+    )
+    .get() as {
+    uniquePlayers: number;
+    distinctChannels: number;
+    soloGames: number;
+    channelGames: number;
+  };
+  return {
+    uniquePlayers: row.uniquePlayers,
+    distinctChannels: row.distinctChannels,
+    soloGames: row.soloGames,
+    channelGames: row.channelGames,
+  };
 }

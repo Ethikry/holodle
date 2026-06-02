@@ -129,6 +129,12 @@ export interface UserStats {
   best: number;
   played: number;
   winRate: number; // 0..1
+  // Lifetime final-guess-count distribution for the result screen:
+  // wins bucketed by guess count (1-6), plus a flat losses count.
+  guessDistribution: {
+    wins: Record<number, number>;
+    losses: number;
+  };
 }
 
 // Admin-only aggregated statistics across all users.
@@ -146,6 +152,33 @@ export interface AdminStats {
   dailyPickFrequency: Array<{ talentId: string; count: number }>;
   attributeAccuracy: Record<string, number>; // "branch" | "generation" | "archetype" | "height" | "birthMonth" → 0..1
   activityByDate: Array<{ date: string; games: number }>;
+  // Per-answer-talent difficulty (only talents that have been a daily answer).
+  perAnswerTalent: Array<{
+    talentId: string;
+    plays: number;
+    wins: number;
+    winRate: number; // 0..1
+    avgGuesses: number;
+  }>;
+  // What players open with: opening-guess talent → count.
+  firstGuessFrequency: Array<{ talentId: string; count: number }>;
+  // How effective each opening guess is, ranked best-first.
+  firstGuessEffectiveness: Array<{
+    talentId: string;
+    plays: number;
+    wins: number;
+    winRate: number; // 0..1
+    avgGuessesToWin: number;
+  }>;
+  // Per-attribute cell-state tally across all guesses.
+  attributeBreakdown: Record<string, { equal: number; partial: number; wrong: number }>;
+  // Reach: distinct players/channels and the solo-vs-channel game split.
+  reach: {
+    uniquePlayers: number;
+    distinctChannels: number;
+    soloGames: number;
+    channelGames: number;
+  };
 }
 
 // A single guess row reduced to its 5 cell-state colors (one per

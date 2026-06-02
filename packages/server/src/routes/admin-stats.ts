@@ -5,8 +5,13 @@ import {
   getAllSettledGames,
   getActivityByDate,
   getAttributeAccuracy,
+  getAttributeBreakdown,
   getGuessDistribution,
   getTalentGuessFrequency,
+  getFirstGuessFrequency,
+  getFirstGuessEffectiveness,
+  getPerAnswerTalentStats,
+  getReachStats,
   getPickLogCounts,
 } from "../db/client.js";
 import { getRegistry } from "../game/talents.js";
@@ -69,6 +74,14 @@ export async function adminStatsRoutes(app: FastifyInstance): Promise<void> {
 
     const attributeAccuracy = getAttributeAccuracy();
     const activityByDate = getActivityByDate();
+    const perAnswerTalent = getPerAnswerTalentStats();
+    const attributeBreakdown = getAttributeBreakdown();
+    const reach = getReachStats();
+    const firstGuessEffectiveness = getFirstGuessEffectiveness();
+
+    const firstGuessFrequencyArray = Array.from(getFirstGuessFrequency().entries())
+      .map(([talentId, count]) => ({ talentId, count }))
+      .sort((a, b) => b.count - a.count);
 
     const stats: AdminStats = {
       generatedAt: Math.floor(Date.now() / 1000),
@@ -84,6 +97,11 @@ export async function adminStatsRoutes(app: FastifyInstance): Promise<void> {
       dailyPickFrequency: dailyPickFrequencyArray,
       attributeAccuracy,
       activityByDate,
+      perAnswerTalent,
+      firstGuessFrequency: firstGuessFrequencyArray,
+      firstGuessEffectiveness,
+      attributeBreakdown,
+      reach,
     };
 
     return stats;
