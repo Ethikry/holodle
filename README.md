@@ -179,11 +179,12 @@ Then in Discord:
 
 Two supported targets:
 
-- **Oracle Cloud (Always Free, arm64 + cloudflared)** — see
-  [`docs/oracle-cloud-deploy.md`](docs/oracle-cloud-deploy.md). Uses the
-  bundled `docker-compose.yml` with a Cloudflare Tunnel sidecar; no inbound
-  ports required.
-- **Fly.io** — see below.
+- **Oracle Cloud (Always Free, arm64 + cloudflared)** — the live deploy.
+  Native Node built with `pnpm build` and run under pm2, fronted by a
+  Cloudflare Named Tunnel (systemd) for HTTPS; no inbound ports required.
+  See [`docs/oracle-cloud-deploy.md`](docs/oracle-cloud-deploy.md). Redeploy
+  is `git pull && pnpm install && pnpm build && pm2 restart holodle`.
+- **Fly.io** — Docker-based; see below.
 
 ### Fly.io
 
