@@ -87,7 +87,7 @@ fails loudly on any malformed entry.
 | `debutYear`  | integer (e.g. 2022)                           | Year of debut. |
 | `archetype`  | string                                        | Free-form (Human, Zombie, Phoenix, Shinigami, …). |
 | `generation` | string                                        | Free-form (`"Gen 0"`, `"GAMERS"`, `"Promise"`, `"Regloss"`, …). Used as the "Gen" column in the guess grid. |
-| `heightCm`   | integer cm                                    | Server derives the bucket: `≤150` Smol, `151–160` Med, `>160` Tall. |
+| `heightCm`   | integer cm                                    | Server derives the bucket: `<150` Smol, `150–165` Med, `>165` Tall. |
 | `birthMonth` | string, English month name                    | "January", "February", …, "December". |
 | `active`     | boolean                                       | `false` keeps the talent in autocomplete but excludes from the daily pool. |
 
@@ -218,7 +218,7 @@ Per-attribute summary:
 - **Gen / Branch / Archetype** — exact match → green; otherwise red.
 - **Debut Year** — exact → green; otherwise red with `↑` (target year is
   higher than your guess) or `↓` (target is lower).
-- **Height** — bucketed (`≤150` Smol, `151–160` Med, `>160` Tall). Exact
+- **Height** — bucketed (`<150` Smol, `150–165` Med, `>165` Tall). Exact
   bucket → green; otherwise red.
 - **Birth Month** — exact → green; otherwise red.
 

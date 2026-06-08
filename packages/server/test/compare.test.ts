@@ -20,14 +20,13 @@ function t(overrides: Partial<Talent>): Talent {
 }
 
 describe("heightBucket", () => {
-  // ≤150 Smol, 151–160 Med, >160 Tall. 150 itself is Smol.
+  // <150 Smol, 150–165 Med, >165 Tall. 150 and 165 are both Med.
   it.each([
     [149, "Smol"],
-    [150, "Smol"],
-    [151, "Med"],
+    [150, "Med"],
     [155, "Med"],
-    [160, "Med"],
-    [161, "Tall"],
+    [165, "Med"],
+    [166, "Tall"],
   ])("%i → %s", (cm, bucket) => {
     expect(heightBucket(cm)).toBe(bucket);
   });

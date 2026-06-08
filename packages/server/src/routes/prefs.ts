@@ -37,12 +37,14 @@ const PrefsPatchSchema = z
     recapPingMuted: z.boolean().optional(),
     theme: ThemeIdSchema.optional(),
     welcomed: z.boolean().optional(),
+    lastSeenNoticeVersion: z.number().int().nonnegative().optional(),
   })
   .refine(
     (v) =>
       v.recapPingMuted !== undefined ||
       v.theme !== undefined ||
-      v.welcomed !== undefined,
+      v.welcomed !== undefined ||
+      v.lastSeenNoticeVersion !== undefined,
     { message: "PATCH body must include at least one field" },
   );
 
@@ -68,6 +70,8 @@ export async function prefsRoutes(app: FastifyInstance): Promise<void> {
       recapPingMuted: parsed.data.recapPingMuted ?? existing.recapPingMuted,
       theme: parsed.data.theme ?? existing.theme,
       welcomed: parsed.data.welcomed ?? existing.welcomed,
+      lastSeenNoticeVersion:
+        parsed.data.lastSeenNoticeVersion ?? existing.lastSeenNoticeVersion,
     });
     return getUserPrefs(user.id);
   });

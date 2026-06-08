@@ -25,7 +25,9 @@ import { HelpModal } from "./components/HelpModal.js";
 import { LoadingScreen } from "./components/LoadingScreen.js";
 import { RecapScreen } from "./components/RecapScreen.js";
 import { WelcomeOverlay } from "./components/WelcomeOverlay.js";
+import { NoticeOverlay } from "./components/NoticeOverlay.js";
 import { Confetti } from "./components/Confetti.js";
+import { CURRENT_NOTICE_VERSION } from "./notices.js";
 
 function preloadAvatars(talents: TalentSummary[]): void {
   for (const t of talents) {
@@ -134,11 +136,18 @@ export function App(): JSX.Element {
           // Apply the persisted theme as soon as it's known so the
           // palette doesn't flash from the default to the user's pick.
           applyTheme(prefs.theme);
-          // First-launch welcome: only open if the server says we've
-          // never welcomed this user. The flag is server-tracked
-          // because Discord Activity iframes partition localStorage
-          // across launches.
-          if (!prefs.welcomed) useGame.getState().setWelcomeOpen(true);
+          // First-launch welcome vs. one-time notice, in that priority.
+          // A brand-new user (never welcomed) only ever sees the welcome;
+          // dismissing it catches them up to CURRENT_NOTICE_VERSION so
+          // historical notices never retroactively pop. A returning user
+          // whose stored notice version is behind the current one sees the
+          // notice once. Both flags are server-tracked because Discord
+          // Activity iframes partition localStorage across launches.
+          if (!prefs.welcomed) {
+            useGame.getState().setWelcomeOpen(true);
+          } else if (prefs.lastSeenNoticeVersion < CURRENT_NOTICE_VERSION) {
+            useGame.getState().setNoticeOpen(true);
+          }
         }
       } catch (err) {
         errs.push(describe(err));
@@ -244,6 +253,7 @@ export function App(): JSX.Element {
       <RecapScreen />
       <Confetti />
       <WelcomeOverlay />
+      <NoticeOverlay />
     </div>
   );
 }

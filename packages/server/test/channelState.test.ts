@@ -978,7 +978,12 @@ describe("Recap rendering with muted users (integration)", () => {
           WHERE channel_id='c-recap'`,
       )
       .run();
-    setUserPrefs("u-muted", { recapPingMuted: true, theme: "sky", welcomed: false });
+    setUserPrefs("u-muted", {
+      recapPingMuted: true,
+      theme: "sky",
+      welcomed: false,
+      lastSeenNoticeVersion: 0,
+    });
 
     const players = listYesterdayRecapPlayers("c-recap", "2026-05-26");
     const mutedUserIds = getMutedRecapUserIds(players.map((p) => p.userId));
