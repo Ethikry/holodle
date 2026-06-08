@@ -1,11 +1,12 @@
 import type { GuessDiff } from "@holodle/shared";
 import { patchPrefs } from "../net/api.js";
 import { useGame } from "../state/game.js";
+import { CURRENT_NOTICE_VERSION } from "../notices.js";
 import { GuessRow } from "./GuessRow.js";
 
 // Synthetic GuessDiff rows for the example board. The hypothetical
 // "answer" is Ceres Fauna (EN, Promise → Gen 2, Mythical (Kirin),
-// Light Green, 164cm Tall, March). Calliope's row shows a YELLOW partial
+// Light Green, 164cm Med, March). Calliope's row shows a YELLOW partial
 // archetype: Mythical (Reaper) shares the Mythical parent with the answer's
 // Mythical (Kirin) but not the exact species.
 const EXAMPLE_ROWS: GuessDiff[] = [
@@ -15,7 +16,9 @@ const EXAMPLE_ROWS: GuessDiff[] = [
     group: { value: "Gen 3", state: "wrong" },
     penlightColor: { value: "Light Blue", state: "wrong" },
     archetype: { value: "Animal (Rabbit)", state: "wrong" },
-    height: { value: "Med", state: "wrong" },
+    // Pekora is 153cm → Med, same bucket as the answer (Fauna, 164cm Med),
+    // so Height lands green even on this otherwise-all-red opener.
+    height: { value: "Med", state: "equal" },
     birthMonth: { value: "January", state: "wrong" },
   },
   {
@@ -35,7 +38,9 @@ const EXAMPLE_ROWS: GuessDiff[] = [
     // Shares the "Mythical" parent with the answer's Mythical (Kirin) but a
     // different sub-archetype → yellow partial.
     archetype: { value: "Mythical (Reaper)", state: "partial" },
-    height: { value: "Tall", state: "equal" },
+    // Calliope is 167cm → Tall, but the answer (Fauna, 164cm) is Med, so
+    // this misses.
+    height: { value: "Tall", state: "wrong" },
     birthMonth: { value: "April", state: "wrong" },
   },
   {
@@ -44,7 +49,7 @@ const EXAMPLE_ROWS: GuessDiff[] = [
     group: { value: "Gen 2", state: "equal" },
     penlightColor: { value: "Light Green", state: "equal" },
     archetype: { value: "Mythical (Kirin)", state: "equal" },
-    height: { value: "Tall", state: "equal" },
+    height: { value: "Med", state: "equal" },
     birthMonth: { value: "March", state: "equal" },
   },
 ];
@@ -60,8 +65,19 @@ export function WelcomeOverlay(): JSX.Element | null {
     // dismiss again.
     setWelcomeOpen(false);
     if (accessToken && !prefs.welcomed) {
-      setPrefs({ ...prefs, welcomed: true });
-      void patchPrefs(accessToken, { welcomed: true }).catch(() => {
+      // Mark welcomed AND catch the user up to the current notice version in
+      // one write. This is what keeps historical "patch notes" notices from
+      // retroactively popping for first-time players — they start their
+      // notice history at the current version, not 0.
+      setPrefs({
+        ...prefs,
+        welcomed: true,
+        lastSeenNoticeVersion: CURRENT_NOTICE_VERSION,
+      });
+      void patchPrefs(accessToken, {
+        welcomed: true,
+        lastSeenNoticeVersion: CURRENT_NOTICE_VERSION,
+      }).catch(() => {
         // Roll back the optimistic update so a retry from the Help
         // modal's "Replay welcome" stays consistent with the server.
         setPrefs({ ...prefs, welcomed: false });
@@ -127,9 +143,9 @@ export function WelcomeOverlay(): JSX.Element | null {
         </p>
 
         {/* Example board — four synthetic rows showing the progression
-            from a complete miss (Pekora) → narrowing in (Anya: equal gen +
-            month; Calliope: equal branch + height, and a YELLOW partial
-            archetype) → solved (Fauna). */}
+            from a near-total miss (Pekora: only Height lands) → narrowing in
+            (Anya: equal gen + month; Calliope: equal branch, plus a YELLOW
+            partial archetype) → solved (Fauna). */}
         <section className="mt-6">
           <h2 className="px-1 text-center text-xs font-semibold uppercase tracking-wider text-holo-muted">
             Example — the answer is Ceres Fauna

@@ -7,13 +7,13 @@ import type {
   Talent,
 } from "@holodle/shared";
 
-// Height bucket cutoffs are: ≤150 = Smol, 151–160 = Med, >160 = Tall.
-// Important: 150 cm itself buckets to Smol. Any change to these boundaries
-// must be reflected in BUCKET_LABEL in GuessRow.tsx and the README schema
-// docs.
+// Height bucket cutoffs are: <150 = Smol, 150–165 = Med, >165 = Tall.
+// Important: 150 cm itself buckets to Med, and 165 cm buckets to Med. Any
+// change to these boundaries must be reflected in BUCKET_LABEL in
+// GuessRow.tsx and the README schema docs.
 export function heightBucket(cm: number): HeightBucket {
-  if (cm <= 150) return "Smol";
-  if (cm > 160) return "Tall";
+  if (cm < 150) return "Smol";
+  if (cm > 165) return "Tall";
   return "Med";
 }
 

@@ -48,6 +48,10 @@ interface GameState {
   // ever launch (when localStorage `holodle-welcomed` is unset); user
   // can replay it any time via a button in the Help modal.
   welcomeOpen: boolean;
+  // One-time "patch notes" notice for returning players. Opened at
+  // bootstrap when the user has been welcomed before but their stored
+  // lastSeenNoticeVersion is behind CURRENT_NOTICE_VERSION.
+  noticeOpen: boolean;
   loading: boolean;
   error: string | null;
 }
@@ -70,6 +74,7 @@ interface GameActions {
   setHelpOpen: (open: boolean) => void;
   setRecapOpen: (open: boolean) => void;
   setWelcomeOpen: (open: boolean) => void;
+  setNoticeOpen: (open: boolean) => void;
   setPrefs: (prefs: UserPrefs) => void;
   setLoading: (loading: boolean) => void;
   setError: (err: string | null) => void;
@@ -97,11 +102,12 @@ export const useGame = create<GameState & GameActions>((set) => ({
   },
   players: new Map(),
 
-  prefs: { recapPingMuted: false, theme: "sky", welcomed: false },
+  prefs: { recapPingMuted: false, theme: "sky", welcomed: false, lastSeenNoticeVersion: 0 },
 
   helpOpen: false,
   recapOpen: false,
   welcomeOpen: false,
+  noticeOpen: false,
   // Start as `true` so the first paint shows the LoadingScreen rather than
   // a half-populated UI. The App.tsx bootstrap effect flips this to false
   // once talents + session + daily + stats + socket are all wired up.
@@ -181,6 +187,7 @@ export const useGame = create<GameState & GameActions>((set) => ({
   setHelpOpen: (helpOpen) => set({ helpOpen }),
   setRecapOpen: (recapOpen) => set({ recapOpen }),
   setWelcomeOpen: (welcomeOpen) => set({ welcomeOpen }),
+  setNoticeOpen: (noticeOpen) => set({ noticeOpen }),
   setPrefs: (prefs) => set({ prefs }),
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),

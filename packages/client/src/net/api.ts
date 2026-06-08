@@ -85,6 +85,10 @@ export interface UserPrefs {
   // Discord Activity iframes don't reliably share localStorage across
   // launches (partitioned storage).
   welcomed: boolean;
+  // Highest one-time "patch notes" notice version this user has dismissed.
+  // Compared against CURRENT_NOTICE_VERSION (src/notices.tsx) to decide
+  // whether to surface the notice overlay. 0 = seen nothing.
+  lastSeenNoticeVersion: number;
 }
 
 export async function fetchPrefs(accessToken: string): Promise<UserPrefs> {

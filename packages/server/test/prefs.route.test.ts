@@ -35,7 +35,7 @@ describe("GET /api/prefs", () => {
       headers: authFor("first-load-user"),
     });
     expect(r.statusCode).toBe(200);
-    expect(r.json()).toEqual({ recapPingMuted: false, theme: "sky", welcomed: false });
+    expect(r.json()).toEqual({ recapPingMuted: false, theme: "sky", welcomed: false, lastSeenNoticeVersion: 0 });
   });
 
   it("rejects unauthenticated requests with 401", async () => {
@@ -54,14 +54,14 @@ describe("PATCH /api/prefs", () => {
       payload: { recapPingMuted: true },
     });
     expect(patch.statusCode).toBe(200);
-    expect(patch.json()).toEqual({ recapPingMuted: true, theme: "sky", welcomed: false });
+    expect(patch.json()).toEqual({ recapPingMuted: true, theme: "sky", welcomed: false, lastSeenNoticeVersion: 0 });
 
     const get = await app.inject({
       method: "GET",
       url: "/api/prefs",
       headers: userHeaders,
     });
-    expect(get.json()).toEqual({ recapPingMuted: true, theme: "sky", welcomed: false });
+    expect(get.json()).toEqual({ recapPingMuted: true, theme: "sky", welcomed: false, lastSeenNoticeVersion: 0 });
   });
 
   it("toggles back to false on a second PATCH", async () => {
@@ -78,7 +78,47 @@ describe("PATCH /api/prefs", () => {
       headers: userHeaders,
       payload: { recapPingMuted: false },
     });
-    expect(second.json()).toEqual({ recapPingMuted: false, theme: "sky", welcomed: false });
+    expect(second.json()).toEqual({ recapPingMuted: false, theme: "sky", welcomed: false, lastSeenNoticeVersion: 0 });
+  });
+
+  it("persists lastSeenNoticeVersion and preserves it under a partial PATCH", async () => {
+    const userHeaders = authFor("notice-version-user");
+    const patch = await app.inject({
+      method: "PATCH",
+      url: "/api/prefs",
+      headers: userHeaders,
+      payload: { lastSeenNoticeVersion: 1 },
+    });
+    expect(patch.statusCode).toBe(200);
+    expect(patch.json()).toEqual({
+      recapPingMuted: false,
+      theme: "sky",
+      welcomed: false,
+      lastSeenNoticeVersion: 1,
+    });
+    // A later unrelated PATCH must not clobber the stored version.
+    const themePatch = await app.inject({
+      method: "PATCH",
+      url: "/api/prefs",
+      headers: userHeaders,
+      payload: { theme: "gura" },
+    });
+    expect(themePatch.json()).toEqual({
+      recapPingMuted: false,
+      theme: "gura",
+      welcomed: false,
+      lastSeenNoticeVersion: 1,
+    });
+  });
+
+  it("rejects a negative lastSeenNoticeVersion with 400", async () => {
+    const r = await app.inject({
+      method: "PATCH",
+      url: "/api/prefs",
+      headers: authFor("bad-notice-version-user"),
+      payload: { lastSeenNoticeVersion: -1 },
+    });
+    expect(r.statusCode).toBe(400);
   });
 
   it("rejects body validation errors with 400", async () => {
@@ -113,7 +153,7 @@ describe("PATCH /api/prefs", () => {
       url: "/api/prefs",
       headers: authFor("isolated-b"),
     });
-    expect(otherUser.json()).toEqual({ recapPingMuted: false, theme: "sky", welcomed: false });
+    expect(otherUser.json()).toEqual({ recapPingMuted: false, theme: "sky", welcomed: false, lastSeenNoticeVersion: 0 });
   });
 });
 
@@ -127,14 +167,14 @@ describe("PATCH /api/prefs theme", () => {
       payload: { theme: "suisei" },
     });
     expect(patch.statusCode).toBe(200);
-    expect(patch.json()).toEqual({ recapPingMuted: false, theme: "suisei", welcomed: false });
+    expect(patch.json()).toEqual({ recapPingMuted: false, theme: "suisei", welcomed: false, lastSeenNoticeVersion: 0 });
 
     const get = await app.inject({
       method: "GET",
       url: "/api/prefs",
       headers: userHeaders,
     });
-    expect(get.json()).toEqual({ recapPingMuted: false, theme: "suisei", welcomed: false });
+    expect(get.json()).toEqual({ recapPingMuted: false, theme: "suisei", welcomed: false, lastSeenNoticeVersion: 0 });
   });
 
   it("rejects an unknown theme id with 400", async () => {
@@ -163,7 +203,7 @@ describe("PATCH /api/prefs theme", () => {
       headers: userHeaders,
       payload: { theme: "calliope" },
     });
-    expect(themePatch.json()).toEqual({ recapPingMuted: true, theme: "calliope", welcomed: false });
+    expect(themePatch.json()).toEqual({ recapPingMuted: true, theme: "calliope", welcomed: false, lastSeenNoticeVersion: 0 });
   });
 
   it("partial PATCH (recapPingMuted only) preserves theme", async () => {
@@ -180,7 +220,7 @@ describe("PATCH /api/prefs theme", () => {
       headers: userHeaders,
       payload: { recapPingMuted: true },
     });
-    expect(togglePatch.json()).toEqual({ recapPingMuted: true, theme: "fauna", welcomed: false });
+    expect(togglePatch.json()).toEqual({ recapPingMuted: true, theme: "fauna", welcomed: false, lastSeenNoticeVersion: 0 });
   });
 
   it("rejects an empty PATCH body with 400", async () => {

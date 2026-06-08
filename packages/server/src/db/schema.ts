@@ -85,6 +85,14 @@ CREATE TABLE IF NOT EXISTS user_prefs (
   -- localStorage across launches reliably — partitioned storage was
   -- causing the welcome screen to pop every session.
   welcomed         INTEGER NOT NULL DEFAULT 0,
+  -- Highest "patch notes" notice version this user has dismissed. The
+  -- client holds a registry of versioned one-time notices (see
+  -- client/src/notices.tsx); a returning user whose stored version is
+  -- below the current one sees the notice once. 0 = has seen nothing,
+  -- which is also the brand-new-user default (they get caught up to the
+  -- current version when they dismiss the welcome overlay, so historical
+  -- notices never retroactively pop for first-timers).
+  last_seen_notice_version INTEGER NOT NULL DEFAULT 0,
   updated_at       INTEGER NOT NULL DEFAULT (strftime('%s','now'))
 );
 
@@ -200,5 +208,13 @@ export const ADDITIVE_MIGRATIONS: Array<{ table: string; column: string; ddl: st
     table: "user_prefs",
     column: "welcomed",
     ddl: "ALTER TABLE user_prefs ADD COLUMN welcomed INTEGER NOT NULL DEFAULT 0",
+  },
+  // Versioned one-time "patch notes" notices. Existing user_prefs rows
+  // default to 0 so the first notice (the height re-sort) pops once for
+  // everyone who has already been welcomed.
+  {
+    table: "user_prefs",
+    column: "last_seen_notice_version",
+    ddl: "ALTER TABLE user_prefs ADD COLUMN last_seen_notice_version INTEGER NOT NULL DEFAULT 0",
   },
 ];

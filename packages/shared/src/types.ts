@@ -3,7 +3,7 @@
 
 export type Branch = "JP" | "ID" | "EN" | "DEV_IS" | "Stars";
 
-// Cutoffs: ≤150 → Smol, 151–160 → Med, >160 → Tall.
+// Cutoffs: <150 → Smol, 150–165 → Med, >165 → Tall.
 export type HeightBucket = "Smol" | "Med" | "Tall";
 
 export type Month =
