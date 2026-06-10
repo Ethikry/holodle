@@ -7,7 +7,10 @@ import {
   getAttributeAccuracy,
   getAttributeBreakdown,
   getGuessDistribution,
+  getGuessDistributionByOutcome,
   getTalentGuessFrequency,
+  getSecondGuessFrequency,
+  getNextGuessByFeedback,
   getFirstGuessFrequency,
   getFirstGuessEffectiveness,
   getPerAnswerTalentStats,
@@ -40,8 +43,6 @@ export async function adminStatsRoutes(app: FastifyInstance): Promise<void> {
     let totalGuesses = 0;
     let totalGuessesInWins = 0;
     let winsCount = 0;
-    let totalGuessesInLosses = 0;
-    let lossesCount = 0;
 
     for (const game of games) {
       const guessCount = game.guesses.length;
@@ -49,23 +50,20 @@ export async function adminStatsRoutes(app: FastifyInstance): Promise<void> {
       if (game.status === "won") {
         totalGuessesInWins += guessCount;
         winsCount++;
-      } else {
-        totalGuessesInLosses += guessCount;
-        lossesCount++;
       }
     }
 
     const averageGuessesPerWin = winsCount > 0 ? totalGuessesInWins / winsCount : 0;
-    const averageGuessesPerLoss = lossesCount > 0 ? totalGuessesInLosses / lossesCount : 0;
     const averageGuessesPerGame = totalGames > 0 ? totalGuesses / totalGames : 0;
 
     // Get statistics
     const guessDistribution = getGuessDistribution();
+    const guessDistributionByOutcome = getGuessDistributionByOutcome();
     const talentGuessFreq = getTalentGuessFrequency();
     const dailyPickCounts = getPickLogCounts();
 
     const talentGuessFrequencyArray = Array.from(talentGuessFreq.entries())
-      .map(([talentId, count]) => ({ talentId, count }))
+      .map(([talentId, v]) => ({ talentId, count: v.total, nonAnswerCount: v.nonAnswer }))
       .sort((a, b) => b.count - a.count);
 
     const dailyPickFrequencyArray = Array.from(dailyPickCounts.entries())
@@ -78,6 +76,8 @@ export async function adminStatsRoutes(app: FastifyInstance): Promise<void> {
     const attributeBreakdown = getAttributeBreakdown();
     const reach = getReachStats();
     const firstGuessEffectiveness = getFirstGuessEffectiveness();
+    const secondGuessFrequency = getSecondGuessFrequency();
+    const nextGuessByFeedback = getNextGuessByFeedback();
 
     const firstGuessFrequencyArray = Array.from(getFirstGuessFrequency().entries())
       .map(([talentId, count]) => ({ talentId, count }))
@@ -90,17 +90,19 @@ export async function adminStatsRoutes(app: FastifyInstance): Promise<void> {
       totalLosses,
       winRate,
       averageGuessesPerWin,
-      averageGuessesPerLoss,
       averageGuessesPerGame,
       guessDistribution,
+      guessDistributionByOutcome,
       talentGuessFrequency: talentGuessFrequencyArray,
       dailyPickFrequency: dailyPickFrequencyArray,
+      secondGuessFrequency,
       attributeAccuracy,
       activityByDate,
       perAnswerTalent,
       firstGuessFrequency: firstGuessFrequencyArray,
       firstGuessEffectiveness,
       attributeBreakdown,
+      nextGuessByFeedback,
       reach,
     };
 

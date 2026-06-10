@@ -145,13 +145,21 @@ export interface AdminStats {
   totalLosses: number;
   winRate: number; // 0..1
   averageGuessesPerWin: number;
-  averageGuessesPerLoss: number;
   averageGuessesPerGame: number;
   guessDistribution: Record<number, number>; // 1-6 → count of games
-  talentGuessFrequency: Array<{ talentId: string; count: number }>;
+  // Guess-count histogram split by outcome (1-6 each). Losses cluster at 6.
+  guessDistributionByOutcome: {
+    win: Record<number, number>;
+    loss: Record<number, number>;
+  };
+  // `count` = total times guessed; `nonAnswerCount` excludes self-answer
+  // winning guesses (guesses where the talent WAS that day's answer).
+  talentGuessFrequency: Array<{ talentId: string; count: number; nonAnswerCount: number }>;
   dailyPickFrequency: Array<{ talentId: string; count: number }>;
+  // How often each talent is the SECOND guess (guesses[1]).
+  secondGuessFrequency: Array<{ talentId: string; count: number }>;
   attributeAccuracy: Record<string, number>; // "branch" | "generation" | "archetype" | "height" | "birthMonth" → 0..1
-  activityByDate: Array<{ date: string; games: number }>;
+  activityByDate: Array<{ date: string; games: number; wins: number }>;
   // Per-answer-talent difficulty (only talents that have been a daily answer).
   perAnswerTalent: Array<{
     talentId: string;
@@ -172,6 +180,11 @@ export interface AdminStats {
   }>;
   // Per-attribute cell-state tally across all guesses.
   attributeBreakdown: Record<string, { equal: number; partial: number; wrong: number }>;
+  // "Given this feedback pattern, what did players guess next?" Keyed by an
+  // E/P/X six-char pattern (attribute order: branch, group, penlightColor,
+  // archetype, height, birthMonth); value is the top next-guesses for that
+  // pattern. Only observed patterns are present.
+  nextGuessByFeedback: Record<string, Array<{ talentId: string; count: number }>>;
   // Reach: distinct players/channels and the solo-vs-channel game split.
   reach: {
     uniquePlayers: number;

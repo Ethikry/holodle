@@ -43,11 +43,16 @@ describe("GET /api/admin/stats", () => {
     expect(stats).toHaveProperty("totalLosses", 0);
     expect(stats).toHaveProperty("winRate", 0);
     expect(stats).toHaveProperty("averageGuessesPerWin", 0);
-    expect(stats).toHaveProperty("averageGuessesPerLoss", 0);
+    expect(stats).not.toHaveProperty("averageGuessesPerLoss");
     expect(stats).toHaveProperty("averageGuessesPerGame", 0);
     expect(stats).toHaveProperty("guessDistribution");
+    expect(stats).toHaveProperty("guessDistributionByOutcome");
+    expect(stats.guessDistributionByOutcome).toHaveProperty("win");
+    expect(stats.guessDistributionByOutcome).toHaveProperty("loss");
     expect(stats).toHaveProperty("talentGuessFrequency");
     expect(stats).toHaveProperty("dailyPickFrequency");
+    expect(stats).toHaveProperty("secondGuessFrequency");
+    expect(Array.isArray(stats.secondGuessFrequency)).toBe(true);
     expect(stats).toHaveProperty("attributeAccuracy");
     expect(stats).toHaveProperty("activityByDate");
     expect(stats).toHaveProperty("perAnswerTalent");
@@ -57,6 +62,7 @@ describe("GET /api/admin/stats", () => {
     expect(stats).toHaveProperty("firstGuessEffectiveness");
     expect(Array.isArray(stats.firstGuessEffectiveness)).toBe(true);
     expect(stats).toHaveProperty("attributeBreakdown");
+    expect(stats).toHaveProperty("nextGuessByFeedback");
     expect(stats).toHaveProperty("reach");
     expect(stats.reach).toMatchObject({
       uniquePlayers: 0,

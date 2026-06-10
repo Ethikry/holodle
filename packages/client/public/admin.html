@@ -124,6 +124,41 @@
       .chart-svg .axis { stroke: var(--line); stroke-width: 1; }
       .chart-svg .lbl { fill: var(--muted); font-size: 10px; }
 
+      /* Sticky table headers inside scroll containers */
+      .scroll table thead th {
+        position: sticky; top: 0; background: var(--panel); z-index: 2;
+        box-shadow: inset 0 -1px 0 var(--line);
+      }
+
+      /* Stacked win/loss distribution segments */
+      .bars .bar { display: flex; flex-direction: column-reverse; overflow: hidden; background: var(--panel-2); }
+      .bars .bar .seg-win { width: 100%; background: var(--ok); }
+      .bars .bar .seg-loss { width: 100%; background: var(--bad); opacity: 0.6; }
+
+      /* Inline "as answer" badge in Most-Guessed */
+      .ansbadge { color: var(--muted); font-size: 11px; margin-left: 6px; white-space: nowrap; }
+
+      /* Next-guess explorer */
+      .fbcells { display: flex; flex-wrap: wrap; gap: 10px; }
+      .fbcell {
+        display: flex; flex-direction: column; align-items: center; gap: 6px;
+        cursor: pointer; user-select: none; min-width: 86px;
+      }
+      .fbcell .swatch {
+        width: 100%; height: 30px; border-radius: 7px; border: 1px solid var(--line);
+        transition: background .12s;
+      }
+      .fbcell .swatch.E { background: var(--ok); }
+      .fbcell .swatch.P { background: var(--partial); }
+      .fbcell .swatch.X { background: var(--bad); opacity: 0.6; }
+      .fbcell .fblabel { color: var(--muted); font-size: 11px; }
+      .fblist { margin-top: 16px; display: flex; flex-direction: column; gap: 6px; }
+      .fblist .row { display: grid; grid-template-columns: 1fr 46px; align-items: center; gap: 10px; }
+      .fblist .barwrap { position: relative; }
+      .fblist .barfill { position: absolute; inset: 0; background: rgba(79,208,232,0.16); border-radius: 6px; z-index: 0; }
+      .fblist .talent { position: relative; z-index: 1; padding: 4px 6px; }
+      .fblist .cnt { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+
       .hidden { display: none !important; }
       .note { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
     </style>
@@ -165,8 +200,14 @@
       <section class="grid-2">
         <div>
           <h2>Guess Distribution</h2>
-          <div class="panel"><div id="dist" class="bars"></div></div>
-          <p class="note">How many guesses settled games took (1–6).</p>
+          <div class="panel">
+            <div id="dist" class="bars"></div>
+            <div class="legend">
+              <span><span class="sw" style="background:var(--ok)"></span>Win</span>
+              <span><span class="sw" style="background:var(--bad);opacity:.6"></span>Loss</span>
+            </div>
+          </div>
+          <p class="note">Settled games by number of guesses (1–6), split by outcome. Losses pile at 6 (all guesses spent).</p>
         </div>
         <div>
           <h2>Attribute Difficulty</h2>
@@ -182,10 +223,17 @@
         </div>
       </section>
 
-      <section>
-        <h2>Activity Over Time</h2>
-        <div class="panel"><div id="activity"></div></div>
-        <p class="note">Settled games per day.</p>
+      <section class="grid-2">
+        <div>
+          <h2>Activity Over Time</h2>
+          <div class="panel"><div id="activity"></div></div>
+          <p class="note">Settled games per day.</p>
+        </div>
+        <div>
+          <h2>Win Rate Over Time</h2>
+          <div class="panel"><div id="winrate-trend"></div></div>
+          <p class="note">Share of settled games won each day.</p>
+        </div>
       </section>
 
       <section>
@@ -247,7 +295,20 @@
           <div class="panel"><div class="scroll"><table id="picks"><tbody></tbody></table></div></div>
           <p class="note">How often each talent has been the daily answer.</p>
         </div>
-        <div></div>
+        <div>
+          <h2>Most-Picked 2nd Guess</h2>
+          <div class="panel"><div class="scroll"><table id="secondguess"><tbody></tbody></table></div></div>
+          <p class="note">What players follow their opener with (the 2nd guess), across all games.</p>
+        </div>
+      </section>
+
+      <section>
+        <h2>Next Guess Explorer</h2>
+        <div class="panel">
+          <div class="fbcells" id="fbcells"></div>
+          <div class="fblist" id="fblist"></div>
+        </div>
+        <p class="note">Click each cell to cycle 🟩→🟨→🟥, then see what players most often guessed <em>next</em> after a guess returned that exact feedback. (Today only Archetype ever turns yellow.)</p>
       </section>
     </div>
 
@@ -279,11 +340,20 @@
       function num(x, d = 2) { return Number(x).toFixed(d); }
 
       function talentName(id) { return (talentMap[id] && talentMap[id].name) || id; }
-      function talentCell(id) {
+      function talentCell(id, suffixHtml) {
         const t = talentMap[id];
         const img = t && t.avatarUrl ? `<img src="${esc(t.avatarUrl)}" alt="" loading="lazy" />` : `<img alt="" />`;
         const name = t ? esc(t.name) : `<span class="tid">${esc(id)}</span>`;
-        return `<div class="talent">${img}<span>${name}</span></div>`;
+        const extra = suffixHtml || "";
+        return `<div class="talent">${img}<span>${name}</span>${extra}</div>`;
+      }
+
+      // Red→green hue by percentile rank within a column of values, so a single
+      // outlier doesn't wash out the gradient. sortedVals = ascending values.
+      function playsColor(v, sortedVals) {
+        if (!sortedVals || sortedVals.length <= 1) return "var(--ink)";
+        const t = sortedVals.indexOf(v) / (sortedVals.length - 1); // 0..1
+        return `hsl(${Math.round(120 * t)}, 70%, 60%)`;
       }
 
       function showGate(msg) {
@@ -322,25 +392,31 @@
 
       function render(s) {
         $("generated").textContent = "Generated " + new Date(s.generatedAt * 1000).toLocaleString();
+        const answerCountById = {};
+        for (const r of s.dailyPickFrequency || []) answerCountById[r.talentId] = r.count;
         renderCards(s);
         renderReach(s.reach);
-        renderDistribution(s.guessDistribution);
+        renderDistribution(s.guessDistributionByOutcome);
         renderAttributes(s.attributeBreakdown);
         renderActivity(s.activityByDate);
+        renderWinRateTrend(s.activityByDate);
         renderAnswers(s.perAnswerTalent);
         renderBestOpeners(s.firstGuessEffectiveness);
-        renderFreqTable("guessed", s.talentGuessFrequency, "Guesses");
+        renderMostGuessed(s.talentGuessFrequency, answerCountById);
         renderFreqTable("firstguess", s.firstGuessFrequency, "Opens");
         renderFreqTable("picks", s.dailyPickFrequency, "Times answer");
+        renderFreqTable("secondguess", s.secondGuessFrequency, "2nd guess");
+        renderExplorer(s.nextGuessByFeedback);
       }
 
       function renderCards(s) {
+        const failRate = s.totalGames > 0 ? s.totalLosses / s.totalGames : 0;
         const cards = [
           { label: "Total games", value: s.totalGames.toLocaleString() },
           { label: "Win rate", value: pct(s.winRate), sub: `${s.totalWins.toLocaleString()} W · ${s.totalLosses.toLocaleString()} L` },
+          { label: "Fail rate", value: pct(failRate), sub: `${s.totalLosses.toLocaleString()} lost` },
           { label: "Avg guesses / game", value: num(s.averageGuessesPerGame) },
           { label: "Avg guesses / win", value: num(s.averageGuessesPerWin) },
-          { label: "Avg guesses / loss", value: num(s.averageGuessesPerLoss) },
           { label: "Active days", value: s.activityByDate.length.toLocaleString() },
         ];
         $("cards").innerHTML = cards
@@ -380,13 +456,24 @@
         }
       }
 
-      function renderDistribution(dist) {
-        const entries = [1, 2, 3, 4, 5, 6].map((k) => [k, dist[k] || 0]);
-        const max = Math.max(1, ...entries.map(([, v]) => v));
+      function renderDistribution(d) {
+        const win = (d && d.win) || {};
+        const loss = (d && d.loss) || {};
+        const entries = [1, 2, 3, 4, 5, 6].map((k) => {
+          const w = win[k] || 0, l = loss[k] || 0;
+          return { k, w, l, t: w + l };
+        });
+        const max = Math.max(1, ...entries.map((e) => e.t));
         $("dist").innerHTML = entries
-          .map(([k, v]) => {
-            const h = Math.round((v / max) * 100);
-            return `<div class="col"><div class="n">${v}</div><div class="bar" style="height:${h}%"></div><div class="x">${k}</div></div>`;
+          .map((e) => {
+            const h = Math.round((e.t / max) * 100);
+            const winPct = e.t > 0 ? (e.w / e.t) * 100 : 0;
+            const lossPct = e.t > 0 ? (e.l / e.t) * 100 : 0;
+            return `<div class="col"><div class="n">${e.t}</div>` +
+              `<div class="bar" style="height:${h}%" title="${e.w} won · ${e.l} lost">` +
+              `<div class="seg-win" style="height:${winPct}%"></div>` +
+              `<div class="seg-loss" style="height:${lossPct}%"></div>` +
+              `</div><div class="x">${e.k}</div></div>`;
           })
           .join("");
       }
@@ -415,27 +502,38 @@
         $("attrs").innerHTML = rows || `<div class="empty">No guesses yet.</div>`;
       }
 
-      function renderActivity(data) {
-        const host = $("activity");
-        if (!data || data.length === 0) { host.innerHTML = `<div class="empty">No activity yet.</div>`; return; }
-        const W = 1000, H = 220, padL = 34, padB = 24, padT = 12, padR = 10;
-        const max = Math.max(1, ...data.map((d) => d.games));
-        const n = data.length;
+      // Generic SVG line chart. points = [{ label, value }]. opts.maxValue pins
+      // the y-domain top (e.g. 1 for a rate); opts.fmtY formats axis labels.
+      function lineChart(host, points, opts) {
+        opts = opts || {};
+        if (!points || points.length === 0) { host.innerHTML = `<div class="empty">No data yet.</div>`; return; }
+        const W = 1000, H = 220, padL = 40, padB = 24, padT = 12, padR = 10;
+        const fmtY = opts.fmtY || ((v) => String(v));
+        const max = opts.maxValue != null ? opts.maxValue : Math.max(1, ...points.map((p) => p.value));
+        const n = points.length;
         const x = (i) => padL + (n === 1 ? (W - padL - padR) / 2 : (i / (n - 1)) * (W - padL - padR));
-        const y = (v) => padT + (1 - v / max) * (H - padT - padB);
-        const pts = data.map((d, i) => [x(i), y(d.games)]);
+        const y = (v) => padT + (1 - (max === 0 ? 0 : v / max)) * (H - padT - padB);
+        const pts = points.map((p, i) => [x(i), y(p.value)]);
         const line = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
         const area = `M${pts[0][0].toFixed(1)} ${(H - padB).toFixed(1)} ` +
           pts.map((p) => "L" + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ") +
           ` L${pts[pts.length - 1][0].toFixed(1)} ${(H - padB).toFixed(1)} Z`;
-        // y gridlines at 0 and max
-        const yLines = [0, max].map((v) => `<line class="axis" x1="${padL}" y1="${y(v).toFixed(1)}" x2="${W - padR}" y2="${y(v).toFixed(1)}" /><text class="lbl" x="2" y="${(y(v) + 3).toFixed(1)}">${v}</text>`).join("");
+        const yLines = [0, max].map((v) => `<line class="axis" x1="${padL}" y1="${y(v).toFixed(1)}" x2="${W - padR}" y2="${y(v).toFixed(1)}" /><text class="lbl" x="2" y="${(y(v) + 3).toFixed(1)}">${esc(fmtY(v))}</text>`).join("");
         const xLabels = (() => {
-          const idxs = n <= 6 ? data.map((_, i) => i) : [0, Math.floor((n - 1) / 2), n - 1];
-          return idxs.map((i) => `<text class="lbl" x="${x(i).toFixed(1)}" y="${H - 8}" text-anchor="middle">${esc(data[i].date.slice(5))}</text>`).join("");
+          const idxs = n <= 6 ? points.map((_, i) => i) : [0, Math.floor((n - 1) / 2), n - 1];
+          return idxs.map((i) => `<text class="lbl" x="${x(i).toFixed(1)}" y="${H - 8}" text-anchor="middle">${esc(points[i].label)}</text>`).join("");
         })();
         host.innerHTML = `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
           ${yLines}<path class="area" d="${area}" /><path class="line" d="${line}" />${xLabels}</svg>`;
+      }
+
+      function renderActivity(data) {
+        lineChart($("activity"), (data || []).map((d) => ({ label: d.date.slice(5), value: d.games })));
+      }
+
+      function renderWinRateTrend(data) {
+        const pts = (data || []).map((d) => ({ label: d.date.slice(5), value: d.games > 0 ? d.wins / d.games : 0 }));
+        lineChart($("winrate-trend"), pts, { maxValue: 1, fmtY: (v) => Math.round(v * 100) + "%" });
       }
 
       function winRateColor(r) {
@@ -449,6 +547,7 @@
         const tbody = $("answers").querySelector("tbody");
         if (!rows || rows.length === 0) { tbody.innerHTML = `<tr><td colspan="5" class="empty">No settled games on logged answer days yet.</td></tr>`; return; }
         const { key, dir } = answersSort;
+        const playsAsc = rows.map((r) => r.plays).sort((a, b) => a - b);
         const sorted = rows.slice().sort((a, b) => {
           const av = key === "talentId" ? talentName(a.talentId) : a[key];
           const bv = key === "talentId" ? talentName(b.talentId) : b[key];
@@ -459,7 +558,7 @@
         tbody.innerHTML = sorted
           .map((r) => `<tr>
             <td>${talentCell(r.talentId)}</td>
-            <td class="num">${r.plays}</td>
+            <td class="num" style="color:${playsColor(r.plays, playsAsc)}">${r.plays}</td>
             <td class="num">${r.wins}</td>
             <td class="num winrate" style="color:${winRateColor(r.winRate)}">${pct(r.winRate)}</td>
             <td class="num">${num(r.avgGuesses)}</td>
@@ -471,7 +570,11 @@
         const tbody = $("bestopener").querySelector("tbody");
         if (!rows || rows.length === 0) { tbody.innerHTML = `<tr><td colspan="5" class="empty">No games played yet.</td></tr>`; return; }
         const { key, dir } = openersSort;
+        const playsAsc = rows.map((r) => r.plays).sort((a, b) => a - b);
         const sorted = rows.slice().sort((a, b) => {
+          // Openers with no wins (avg-to-win renders "—") always sink to the
+          // bottom, regardless of column or direction.
+          if ((a.wins === 0) !== (b.wins === 0)) return a.wins === 0 ? 1 : -1;
           const av = key === "talentId" ? talentName(a.talentId) : a[key];
           const bv = key === "talentId" ? talentName(b.talentId) : b[key];
           if (av < bv) return dir === "asc" ? -1 : 1;
@@ -481,7 +584,7 @@
         tbody.innerHTML = sorted
           .map((r) => `<tr>
             <td>${talentCell(r.talentId)}</td>
-            <td class="num">${r.plays}</td>
+            <td class="num" style="color:${playsColor(r.plays, playsAsc)}">${r.plays}</td>
             <td class="num">${r.wins}</td>
             <td class="num winrate" style="color:${winRateColor(r.winRate)}">${pct(r.winRate)}</td>
             <td class="num">${r.wins > 0 ? num(r.avgGuessesToWin) : "—"}</td>
@@ -490,15 +593,73 @@
       }
 
       function renderFreqTable(id, rows, countLabel) {
-        const tbody = $(id).querySelector("tbody");
-        if (!rows || rows.length === 0) { tbody.innerHTML = `<tr><td class="empty">No data yet.</td></tr>`; return; }
-        const max = Math.max(1, ...rows.map((r) => r.count));
-        tbody.innerHTML =
-          `<tr><th>Talent</th><th class="num">${esc(countLabel)}</th></tr>` +
+        const table = $(id);
+        const head = `<thead><tr><th>Talent</th><th class="num">${esc(countLabel)}</th></tr></thead>`;
+        if (!rows || rows.length === 0) {
+          table.innerHTML = head + `<tbody><tr><td class="empty" colspan="2">No data yet.</td></tr></tbody>`;
+          return;
+        }
+        table.innerHTML = head + "<tbody>" +
           rows
             .map((r) => `<tr><td>${talentCell(r.talentId)}</td><td class="num">${r.count.toLocaleString()}</td></tr>`)
-            .join("");
-        void max;
+            .join("") +
+          "</tbody>";
+      }
+
+      // Most-Guessed gets a 3rd column ("Guesses (not answer)") + an inline
+      // "·N× ans" badge, so it can't use the generic 2-col renderFreqTable.
+      function renderMostGuessed(rows, answerCountById) {
+        const table = $("guessed");
+        const head = `<thead><tr><th>Talent</th><th class="num">Guesses</th><th class="num">Guesses&nbsp;(not&nbsp;answer)</th></tr></thead>`;
+        if (!rows || rows.length === 0) {
+          table.innerHTML = head + `<tbody><tr><td class="empty" colspan="3">No data yet.</td></tr></tbody>`;
+          return;
+        }
+        table.innerHTML = head + "<tbody>" +
+          rows
+            .map((r) => {
+              const ans = answerCountById[r.talentId] || 0;
+              const badge = ans > 0 ? `<span class="ansbadge">·${ans}× ans</span>` : "";
+              const na = r.nonAnswerCount != null ? r.nonAnswerCount : r.count;
+              return `<tr><td>${talentCell(r.talentId, badge)}</td><td class="num">${r.count.toLocaleString()}</td><td class="num">${na.toLocaleString()}</td></tr>`;
+            })
+            .join("") +
+          "</tbody>";
+      }
+
+      // ── Next Guess Explorer ──────────────────────────────────────────
+      // Cell order MUST match FEEDBACK_ATTRS in db/client.ts (the key encoding).
+      const FB_ORDER = ["branch", "group", "penlightColor", "archetype", "height", "birthMonth"];
+      const FB_CYCLE = { E: "P", P: "X", X: "E" }; // 🟩 → 🟨 → 🟥
+      let fbState = ["X", "X", "X", "X", "X", "X"];
+      let fbData = {};
+
+      function renderExplorer(data) {
+        if (data) fbData = data;
+        $("fbcells").innerHTML = FB_ORDER.map((attr, i) =>
+          `<div class="fbcell" data-i="${i}" title="Click to cycle"><div class="swatch ${fbState[i]}"></div><div class="fblabel">${esc(ATTR_LABELS[attr] || attr)}</div></div>`,
+        ).join("");
+        $("fbcells").querySelectorAll(".fbcell").forEach((el) => {
+          el.addEventListener("click", () => {
+            const i = Number(el.dataset.i);
+            fbState[i] = FB_CYCLE[fbState[i]];
+            renderExplorer();
+          });
+        });
+        renderFbResults();
+      }
+
+      function renderFbResults() {
+        const rows = fbData[fbState.join("")] || [];
+        const host = $("fblist");
+        if (rows.length === 0) { host.innerHTML = `<div class="empty">No games reached this exact pattern.</div>`; return; }
+        const max = Math.max(1, ...rows.map((r) => r.count));
+        host.innerHTML = rows
+          .map((r) => {
+            const w = Math.round((r.count / max) * 100);
+            return `<div class="row"><div class="barwrap"><div class="barfill" style="width:${w}%"></div>${talentCell(r.talentId)}</div><div class="cnt">${r.count.toLocaleString()}</div></div>`;
+          })
+          .join("");
       }
 
       // Sortable answer-difficulty headers
