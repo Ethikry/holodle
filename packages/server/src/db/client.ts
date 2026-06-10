@@ -712,13 +712,33 @@ export function getAllSettledGames(): SettledGameRow[] {
   }));
 }
 
-// Count how many times each talent was guessed across all games.
-export function getTalentGuessFrequency(): Map<string, number> {
+// Maps each logged day_index to the talent that was the answer that day.
+// Shared by the per-answer and guess-frequency aggregations.
+function getDayToAnswerMap(): Map<number, string> {
+  const rows = getDb()
+    .prepare(`SELECT day_index, talent_id FROM daily_pick_log`)
+    .all() as Array<{ day_index: number; talent_id: string }>;
+  const m = new Map<number, string>();
+  for (const r of rows) m.set(r.day_index, r.talent_id);
+  return m;
+}
+
+// Count how many times each talent was guessed across all games. `total` is
+// every guess; `nonAnswer` excludes guesses where the talent WAS that day's
+// answer (i.e. the self-answer winning guess) — so it isolates how often a
+// talent is used as a strategic/probe guess. Days with no logged answer count
+// toward nonAnswer (we can't confirm a self-answer, and it almost never is).
+export function getTalentGuessFrequency(): Map<string, { total: number; nonAnswer: number }> {
   const games = getAllSettledGames();
-  const freq = new Map<string, number>();
+  const dayToAnswer = getDayToAnswerMap();
+  const freq = new Map<string, { total: number; nonAnswer: number }>();
   for (const game of games) {
+    const answer = dayToAnswer.get(game.dayIndex);
     for (const guess of game.guesses) {
-      freq.set(guess.talentId, (freq.get(guess.talentId) ?? 0) + 1);
+      const e = freq.get(guess.talentId) ?? { total: 0, nonAnswer: 0 };
+      e.total++;
+      if (guess.talentId !== answer) e.nonAnswer++;
+      freq.set(guess.talentId, e);
     }
   }
   return freq;
@@ -736,6 +756,88 @@ export function getGuessDistribution(): Record<number, number> {
     }
   }
   return dist;
+}
+
+// Guess-count histogram split by outcome. Wins distribute across 1-6; losses
+// cluster at 6 (all guesses spent). Powers the stacked win/loss distribution
+// chart and the fail-rate read.
+export function getGuessDistributionByOutcome(): {
+  win: Record<number, number>;
+  loss: Record<number, number>;
+} {
+  const win: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+  const loss: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+  for (const game of getAllSettledGames()) {
+    const bucket = Math.min(game.guesses.length, 6) || 1;
+    const target = game.status === "won" ? win : loss;
+    const current = target[bucket];
+    if (current !== undefined) target[bucket] = current + 1;
+  }
+  return { win, loss };
+}
+
+// How often each talent is chosen as the SECOND guess (guesses[1]), across
+// settled games with at least two guesses. Sorted most-common first.
+export function getSecondGuessFrequency(): Array<{ talentId: string; count: number }> {
+  const freq = new Map<string, number>();
+  for (const game of getAllSettledGames()) {
+    const second = game.guesses[1]?.talentId;
+    if (second) freq.set(second, (freq.get(second) ?? 0) + 1);
+  }
+  return Array.from(freq.entries())
+    .map(([talentId, count]) => ({ talentId, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+// Fixed attribute order for the feedback-pattern key. MUST match the order the
+// admin "Next Guess Explorer" UI lays its six toggle cells out in.
+const FEEDBACK_ATTRS: Array<keyof Omit<GuessDiff, "talentId">> = [
+  "branch",
+  "group",
+  "penlightColor",
+  "archetype",
+  "height",
+  "birthMonth",
+];
+
+// Encodes one guess's six cell states as an E/P/X pattern key, e.g. "EXXEEX".
+function feedbackKey(guess: GuessDiff): string {
+  return FEEDBACK_ATTRS.map((attr) => {
+    const st = guess[attr]?.state;
+    return st === "equal" ? "E" : st === "partial" ? "P" : "X";
+  }).join("");
+}
+
+// "Given this feedback, what did players guess next?" For every consecutive
+// guess pair (g_i, g_{i+1}) in a settled game, key by g_i's feedback pattern
+// and tally g_{i+1}'s talent. Returns the top `topN` next-guesses per observed
+// pattern. Only patterns that actually occurred are present.
+export function getNextGuessByFeedback(
+  topN = 8,
+): Record<string, Array<{ talentId: string; count: number }>> {
+  const byPattern = new Map<string, Map<string, number>>();
+  for (const game of getAllSettledGames()) {
+    for (let i = 0; i < game.guesses.length - 1; i++) {
+      const cur = game.guesses[i];
+      const next = game.guesses[i + 1];
+      if (!cur || !next) continue;
+      const key = feedbackKey(cur);
+      let counts = byPattern.get(key);
+      if (!counts) {
+        counts = new Map<string, number>();
+        byPattern.set(key, counts);
+      }
+      counts.set(next.talentId, (counts.get(next.talentId) ?? 0) + 1);
+    }
+  }
+  const out: Record<string, Array<{ talentId: string; count: number }>> = {};
+  for (const [key, counts] of byPattern) {
+    out[key] = Array.from(counts.entries())
+      .map(([talentId, count]) => ({ talentId, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, topN);
+  }
+  return out;
 }
 
 // Aggregate accuracy (% of "equal" state) for each attribute.
@@ -782,24 +884,28 @@ export function getAttributeAccuracy(): Record<string, number> {
   return accuracy;
 }
 
-// Returns games per date (from settled_at timestamps).
-export function getActivityByDate(): Array<{ date: string; games: number }> {
+// Returns games + wins per date (from settled_at timestamps). `wins` powers
+// the win-rate-over-time trend; `games` powers the activity chart.
+export function getActivityByDate(): Array<{ date: string; games: number; wins: number }> {
   const games = getAllSettledGames();
-  const dateMap = new Map<string, number>();
+  const dateMap = new Map<string, { games: number; wins: number }>();
 
   for (const game of games) {
     if (!game.settledAt) continue;
     // Convert unix timestamp to YYYY-MM-DD
     const date = new Date(game.settledAt * 1000).toISOString().split("T")[0];
     if (date) { // Check that date exists to satisfy strict 'noUncheckedIndexedAccess' compiler rule
-      dateMap.set(date, (dateMap.get(date) ?? 0) + 1);
+      const e = dateMap.get(date) ?? { games: 0, wins: 0 };
+      e.games++;
+      if (game.status === "won") e.wins++;
+      dateMap.set(date, e);
     }
   }
 
   // Sort by date ascending
   return Array.from(dateMap.entries())
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, games]) => ({ date, games }));
+    .map(([date, v]) => ({ date, games: v.games, wins: v.wins }));
 }
 
 // Per-answer-talent difficulty: for each talent that has been a daily answer,
@@ -816,11 +922,7 @@ export interface PerAnswerTalentStat {
 }
 
 export function getPerAnswerTalentStats(): PerAnswerTalentStat[] {
-  const pickRows = getDb()
-    .prepare(`SELECT day_index, talent_id FROM daily_pick_log`)
-    .all() as Array<{ day_index: number; talent_id: string }>;
-  const dayToTalent = new Map<number, string>();
-  for (const r of pickRows) dayToTalent.set(r.day_index, r.talent_id);
+  const dayToTalent = getDayToAnswerMap();
 
   const agg = new Map<string, { plays: number; wins: number; totalGuesses: number }>();
   for (const game of getAllSettledGames()) {
