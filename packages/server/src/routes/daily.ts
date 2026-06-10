@@ -5,8 +5,7 @@ import { requireUser } from "../auth/requireUser.js";
 import {
   getPickLogCounts,
   getPickLogEntry,
-  getPickLogRecent,
-  getPickLogRecentOrdered,
+  getPickLogLastPicked,
   insertPickLog,
   loadUserDay,
 } from "../db/client.js";
@@ -23,8 +22,7 @@ import { getRegistry } from "../game/talents.js";
 // closing over a fresh object on every request.
 const pickLogDeps = {
   getEntry: getPickLogEntry,
-  getRecent: getPickLogRecent,
-  getRecentOrdered: getPickLogRecentOrdered,
+  getLastPicked: getPickLogLastPicked,
   getCounts: getPickLogCounts,
   insert: insertPickLog,
 };

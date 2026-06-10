@@ -6,8 +6,7 @@ import { requireUser } from "../auth/requireUser.js";
 import {
   getPickLogCounts,
   getPickLogEntry,
-  getPickLogRecent,
-  getPickLogRecentOrdered,
+  getPickLogLastPicked,
   insertPickLog,
   loadUserDay,
   saveUserDay,
@@ -31,8 +30,7 @@ import { broadcastProgress } from "../ws/socket.js";
 // daily fetch and the first guess see the same answer.
 const pickLogDeps = {
   getEntry: getPickLogEntry,
-  getRecent: getPickLogRecent,
-  getRecentOrdered: getPickLogRecentOrdered,
+  getLastPicked: getPickLogLastPicked,
   getCounts: getPickLogCounts,
   insert: insertPickLog,
 };

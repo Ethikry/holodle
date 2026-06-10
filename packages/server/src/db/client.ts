@@ -587,36 +587,21 @@ export function getPickLogEntry(dayIndex: number): string | null {
   return row?.talent_id ?? null;
 }
 
-// Returns the set of talent ids picked in the (open) window
-// (dayIndex - windowDays, dayIndex). Used to honour the rolling 30-day
-// no-repeat rule. Bounded by the window size; never returns null.
-export function getPickLogRecent(dayIndex: number, windowDays: number): Set<string> {
+// Returns talentId → most recent day_index STRICTLY BEFORE `dayIndex`.
+// Talents never picked are absent. Future rows are excluded (cross-tz
+// races can log dayIndex+1 before dayIndex). Drives the smooth recency
+// suppression in the weighted daily picker.
+export function getPickLogLastPicked(dayIndex: number): Map<string, number> {
   const rows = getDb()
     .prepare(
-      `SELECT talent_id FROM daily_pick_log
-        WHERE day_index < ? AND day_index >= ?`,
-    )
-    .all(dayIndex, dayIndex - windowDays) as Array<{ talent_id: string }>;
-  return new Set(rows.map((r) => r.talent_id));
-}
-
-// Returns the day_index → talent_id map for the most-recent `limit`
-// entries, ordered newest first. Used as the small-pool fallback when
-// every active talent has been picked recently — the picker re-selects
-// the LEAST recently-picked among them.
-export function getPickLogRecentOrdered(
-  dayIndex: number,
-  limit: number,
-): Array<{ dayIndex: number; talentId: string }> {
-  const rows = getDb()
-    .prepare(
-      `SELECT day_index, talent_id FROM daily_pick_log
+      `SELECT talent_id, MAX(day_index) AS last FROM daily_pick_log
         WHERE day_index < ?
-        ORDER BY day_index DESC
-        LIMIT ?`,
+        GROUP BY talent_id`,
     )
-    .all(dayIndex, limit) as Array<{ day_index: number; talent_id: string }>;
-  return rows.map((r) => ({ dayIndex: r.day_index, talentId: r.talent_id }));
+    .all(dayIndex) as Array<{ talent_id: string; last: number }>;
+  const m = new Map<string, number>();
+  for (const r of rows) m.set(r.talent_id, r.last);
+  return m;
 }
 
 // Returns a Map of talentId → total count of times it has been picked.
