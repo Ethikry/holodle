@@ -4,13 +4,17 @@ import {
   EPOCH_UTC_MS,
   NO_REPEAT_WINDOW,
   type PickLogDeps,
+  RECENCY_EXPONENT,
+  RECENCY_HORIZON_DAYS,
   cstDayIndexFor,
   dayIndexFor,
   pickAndLogDaily,
   pickByIndex,
   pickDaily,
+  pickWeight,
   puzzleEndUtcSecs,
   puzzleIdFor,
+  recencyWeight,
   safeTz,
   weightedPick,
 } from "../src/game/dailyPicker.js";
@@ -258,7 +262,7 @@ describe("puzzleEndUtcSecs", () => {
   });
 });
 
-// ─── pickAndLogDaily (weighted random + 30-day window) ───────────────
+// ─── pickAndLogDaily (smooth recency suppression × frequency) ─────────
 
 // Pure in-memory fake of PickLogDeps. Mirrors the real DB shape but
 // lives in two Maps so the picker is testable without touching SQLite.
@@ -274,20 +278,12 @@ function makeFakeLog(seedRows: Array<{ dayIndex: number; talentId: string }> = [
     getEntry(dayIndex) {
       return entries.get(dayIndex) ?? null;
     },
-    getRecent(dayIndex, windowDays) {
-      const set = new Set<string>();
+    getLastPicked(dayIndex) {
+      const m = new Map<string, number>();
       for (const [d, id] of entries) {
-        if (d < dayIndex && d >= dayIndex - windowDays) set.add(id);
+        if (d < dayIndex && d > (m.get(id) ?? Number.NEGATIVE_INFINITY)) m.set(id, d);
       }
-      return set;
-    },
-    getRecentOrdered(dayIndex, limit) {
-      const rows: Array<{ dayIndex: number; talentId: string }> = [];
-      for (const [d, id] of entries) {
-        if (d < dayIndex) rows.push({ dayIndex: d, talentId: id });
-      }
-      rows.sort((a, b) => b.dayIndex - a.dayIndex);
-      return rows.slice(0, limit);
+      return m;
     },
     getCounts() {
       const m = new Map<string, number>();
@@ -309,6 +305,27 @@ function makeFakeLog(seedRows: Array<{ dayIndex: number; talentId: string }> = [
     },
   } as { deps: PickLogDeps; entries: Map<number, string>; inserts: number };
 }
+
+describe("recencyWeight / pickWeight", () => {
+  it("power-ramps from ~0 to 1 over the horizon", () => {
+    expect(recencyWeight(Number.POSITIVE_INFINITY)).toBe(1); // never picked
+    expect(recencyWeight(0)).toBe(0);
+    expect(recencyWeight(1)).toBeCloseTo((1 / RECENCY_HORIZON_DAYS) ** RECENCY_EXPONENT, 10);
+    expect(recencyWeight(RECENCY_HORIZON_DAYS)).toBe(1);
+    expect(recencyWeight(RECENCY_HORIZON_DAYS * 5)).toBe(1);
+    // Monotonic along the ramp.
+    expect(recencyWeight(3)).toBeGreaterThan(recencyWeight(1));
+    expect(recencyWeight(14)).toBeGreaterThan(recencyWeight(7));
+  });
+
+  it("divides by (count + 1) for frequency evening", () => {
+    expect(pickWeight(Number.POSITIVE_INFINITY, 0)).toBe(1);
+    expect(pickWeight(Number.POSITIVE_INFINITY, 1)).toBe(0.5);
+    expect(pickWeight(Number.POSITIVE_INFINITY, 2)).toBeCloseTo(1 / 3, 10);
+    // Yesterday's pick is millions of times less likely than a fresh talent.
+    expect(pickWeight(1, 0)).toBeLessThan(pickWeight(Number.POSITIVE_INFINITY, 0) / 1_000_000);
+  });
+});
 
 describe("weightedPick", () => {
   it("with all-equal weights picks each index roughly equally", () => {
@@ -361,17 +378,34 @@ describe("pickAndLogDaily", () => {
     expect(fake.inserts).toBe(insertsAfterFirst);
   });
 
-  it("never picks a talent that's inside the 30-day window", () => {
-    // Pre-seed: talent "a" was picked on day 100.
-    const fake = makeFakeLog([{ dayIndex: 100, talentId: "a" }]);
-    for (let d = 101; d < 101 + NO_REPEAT_WINDOW; d++) {
+  it("smoothly suppresses recent picks — no same-week repeats in a long run", () => {
+    // Play 120 consecutive days from an empty log. With the power ramp,
+    // a repeat within 7 days of the previous pick carries ≤ (7/21)⁵ ≈ 0.4%
+    // weight against ~30+ fresh-weight alternatives, so gaps that small
+    // should never occur. Deterministic (seeded per day).
+    const fake = makeFakeLog();
+    const lastSeen = new Map<string, number>();
+    let minGap = Number.POSITIVE_INFINITY;
+    for (let d = 100; d < 220; d++) {
       const pick = pickAndLogDaily(pool, d, fake.deps);
-      expect(pick?.id).not.toBe("a");
+      expect(pick).not.toBeNull();
+      const prev = lastSeen.get(pick!.id);
+      if (prev !== undefined) minGap = Math.min(minGap, d - prev);
+      lastSeen.set(pick!.id, d);
     }
-    // 31 days after day 100, "a" is eligible again.
-    const pick = pickAndLogDaily(pool, 100 + NO_REPEAT_WINDOW + 1, fake.deps);
-    // Not asserting it IS "a" — just that nothing now forbids it.
-    expect(pick).not.toBeNull();
+    expect(minGap).toBeGreaterThan(7);
+  });
+
+  it("allows repeats eventually — nothing is hard-forbidden", () => {
+    // Seed "a" picked long ago; over a long run "a" must appear again
+    // (the old 30-day window also allowed this, but here there's no
+    // cliff — eligibility ramps smoothly).
+    const fake = makeFakeLog([{ dayIndex: 0, talentId: "a" }]);
+    let seenA = false;
+    for (let d = 100; d < 400 && !seenA; d++) {
+      if (pickAndLogDaily(pool, d, fake.deps)?.id === "a") seenA = true;
+    }
+    expect(seenA).toBe(true);
   });
 
   it("is deterministic — same log state + dayIndex → same pick", () => {
@@ -416,18 +450,35 @@ describe("pickAndLogDaily", () => {
     expect(lightHits).toBeGreaterThan(heavyHits * 10);
   });
 
-  it("small-pool fallback picks the least-recently-seen talent when every member is in the window", () => {
-    // 4-talent pool, 4 recent picks → every member is excluded by the
-    // window. The picker should still return a talent (not null) and
-    // it should be the one picked LONGEST ago.
+  it("small pools keep working — weights favor the least-recently-seen", () => {
+    // 4-talent pool, all picked within the last 4 days. No member is
+    // forbidden (no hard window any more) but the oldest pick ("a",
+    // 4 days ago) carries the highest weight: (4/21)⁵ vs (1/21)⁵ for
+    // yesterday's "d". The picker must return SOMETHING, and across many
+    // such days the older picks should dominate. Here we just assert
+    // totality + that yesterday's pick isn't chosen (weight 1024× smaller).
     const tinyPool = ["a", "b", "c", "d"].map(t);
     const fake = makeFakeLog([
-      { dayIndex: 96, talentId: "a" }, // oldest → should win the fallback
+      { dayIndex: 96, talentId: "a" },
       { dayIndex: 97, talentId: "b" },
       { dayIndex: 98, talentId: "c" },
       { dayIndex: 99, talentId: "d" },
     ]);
     const pick = pickAndLogDaily(tinyPool, 100, fake.deps);
-    expect(pick?.id).toBe("a");
+    expect(pick).not.toBeNull();
+    expect(pick?.id).not.toBe("d");
+  });
+
+  it("degenerate all-zero weights fall back to a uniform seeded draw", () => {
+    // Force daysSince = 0 for every member via a custom getLastPicked.
+    const tinyPool = ["a", "b"].map(t);
+    const deps: PickLogDeps = {
+      getEntry: () => null,
+      getLastPicked: (dayIndex) => new Map(tinyPool.map((x) => [x.id, dayIndex])),
+      getCounts: () => new Map(),
+      insert: () => true,
+    };
+    const pick = pickAndLogDaily(tinyPool, 100, deps);
+    expect(pick).not.toBeNull();
   });
 });

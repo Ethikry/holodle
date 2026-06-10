@@ -19,8 +19,7 @@ const { dayIndexFor, pickAndLogDaily } = await import("../src/game/dailyPicker.j
 const {
   getPickLogCounts,
   getPickLogEntry,
-  getPickLogRecent,
-  getPickLogRecentOrdered,
+  getPickLogLastPicked,
   insertPickLog,
 } = await import("../src/db/client.js");
 const { getRegistry } = await import("../src/game/talents.js");
@@ -32,8 +31,7 @@ const app = await buildApp({ talentsJsonPath: TALENTS, serveClient: false, log: 
 // pick one + write it, after which the route will see the same row.
 const pickLogDeps = {
   getEntry: getPickLogEntry,
-  getRecent: getPickLogRecent,
-  getRecentOrdered: getPickLogRecentOrdered,
+  getLastPicked: getPickLogLastPicked,
   getCounts: getPickLogCounts,
   insert: insertPickLog,
 };

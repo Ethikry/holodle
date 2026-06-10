@@ -120,10 +120,11 @@ CREATE TABLE IF NOT EXISTS channel_daily_participant (
 
 -- Per-day puzzle answer log. One row per dayIndex. Drives the weighted
 -- random picker in dailyPicker.ts: the picker reads this table to (a)
--- skip talents picked within the 30-day window and (b) bias selection
--- toward talents with the lowest historical count. First write wins —
--- once a dayIndex has a row, subsequent calls are idempotent and just
--- return the stored talent.
+-- smoothly suppress recently-picked talents (quadratic ramp back to full
+-- weight over RECENCY_HORIZON_DAYS — no hard exclusion window) and (b)
+-- bias selection toward talents with the lowest historical count. First
+-- write wins — once a dayIndex has a row, subsequent calls are idempotent
+-- and just return the stored talent.
 CREATE TABLE IF NOT EXISTS daily_pick_log (
   day_index  INTEGER PRIMARY KEY,
   talent_id  TEXT NOT NULL,
