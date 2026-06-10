@@ -55,8 +55,8 @@ describe("attributeUsefulness", () => {
 });
 
 describe("exploreBestGuess", () => {
-  it("start of game: candidates = full active pool", () => {
-    const r = exploreBestGuess(null, "", REGISTRY);
+  it("zero steps (start of game): candidates = full active pool", () => {
+    const r = exploreBestGuess([], REGISTRY);
     expect(r.candidates.sort()).toEqual(["a", "b", "c", "d"]);
     expect(r.suggestions.length).toBeGreaterThan(0);
     // Any opener splits the pool into {itself}, {same-month other}, and the
@@ -71,21 +71,43 @@ describe("exploreBestGuess", () => {
     // (branch/group/archetype/height are equal across the pool, so a real
     // diff always has them green). Build the expected key from compareGuess.
     const key = feedbackKey(compareGuess(POOL[0]!, POOL[1]!)); // a vs b
-    const r = exploreBestGuess("a", key, REGISTRY);
+    const r = exploreBestGuess([{ guessId: "a", pattern: key }], REGISTRY);
     // b shares a's month but not penlight; only b matches this pattern.
     expect(r.candidates).toEqual(["b"]);
     expect(r.suggestions[0]?.talentId).toBe("b");
     expect(r.suggestions[0]?.expectedRemaining).toBe(1);
   });
 
+  it("chains multiple steps, narrowing across them", () => {
+    // Step 1: guess "a" vs the other-month pair — c and d both grade
+    // pen X / month X, leaving {c, d}.
+    const keyAtoC = feedbackKey(compareGuess(POOL[0]!, POOL[2]!)); // a vs c
+    const one = exploreBestGuess([{ guessId: "a", pattern: keyAtoC }], REGISTRY);
+    expect(one.candidates.sort()).toEqual(["c", "d"]);
+    // Step 2: guess "c", feedback as if the answer is d (pen X, month E)
+    // → only d remains.
+    const keyCtoD = feedbackKey(compareGuess(POOL[2]!, POOL[3]!)); // c vs d
+    const two = exploreBestGuess(
+      [
+        { guessId: "a", pattern: keyAtoC },
+        { guessId: "c", pattern: keyCtoD },
+      ],
+      REGISTRY,
+    );
+    expect(two.candidates).toEqual(["d"]);
+    expect(two.suggestions[0]?.talentId).toBe("d");
+  });
+
   it("returns empty for a pattern nothing satisfies", () => {
     // All-X is impossible here (constants always grade equal).
-    const r = exploreBestGuess("a", "XXXXXX", REGISTRY);
+    const r = exploreBestGuess([{ guessId: "a", pattern: "XXXXXX" }], REGISTRY);
     expect(r.candidates).toEqual([]);
     expect(r.suggestions).toEqual([]);
   });
 
   it("throws on an unknown guess id", () => {
-    expect(() => exploreBestGuess("nope", "EEEEEE", REGISTRY)).toThrow(/Unknown talent/);
+    expect(() => exploreBestGuess([{ guessId: "nope", pattern: "EEEEEE" }], REGISTRY)).toThrow(
+      /Unknown talent/,
+    );
   });
 });

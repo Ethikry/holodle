@@ -184,6 +184,22 @@ export interface AdminStats {
   // computed from the current roster (not from play data). Higher = the
   // column narrows the candidate field more on a typical guess.
   attributeUsefulness: Record<string, number>;
+  // Measured from real games: for each stored guess we reconstruct the
+  // candidate set the player faced and score how much each cell's feedback
+  // shrank it (log2 elimination bits — red cells earn credit too). Cells
+  // whose stored state can't be reproduced under current rules are skipped,
+  // so guessesMeasured varies per attribute.
+  attributeValueInPractice: Record<
+    string,
+    {
+      guessesMeasured: number;
+      avgBits: number;
+      avgEliminationPct: number; // 0..1
+      greenRate: number; // 0..1
+      avgBitsWhenGreen: number;
+      avgBitsWhenMiss: number;
+    }
+  >;
   // "Given this feedback pattern, what did players guess next?" Keyed by an
   // E/P/X six-char pattern (attribute order: branch, group, penlightColor,
   // archetype, height, birthMonth); value is the top next-guesses for that

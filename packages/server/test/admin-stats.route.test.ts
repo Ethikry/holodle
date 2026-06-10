@@ -64,6 +64,8 @@ describe("GET /api/admin/stats", () => {
     expect(stats).toHaveProperty("attributeBreakdown");
     expect(stats).toHaveProperty("attributeUsefulness");
     expect(typeof stats.attributeUsefulness.branch).toBe("number");
+    expect(stats).toHaveProperty("attributeValueInPractice");
+    expect(stats.attributeValueInPractice.branch).toMatchObject({ guessesMeasured: 0 });
     expect(stats).toHaveProperty("nextGuessByFeedback");
     expect(stats).toHaveProperty("reach");
     expect(stats.reach).toMatchObject({
@@ -103,12 +105,12 @@ describe("GET /api/admin/best-guess", () => {
   const auth = { "x-admin-token": "test-admin-token" };
 
   it("rejects requests without a token with 401", async () => {
-    const r = await app.inject({ method: "GET", url: "/api/admin/best-guess?guess=start" });
+    const r = await app.inject({ method: "GET", url: "/api/admin/best-guess" });
     expect(r.statusCode).toBe(401);
   });
 
-  it("start of game returns the full active pool and ranked suggestions", async () => {
-    const r = await app.inject({ method: "GET", url: "/api/admin/best-guess?guess=start", headers: auth });
+  it("no steps (start of game) returns the full active pool and ranked suggestions", async () => {
+    const r = await app.inject({ method: "GET", url: "/api/admin/best-guess", headers: auth });
     expect(r.statusCode).toBe(200);
     const d = r.json();
     expect(d.candidates.sort()).toEqual(["alpha", "bravo", "charlie"]);
@@ -118,10 +120,10 @@ describe("GET /api/admin/best-guess", () => {
     expect(d.suggestions[0]).toHaveProperty("isCandidate");
   });
 
-  it("rejects a malformed pattern with 400", async () => {
+  it("rejects a malformed step with 400", async () => {
     const r = await app.inject({
       method: "GET",
-      url: "/api/admin/best-guess?guess=alpha&pattern=GREEN!",
+      url: "/api/admin/best-guess?steps=alpha:GREEN!",
       headers: auth,
     });
     expect(r.statusCode).toBe(400);
@@ -130,20 +132,28 @@ describe("GET /api/admin/best-guess", () => {
   it("rejects an unknown guess id with 400", async () => {
     const r = await app.inject({
       method: "GET",
-      url: "/api/admin/best-guess?guess=not-a-talent&pattern=XXXXXX",
+      url: "/api/admin/best-guess?steps=not-a-talent:XXXXXX",
       headers: auth,
     });
     expect(r.statusCode).toBe(400);
   });
 
-  it("filters candidates by guess + pattern", async () => {
-    // alpha vs itself is all-green; EEEEEE must include alpha.
-    const r = await app.inject({
+  it("filters candidates through chained steps", async () => {
+    // alpha vs itself is all-green; one EEEEEE step must include alpha.
+    const one = await app.inject({
       method: "GET",
-      url: "/api/admin/best-guess?guess=alpha&pattern=EEEEEE",
+      url: "/api/admin/best-guess?steps=alpha:EEEEEE",
       headers: auth,
     });
-    expect(r.statusCode).toBe(200);
-    expect(r.json().candidates).toContain("alpha");
+    expect(one.statusCode).toBe(200);
+    expect(one.json().candidates).toContain("alpha");
+    // Chaining a second all-green step on the same guess keeps the set.
+    const two = await app.inject({
+      method: "GET",
+      url: "/api/admin/best-guess?steps=alpha:EEEEEE,alpha:EEEEEE",
+      headers: auth,
+    });
+    expect(two.statusCode).toBe(200);
+    expect(two.json().candidates).toEqual(one.json().candidates);
   });
 });

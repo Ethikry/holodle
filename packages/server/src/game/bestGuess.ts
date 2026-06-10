@@ -75,22 +75,26 @@ function rankGuesses(
   return scored.slice(0, topN);
 }
 
-// guessId === null means "start of game": candidates are the full active
-// pool and the ranking is the best-opener list. Throws on unknown guess ids
-// (the route validates first, this is a backstop).
+export interface GuessStep {
+  guessId: string;
+  pattern: string; // six-char E/P/X key in FEEDBACK_ATTRS order
+}
+
+// Chains zero or more (guess, feedback) steps: candidates start as the full
+// active pool and each step keeps only the answers consistent with that
+// guess having returned that pattern. Zero steps = start of game, so the
+// ranking is the best-opener list. Throws on unknown guess ids (the route
+// validates first, this is a backstop).
 export function exploreBestGuess(
-  guessId: string | null,
-  pattern: string,
+  steps: GuessStep[],
   registry: { all: Talent[]; activePool: Talent[]; byId: Map<string, Talent> },
   topN = 10,
 ): BestGuessResult {
-  let candidates: Talent[];
-  if (guessId === null) {
-    candidates = registry.activePool;
-  } else {
-    const guess = registry.byId.get(guessId);
-    if (!guess) throw new Error(`Unknown talent id: ${guessId}`);
-    candidates = consistentCandidates(guess, pattern, registry.activePool);
+  let candidates = registry.activePool;
+  for (const step of steps) {
+    const guess = registry.byId.get(step.guessId);
+    if (!guess) throw new Error(`Unknown talent id: ${step.guessId}`);
+    candidates = consistentCandidates(guess, step.pattern, candidates);
   }
   return {
     candidates: candidates.map((c) => c.id),
