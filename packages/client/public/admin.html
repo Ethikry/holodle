@@ -313,7 +313,7 @@
             </table>
           </div>
         </div>
-        <p class="note">Which openers lead to the best outcomes in practice. Ranked by win rate (then sample size) — click a header to re-sort. Openers with few plays are statistically noisy.</p>
+        <p class="note">Which openers lead to the best outcomes in practice. Sorted by plays (sample size) by default — click a header to re-sort. Openers with no wins always sort last; openers with few plays are statistically noisy.</p>
       </section>
 
       <section class="grid-2">
@@ -335,7 +335,7 @@
           <div class="fbcells" id="fbcells"></div>
           <div class="fblist" id="fblist"></div>
         </div>
-        <p class="note">Click each cell to cycle 🟩→🟨→🟥, then see what players most often guessed <em>next</em> after a guess returned that exact feedback. (Today only Archetype ever turns yellow.)</p>
+        <p class="note">Click each cell to toggle 🟩/🟥 (Archetype also cycles 🟨, the only column that can grade partial), then see what players most often guessed <em>next</em> after a guess returned that exact feedback.</p>
       </section>
 
       <section>
@@ -384,7 +384,7 @@
 
       let talentMap = {}; // id -> { name, avatarUrl }
       let answersSort = { key: "winRate", dir: "asc" }; // hardest first
-      let openersSort = { key: "winRate", dir: "desc" }; // best first
+      let openersSort = { key: "plays", dir: "desc" }; // best-sampled first
       let lastStats = null;
 
       function esc(s) {
@@ -664,15 +664,24 @@
 
       // Most-Guessed gets a 3rd column ("Guesses (not answer)") + an inline
       // "·N× ans" badge, so it can't use the generic 2-col renderFreqTable.
+      // Both numeric columns are sortable; the thead is rebuilt every render,
+      // so the click handlers are (re)attached here rather than at boot.
+      let guessedSort = { key: "count", dir: "desc" };
       function renderMostGuessed(rows, answerCountById) {
         const table = $("guessed");
-        const head = `<thead><tr><th>Talent</th><th class="num">Guesses</th><th class="num">Guesses&nbsp;(not&nbsp;answer)</th></tr></thead>`;
+        const head = `<thead><tr><th>Talent</th><th class="num sortable" data-key="count">Guesses</th><th class="num sortable" data-key="nonAnswerCount">Guesses&nbsp;(not&nbsp;answer)</th></tr></thead>`;
         if (!rows || rows.length === 0) {
           table.innerHTML = head + `<tbody><tr><td class="empty" colspan="3">No data yet.</td></tr></tbody>`;
           return;
         }
+        const { key, dir } = guessedSort;
+        const sorted = rows.slice().sort((a, b) => {
+          const av = a[key] != null ? a[key] : 0;
+          const bv = b[key] != null ? b[key] : 0;
+          return dir === "asc" ? av - bv : bv - av;
+        });
         table.innerHTML = head + "<tbody>" +
-          rows
+          sorted
             .map((r) => {
               const ans = answerCountById[r.talentId] || 0;
               const badge = ans > 0 ? `<span class="ansbadge">·${ans}× ans</span>` : "";
@@ -681,6 +690,14 @@
             })
             .join("") +
           "</tbody>";
+        table.querySelectorAll("th.sortable").forEach((th) => {
+          th.addEventListener("click", () => {
+            const k = th.dataset.key;
+            if (guessedSort.key === k) guessedSort.dir = guessedSort.dir === "asc" ? "desc" : "asc";
+            else guessedSort = { key: k, dir: "desc" };
+            renderMostGuessed(rows, answerCountById);
+          });
+        });
       }
 
       // ── Next Guess Explorer ──────────────────────────────────────────
@@ -698,7 +715,8 @@
         $("fbcells").querySelectorAll(".fbcell").forEach((el) => {
           el.addEventListener("click", () => {
             const i = Number(el.dataset.i);
-            fbState[i] = FB_CYCLE[fbState[i]];
+            // Only archetype (index 3) can grade partial; the rest are 🟩↔🟥.
+            fbState[i] = i === 3 ? FB_CYCLE[fbState[i]] : (fbState[i] === "E" ? "X" : "E");
             renderExplorer();
           });
         });
