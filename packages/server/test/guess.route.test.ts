@@ -42,9 +42,9 @@ const pickLogDeps = {
 // weighted-random picker for the current dayIndex (in UTC, matching the
 // route default when no tz header is present). First call seeds the
 // log; subsequent calls — including the one inside the route — read it.
-function pickDaily(activePool: ReturnType<typeof getRegistry>["activePool"]) {
+function pickDaily(pool: ReturnType<typeof getRegistry>["all"]) {
   const dayIndex = dayIndexFor(Date.now(), "UTC");
-  return pickAndLogDaily(activePool, dayIndex, pickLogDeps);
+  return pickAndLogDaily(pool, dayIndex, pickLogDeps);
 }
 
 afterAll(async () => {
@@ -71,7 +71,7 @@ describe("POST /api/guess", () => {
 
   it("rejects guess after winning with 409", async () => {
     // Win on the first try: use the actual daily answer for today.
-    const answer = pickDaily(getRegistry().activePool);
+    const answer = pickDaily(getRegistry().all);
     expect(answer).not.toBeNull();
     const r1 = await app.inject({
       method: "POST",
@@ -92,7 +92,7 @@ describe("POST /api/guess", () => {
   });
 
   it("rejects a 7th guess with 409 (loss after 6)", async () => {
-    const answer = pickDaily(getRegistry().activePool)!;
+    const answer = pickDaily(getRegistry().all)!;
     const allIds = getRegistry().all.map((t) => t.id);
     // Pick 6 ids that are NOT the answer. With only 3 fixture talents, we
     // submit the same wrong id repeatedly — but the server doesn't dedupe by
@@ -134,7 +134,7 @@ describe("POST /api/guess", () => {
   });
 
   it("updates /api/stats after a win (streak=1, played=1, winRate=1)", async () => {
-    const answer = pickDaily(getRegistry().activePool)!;
+    const answer = pickDaily(getRegistry().all)!;
     const auth = { Authorization: "Bearer dev:statscheck" };
 
     // Pre-win: stats are zero and the guess distribution is empty.
@@ -171,7 +171,7 @@ describe("POST /api/guess", () => {
     const auth = { Authorization: "Bearer dev:resumer" };
     const wrong = getRegistry()
       .all.map((t) => t.id)
-      .find((id) => id !== pickDaily(getRegistry().activePool)!.id)!;
+      .find((id) => id !== pickDaily(getRegistry().all)!.id)!;
 
     await app.inject({ method: "POST", url: "/api/guess", headers: auth, payload: { talentId: wrong } });
     const daily = await app.inject({ method: "GET", url: "/api/daily", headers: auth });

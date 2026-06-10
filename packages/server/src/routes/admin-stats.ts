@@ -90,9 +90,9 @@ export async function adminStatsRoutes(app: FastifyInstance): Promise<void> {
     const secondGuessFrequency = getSecondGuessFrequency();
     const nextGuessByFeedback = getNextGuessByFeedback();
     // Roster-derived (not play-derived): how much information each column's
-    // feedback gives on a typical guess.
+    // feedback gives on a typical guess. Full roster — `active` gates nothing.
     const registry = getRegistry();
-    const usefulness = attributeUsefulness(registry.all, registry.activePool);
+    const usefulness = attributeUsefulness(registry.all);
     // Play-derived: how much each column actually told players, measured by
     // replaying every settled game's guesses against the candidate set.
     const valueInPractice = empiricalAttributeValue(games, registry);

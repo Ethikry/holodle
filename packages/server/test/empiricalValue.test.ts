@@ -28,7 +28,7 @@ const POOL: Talent[] = [
   t({ id: "d", penlightColor: "White", birthMonth: "July" }),
 ];
 const REGISTRY = {
-  activePool: POOL,
+  all: POOL,
   byId: new Map(POOL.map((x) => [x.id, x])),
 };
 

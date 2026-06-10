@@ -6,8 +6,10 @@ import { FEEDBACK_ATTRS, feedbackKey } from "./feedback.js";
 //
 // Powers the admin panel's "Best Guess Explorer" (optimal play, computed
 // from the roster) and the "Attribute Usefulness" chart. Both treat the
-// daily answer as uniformly random over the active pool — the real picker
-// is weighted, but uniform is the right prior for strategy analysis.
+// daily answer as uniformly random over the FULL roster — the `active`
+// flag is reserved for future use and gates nothing (graduated talents are
+// valid answers). The real picker is weighted, but uniform is the right
+// prior for strategy analysis.
 
 export interface BestGuessSuggestion {
   talentId: string;
@@ -22,13 +24,13 @@ export interface BestGuessSuggestion {
 }
 
 export interface BestGuessResult {
-  // Active talents consistent with the given guess + feedback. For the
-  // start-of-game case this is the whole active pool.
+  // Talents consistent with the given guess + feedback. For the
+  // start-of-game case this is the whole roster.
   candidates: string[];
   suggestions: BestGuessSuggestion[];
 }
 
-// Filters the active pool down to the answers consistent with `guess`
+// Filters the candidate pool down to the answers consistent with `guess`
 // having returned `pattern` (a six-char E/P/X key in FEEDBACK_ATTRS order).
 function consistentCandidates(guess: Talent, pattern: string, pool: Talent[]): Talent[] {
   return pool.filter((t) => feedbackKey(compareGuess(guess, t)) === pattern);
@@ -81,16 +83,16 @@ export interface GuessStep {
 }
 
 // Chains zero or more (guess, feedback) steps: candidates start as the full
-// active pool and each step keeps only the answers consistent with that
-// guess having returned that pattern. Zero steps = start of game, so the
-// ranking is the best-opener list. Throws on unknown guess ids (the route
-// validates first, this is a backstop).
+// roster and each step keeps only the answers consistent with that guess
+// having returned that pattern. Zero steps = start of game, so the ranking
+// is the best-opener list. Throws on unknown guess ids (the route validates
+// first, this is a backstop).
 export function exploreBestGuess(
   steps: GuessStep[],
-  registry: { all: Talent[]; activePool: Talent[]; byId: Map<string, Talent> },
+  registry: { all: Talent[]; byId: Map<string, Talent> },
   topN = 10,
 ): BestGuessResult {
-  let candidates = registry.activePool;
+  let candidates = registry.all;
   for (const step of steps) {
     const guess = registry.byId.get(step.guessId);
     if (!guess) throw new Error(`Unknown talent id: ${step.guessId}`);
@@ -103,18 +105,16 @@ export function exploreBestGuess(
 }
 
 // Average information (bits) each attribute's feedback provides per guess:
-// for every guessable talent, partition the active pool by that attribute's
-// cell state (equal/partial/wrong) and take the entropy of the split, then
-// average across guesses. 0 bits = the column never separates anything;
-// higher = it narrows the field more on a typical guess. Binary columns cap
-// at 1 bit; archetype (the only one with partials) caps at log2(3) ≈ 1.58.
-export function attributeUsefulness(
-  allTalents: Talent[],
-  activePool: Talent[],
-): Record<string, number> {
+// for every guessable talent, partition the full roster (all talents are
+// possible answers) by that attribute's cell state (equal/partial/wrong)
+// and take the entropy of the split, then average across guesses. 0 bits =
+// the column never separates anything; higher = it narrows the field more
+// on a typical guess. Binary columns cap at 1 bit; archetype (the only one
+// with partials) caps at log2(3) ≈ 1.58.
+export function attributeUsefulness(allTalents: Talent[]): Record<string, number> {
   const out: Record<string, number> = {};
-  const n = activePool.length;
-  if (n === 0 || allTalents.length === 0) {
+  const n = allTalents.length;
+  if (n === 0) {
     for (const attr of FEEDBACK_ATTRS) out[String(attr)] = 0;
     return out;
   }
@@ -123,7 +123,7 @@ export function attributeUsefulness(
     const stateCounts = new Map<string, Record<string, number>>(
       FEEDBACK_ATTRS.map((a) => [String(a), {}]),
     );
-    for (const t of activePool) {
+    for (const t of allTalents) {
       const diff = compareGuess(g, t);
       for (const attr of FEEDBACK_ATTRS) {
         const key = String(attr);

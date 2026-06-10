@@ -37,7 +37,7 @@ pnpm dev                         # server on :3001, client on :5173
 
 With an empty `talent_data.json`, the server logs `0 talents loaded` and stays
 up. Endpoints respond, but `GET /api/daily` returns 503 until at least one
-active talent is added.
+talent is added.
 
 > **`.env` lives at the repo root only.** Both the Fastify server (via
 > `process.loadEnvFile`) and Vite (via `envDir`) read from
@@ -89,7 +89,7 @@ fails loudly on any malformed entry.
 | `generation` | string                                        | Free-form (`"Gen 0"`, `"GAMERS"`, `"Promise"`, `"Regloss"`, …). Used as the "Gen" column in the guess grid. |
 | `heightCm`   | integer cm                                    | Server derives the bucket: `<150` Smol, `150–165` Med, `>165` Tall. |
 | `birthMonth` | string, English month name                    | "January", "February", …, "December". |
-| `active`     | boolean                                       | `false` keeps the talent in autocomplete but excludes from the daily pool. |
+| `active`     | boolean                                       | Reserved for future use — currently has **no effect**; every talent (graduated included) is guessable and a valid daily answer. |
 
 Avatar PNGs live at `packages/client/public/avatars/<id>.png`.
 

@@ -30,12 +30,11 @@ const POOL: Talent[] = [
 ];
 const REGISTRY = {
   all: POOL,
-  activePool: POOL,
   byId: new Map(POOL.map((x) => [x.id, x])),
 };
 
 describe("attributeUsefulness", () => {
-  const u = attributeUsefulness(POOL, POOL);
+  const u = attributeUsefulness(POOL);
 
   it("gives 0 bits to attributes constant across the pool", () => {
     expect(u.branch).toBe(0);
