@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import type { GameStatus, GuessDiff, UserStats } from "@holodle/shared";
 import { env } from "../env.js";
+import { feedbackKey } from "../game/feedback.js";
 import { ADDITIVE_MIGRATIONS, INDEXES_SQL, TABLES_SQL } from "./schema.js";
 
 let db: Database.Database | null = null;
@@ -787,25 +788,6 @@ export function getSecondGuessFrequency(): Array<{ talentId: string; count: numb
   return Array.from(freq.entries())
     .map(([talentId, count]) => ({ talentId, count }))
     .sort((a, b) => b.count - a.count);
-}
-
-// Fixed attribute order for the feedback-pattern key. MUST match the order the
-// admin "Next Guess Explorer" UI lays its six toggle cells out in.
-const FEEDBACK_ATTRS: Array<keyof Omit<GuessDiff, "talentId">> = [
-  "branch",
-  "group",
-  "penlightColor",
-  "archetype",
-  "height",
-  "birthMonth",
-];
-
-// Encodes one guess's six cell states as an E/P/X pattern key, e.g. "EXXEEX".
-function feedbackKey(guess: GuessDiff): string {
-  return FEEDBACK_ATTRS.map((attr) => {
-    const st = guess[attr]?.state;
-    return st === "equal" ? "E" : st === "partial" ? "P" : "X";
-  }).join("");
 }
 
 // "Given this feedback, what did players guess next?" For every consecutive

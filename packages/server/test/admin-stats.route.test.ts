@@ -62,6 +62,8 @@ describe("GET /api/admin/stats", () => {
     expect(stats).toHaveProperty("firstGuessEffectiveness");
     expect(Array.isArray(stats.firstGuessEffectiveness)).toBe(true);
     expect(stats).toHaveProperty("attributeBreakdown");
+    expect(stats).toHaveProperty("attributeUsefulness");
+    expect(typeof stats.attributeUsefulness.branch).toBe("number");
     expect(stats).toHaveProperty("nextGuessByFeedback");
     expect(stats).toHaveProperty("reach");
     expect(stats.reach).toMatchObject({
@@ -94,5 +96,54 @@ describe("GET /api/admin/stats", () => {
   it("returns 404 when ADMIN_TOKEN env is not set", async () => {
     // This test would require creating a new app instance without ADMIN_TOKEN,
     // which is complex. Skip for now as the endpoint gracefully handles missing token.
+  });
+});
+
+describe("GET /api/admin/best-guess", () => {
+  const auth = { "x-admin-token": "test-admin-token" };
+
+  it("rejects requests without a token with 401", async () => {
+    const r = await app.inject({ method: "GET", url: "/api/admin/best-guess?guess=start" });
+    expect(r.statusCode).toBe(401);
+  });
+
+  it("start of game returns the full active pool and ranked suggestions", async () => {
+    const r = await app.inject({ method: "GET", url: "/api/admin/best-guess?guess=start", headers: auth });
+    expect(r.statusCode).toBe(200);
+    const d = r.json();
+    expect(d.candidates.sort()).toEqual(["alpha", "bravo", "charlie"]);
+    expect(d.suggestions.length).toBeGreaterThan(0);
+    expect(d.suggestions[0]).toHaveProperty("expectedRemaining");
+    expect(d.suggestions[0]).toHaveProperty("worstCase");
+    expect(d.suggestions[0]).toHaveProperty("isCandidate");
+  });
+
+  it("rejects a malformed pattern with 400", async () => {
+    const r = await app.inject({
+      method: "GET",
+      url: "/api/admin/best-guess?guess=alpha&pattern=GREEN!",
+      headers: auth,
+    });
+    expect(r.statusCode).toBe(400);
+  });
+
+  it("rejects an unknown guess id with 400", async () => {
+    const r = await app.inject({
+      method: "GET",
+      url: "/api/admin/best-guess?guess=not-a-talent&pattern=XXXXXX",
+      headers: auth,
+    });
+    expect(r.statusCode).toBe(400);
+  });
+
+  it("filters candidates by guess + pattern", async () => {
+    // alpha vs itself is all-green; EEEEEE must include alpha.
+    const r = await app.inject({
+      method: "GET",
+      url: "/api/admin/best-guess?guess=alpha&pattern=EEEEEE",
+      headers: auth,
+    });
+    expect(r.statusCode).toBe(200);
+    expect(r.json().candidates).toContain("alpha");
   });
 });
