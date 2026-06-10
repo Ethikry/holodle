@@ -912,7 +912,7 @@
         const tbody = $("bg-table").querySelector("tbody");
         const canAppend = bgSteps.length < BG_MAX_STEPS;
         if (n === 0) {
-          $("bg-meta").textContent = "No active talent is consistent with that feedback — recheck the patterns above.";
+          $("bg-meta").textContent = "No talent is consistent with that feedback — recheck the patterns above.";
           $("bg-chips").innerHTML = "";
           tbody.innerHTML = `<tr><td colspan="5" class="empty">Nothing to suggest.</td></tr>`;
           return;

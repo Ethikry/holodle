@@ -47,12 +47,15 @@ export async function dailyRoutes(app: FastifyInstance): Promise<void> {
     // bias toward less-frequently-seen talents); /endless stays on the
     // pure shuffle picker so it doesn't pollute the daily_pick_log with
     // day-indexes the natural sequence will hit later.
+    // The answer pool is the FULL roster — the `active` flag is reserved
+    // for future use and must not gate anything yet (graduated talents are
+    // valid answers). Keep in sync with routes/guess.ts.
     const answer = row.endlessOffset > 0
-      ? pickByIndex(reg.activePool, dayIndex + row.endlessOffset)
-      : pickAndLogDaily(reg.activePool, dayIndex, pickLogDeps);
+      ? pickByIndex(reg.all, dayIndex + row.endlessOffset)
+      : pickAndLogDaily(reg.all, dayIndex, pickLogDeps);
     if (!answer) {
       reply.code(503);
-      return { error: "No active talents available" };
+      return { error: "No talents available" };
     }
     const state: DailyState = {
       puzzleId: puzzleIdFor(now, tz),
