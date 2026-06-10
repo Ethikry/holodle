@@ -2,6 +2,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { AdminBestGuess, AdminStats } from "@holodle/shared";
 import { env } from "../env.js";
 import { attributeUsefulness, exploreBestGuess } from "../game/bestGuess.js";
+import type { GuessStep } from "../game/bestGuess.js";
+import { empiricalAttributeValue } from "../game/empiricalValue.js";
 import {
   getAllSettledGames,
   getActivityByDate,
@@ -91,6 +93,9 @@ export async function adminStatsRoutes(app: FastifyInstance): Promise<void> {
     // feedback gives on a typical guess.
     const registry = getRegistry();
     const usefulness = attributeUsefulness(registry.all, registry.activePool);
+    // Play-derived: how much each column actually told players, measured by
+    // replaying every settled game's guesses against the candidate set.
+    const valueInPractice = empiricalAttributeValue(games, registry);
 
     const firstGuessFrequencyArray = Array.from(getFirstGuessFrequency().entries())
       .map(([talentId, count]) => ({ talentId, count }))
@@ -116,6 +121,7 @@ export async function adminStatsRoutes(app: FastifyInstance): Promise<void> {
       firstGuessEffectiveness,
       attributeBreakdown,
       attributeUsefulness: usefulness,
+      attributeValueInPractice: valueInPractice,
       nextGuessByFeedback,
       reach,
     };
@@ -123,28 +129,35 @@ export async function adminStatsRoutes(app: FastifyInstance): Promise<void> {
     return stats;
   });
 
-  // Best Guess Explorer: given a guessed talent + the feedback it returned,
-  // compute the consistent answer set and the optimal next guesses.
-  // ?guess=start (or omitted) means "no guesses yet" — ranks best openers.
+  // Best Guess Explorer: given a sequence of (guess, feedback) steps —
+  // ?steps=akai-haato:EXXXEX,hoshimachi-suisei:EXEXXX — chain-filter the
+  // active pool to the consistent answers and rank the optimal next
+  // guesses. Empty/absent steps = start of game (ranks best openers).
   app.get("/api/admin/best-guess", async (req, reply) => {
     if (!requireAdmin(req, reply)) return;
 
-    const q = req.query as { guess?: string; pattern?: string };
-    const guessParam = q.guess && q.guess !== "start" ? q.guess : null;
-    const pattern = (q.pattern ?? "").toUpperCase();
-
-    if (guessParam !== null) {
-      if (!/^[EPX]{6}$/.test(pattern)) {
-        return reply
-          .code(400)
-          .send({ error: "pattern must be six characters of E/P/X" });
+    const q = req.query as { steps?: string };
+    const raw = (q.steps ?? "").trim();
+    const parts = raw === "" ? [] : raw.split(",");
+    if (parts.length > 10) {
+      return reply.code(400).send({ error: "Too many steps (max 10)" });
+    }
+    const steps: GuessStep[] = [];
+    for (const part of parts) {
+      const [guessId, patternRaw, ...extra] = part.split(":");
+      const pattern = (patternRaw ?? "").toUpperCase();
+      if (!guessId || extra.length > 0 || !/^[EPX]{6}$/.test(pattern)) {
+        return reply.code(400).send({
+          error: `Malformed step "${part}" — expected <talent-id>:<EPX pattern of length 6>`,
+        });
       }
-      if (!getRegistry().byId.has(guessParam)) {
-        return reply.code(400).send({ error: `Unknown talent id: ${guessParam}` });
+      if (!getRegistry().byId.has(guessId)) {
+        return reply.code(400).send({ error: `Unknown talent id: ${guessId}` });
       }
+      steps.push({ guessId, pattern });
     }
 
-    const result: AdminBestGuess = exploreBestGuess(guessParam, pattern, getRegistry());
+    const result: AdminBestGuess = exploreBestGuess(steps, getRegistry());
     return result;
   });
 }

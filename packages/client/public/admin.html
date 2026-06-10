@@ -159,12 +159,32 @@
       .fblist .talent { position: relative; z-index: 1; padding: 4px 6px; }
       .fblist .cnt { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 
-      /* Best Guess Explorer */
-      .bg-controls { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
-      .bg-controls select {
-        background: var(--bg); color: var(--ink); border: 1px solid var(--line);
-        border-radius: 9px; padding: 9px 11px; font-size: 13px; min-width: 240px;
+      /* Attribute value in practice: theoretical marker on the bar track */
+      .attr-row .track { position: relative; }
+      .attr-row .mark {
+        position: absolute; top: -3px; bottom: -3px; width: 2px;
+        background: var(--ink); opacity: 0.65; border-radius: 1px;
       }
+
+      /* Best Guess Explorer */
+      .bg-steps { display: flex; flex-direction: column; }
+      .bg-step {
+        display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+        padding: 9px 0; border-bottom: 1px dashed var(--line);
+      }
+      .bg-step .stepno { color: var(--muted); font-size: 12px; width: 18px; }
+      .bg-step .fbcell { min-width: 58px; }
+      .bg-step .swatch { height: 22px; }
+      .bg-step .rm {
+        background: transparent; border: 1px solid var(--line); color: var(--muted);
+        border-radius: 7px; width: 26px; height: 26px; cursor: pointer; font-size: 13px;
+        line-height: 1;
+      }
+      .bg-step .rm:hover { color: var(--bad); border-color: var(--bad); }
+      .bg-hint { color: var(--muted); font-size: 12px; padding: 10px 0 2px; }
+      .clickable { cursor: pointer; }
+      .bg-chips .chip.clickable:hover { border-color: var(--accent); color: var(--accent); }
+      #bg-table tbody tr.clickable:hover td { background: var(--panel-2); }
       .bg-meta { color: var(--muted); font-size: 12px; margin-top: 14px; }
       .bg-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
       .bg-chips .chip {
@@ -245,9 +265,31 @@
       </section>
 
       <section>
-        <h2>Attribute Usefulness</h2>
-        <div class="panel"><div id="usefulness"></div></div>
-        <p class="note">Average information (bits) each column's feedback gives per guess, computed from the current roster — higher = narrows the remaining candidates more. Contrast with Attribute Difficulty above, which measures how often players' guesses actually match.</p>
+        <h2>Attribute Value in Practice</h2>
+        <div class="panel">
+          <div id="practice-bars"></div>
+          <div class="legend">
+            <span><span class="sw" style="background:var(--accent)"></span>Measured from real games</span>
+            <span><span class="sw" style="background:var(--ink);opacity:.65"></span>Theoretical (roster)</span>
+          </div>
+          <div class="scroll" style="margin-top:14px">
+            <table id="practice-table">
+              <thead>
+                <tr>
+                  <th>Attribute</th>
+                  <th class="num">Avg bits</th>
+                  <th class="num">Avg eliminated</th>
+                  <th class="num">Green rate</th>
+                  <th class="num">Bits when 🟩</th>
+                  <th class="num">Bits when miss</th>
+                  <th class="num">Cells measured</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+        <p class="note">How much each column <em>actually told players</em>: for every real guess we rebuild the answers still possible beforehand and score how many that cell's feedback eliminated (in bits). Misses earn credit too — a red Branch rules out a whole branch. The tick marks the theoretical value from the roster; "bits when miss" vs "when 🟩" shows where each column's information really comes from. Cells whose stored grading can't be reproduced under current rules (e.g. pre-resort height cells) are excluded.</p>
       </section>
 
       <section class="grid-2">
@@ -341,10 +383,11 @@
       <section>
         <h2>Best Guess Explorer</h2>
         <div class="panel">
-          <div class="bg-controls">
-            <select id="bg-talent"></select>
-            <div class="fbcells" id="bg-cells"></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+            <div class="bg-hint" id="bg-hint">Click any suggested guess or candidate below to play it, then set the feedback it returned.</div>
+            <button class="btn ghost" id="bg-reset">Reset</button>
           </div>
+          <div class="bg-steps" id="bg-steps"></div>
           <div class="bg-meta" id="bg-meta"></div>
           <div class="bg-chips" id="bg-chips"></div>
           <div class="scroll" style="margin-top:14px">
@@ -362,7 +405,7 @@
             </table>
           </div>
         </div>
-        <p class="note">Optimal play, computed from the roster (uniform answer prior): pick the talent you guessed and the feedback it returned — the table ranks every possible next guess by how few candidates it leaves on average. "Start of game" ranks the best openers. <span class="bg-pill">Answer?</span> marks guesses that are themselves still possible answers.</p>
+        <p class="note">Optimal play, computed from the roster (uniform answer prior). Build a game state guess by guess: click a suggestion or candidate to play it, set the feedback it returned (🟩/🟥; Archetype also 🟨), and the candidate set + rankings recompute with the full history in mind. With no guesses played, the table ranks the best openers. <span class="bg-pill">Answer?</span> marks guesses that are themselves still possible answers.</p>
       </section>
     </div>
 
@@ -461,7 +504,7 @@
         renderFreqTable("picks", s.dailyPickFrequency, "Times answer");
         renderFreqTable("secondguess", s.secondGuessFrequency, "2nd guess");
         renderExplorer(s.nextGuessByFeedback);
-        renderUsefulness(s.attributeUsefulness);
+        renderAttrPractice(s.attributeValueInPractice, s.attributeUsefulness);
         initBestGuess();
       }
 
@@ -736,57 +779,111 @@
           .join("");
       }
 
-      // Attribute usefulness: bars scaled to the highest-bits attribute.
-      function renderUsefulness(u) {
+      // Attribute value in practice: accent bars = avg bits measured from
+      // real games; the tick on each track marks the roster-theoretical
+      // value for comparison. Detail table breaks down where the
+      // information comes from (green vs miss).
+      function renderAttrPractice(p, theo) {
         const keys = ["branch", "group", "penlightColor", "archetype", "height", "birthMonth"];
-        const vals = keys.map((k) => (u && u[k]) || 0);
-        const max = Math.max(0.001, ...vals);
-        $("usefulness").innerHTML = keys
-          .map((k, i) => {
-            const bits = vals[i];
-            const w = (bits / max) * 100;
+        const barsHost = $("practice-bars");
+        const tbody = $("practice-table").querySelector("tbody");
+        const totalMeasured = keys.reduce((s, k) => s + ((p && p[k]) ? p[k].guessesMeasured : 0), 0);
+        if (!p || totalMeasured === 0) {
+          barsHost.innerHTML = `<div class="empty">No measurable guesses yet.</div>`;
+          tbody.innerHTML = "";
+          return;
+        }
+        const maxScale = Math.max(
+          0.001,
+          ...keys.map((k) => (p[k] ? p[k].avgBits : 0)),
+          ...keys.map((k) => (theo && theo[k]) || 0),
+        );
+        barsHost.innerHTML = keys
+          .map((k) => {
+            const st = p[k] || { avgBits: 0 };
+            const w = (st.avgBits / maxScale) * 100;
+            const tv = (theo && theo[k]) || 0;
+            const m = Math.min(99.5, (tv / maxScale) * 100);
             return `<div class="attr-row">
               <div class="name">${esc(ATTR_LABELS[k] || k)}</div>
-              <div class="track"><div class="seg" style="width:${w}%;background:var(--accent)" title="${bits.toFixed(3)} bits"></div></div>
-              <div class="pct">${bits.toFixed(2)} b</div>
+              <div class="track"><div class="seg" style="width:${w}%;background:var(--accent)" title="${st.avgBits.toFixed(3)} bits in practice"></div><div class="mark" style="left:${m}%" title="Theoretical: ${tv.toFixed(3)} bits"></div></div>
+              <div class="pct">${st.avgBits.toFixed(2)} b</div>
             </div>`;
+          })
+          .join("");
+        tbody.innerHTML = keys
+          .map((k) => {
+            const st = p[k];
+            if (!st) return "";
+            return `<tr>
+              <td>${esc(ATTR_LABELS[k] || k)}</td>
+              <td class="num">${st.avgBits.toFixed(2)}</td>
+              <td class="num">${pct(st.avgEliminationPct)}</td>
+              <td class="num">${pct(st.greenRate)}</td>
+              <td class="num">${st.avgBitsWhenGreen.toFixed(2)}</td>
+              <td class="num">${st.avgBitsWhenMiss.toFixed(2)}</td>
+              <td class="num">${st.guessesMeasured.toLocaleString()}</td>
+            </tr>`;
           })
           .join("");
       }
 
       // ── Best Guess Explorer ──────────────────────────────────────────
-      // Same FB_ORDER/key contract as the Next Guess Explorer. Only the
-      // archetype cell can be partial, so the other five cycle 🟩↔🟥.
-      let bgState = ["X", "X", "X", "X", "X", "X"];
+      // Game state = ordered (talent, feedback) steps; clicking a suggested
+      // guess or candidate chip plays it as the next step. Same FB_ORDER/key
+      // contract as the Next Guess Explorer; only archetype (index 3) can
+      // grade partial, the other five cycle 🟩↔🟥.
+      const BG_MAX_STEPS = 10;
+      let bgSteps = []; // [{ id, pattern: ["E"|"P"|"X" × 6] }]
       let bgInited = false;
       let bgFetchSeq = 0;
 
       function initBestGuess() {
         if (bgInited) return;
         bgInited = true;
-        const sel = $("bg-talent");
-        const opts = Object.entries(talentMap)
-          .map(([id, t]) => ({ id, name: t.name }))
-          .sort((a, b) => a.name.localeCompare(b.name));
-        sel.innerHTML = `<option value="start">— Start of game (best openers) —</option>` +
-          opts.map((o) => `<option value="${esc(o.id)}">${esc(o.name)}</option>`).join("");
-        sel.addEventListener("change", () => { renderBgCells(); fetchBestGuess(); });
-        renderBgCells();
+        $("bg-reset").addEventListener("click", () => {
+          bgSteps = [];
+          renderBgSteps();
+          fetchBestGuess();
+        });
+        renderBgSteps();
         fetchBestGuess();
       }
 
-      function renderBgCells() {
-        const host = $("bg-cells");
-        if ($("bg-talent").value === "start") { host.innerHTML = ""; return; }
-        host.innerHTML = FB_ORDER.map((attr, i) =>
-          `<div class="fbcell" data-i="${i}" title="Click to cycle"><div class="swatch ${bgState[i]}"></div><div class="fblabel">${esc(ATTR_LABELS[attr] || attr)}</div></div>`,
-        ).join("");
+      function appendBgStep(id) {
+        if (bgSteps.length >= BG_MAX_STEPS) return;
+        bgSteps.push({ id, pattern: ["X", "X", "X", "X", "X", "X"] });
+        renderBgSteps();
+        fetchBestGuess();
+      }
+
+      function renderBgSteps() {
+        const host = $("bg-steps");
+        $("bg-hint").textContent = bgSteps.length === 0
+          ? "No guesses played — the table below ranks the best openers. Click any suggestion or candidate to play it."
+          : "Set each guess's feedback by clicking its cells; click another talent below to play it next.";
+        host.innerHTML = bgSteps
+          .map((step, si) => {
+            const cells = FB_ORDER.map((attr, i) =>
+              `<div class="fbcell" data-si="${si}" data-i="${i}" title="Click to cycle"><div class="swatch ${step.pattern[i]}"></div><div class="fblabel">${esc(ATTR_LABELS[attr] || attr)}</div></div>`,
+            ).join("");
+            return `<div class="bg-step"><span class="stepno">${si + 1}.</span>${talentCell(step.id)}<div class="fbcells">${cells}</div><button class="rm" data-si="${si}" title="Remove this guess">×</button></div>`;
+          })
+          .join("");
         host.querySelectorAll(".fbcell").forEach((el) => {
           el.addEventListener("click", () => {
+            const si = Number(el.dataset.si);
             const i = Number(el.dataset.i);
-            // Only archetype (index 3) has a real partial state.
-            bgState[i] = i === 3 ? FB_CYCLE[bgState[i]] : (bgState[i] === "E" ? "X" : "E");
-            renderBgCells();
+            const cur = bgSteps[si].pattern[i];
+            bgSteps[si].pattern[i] = i === 3 ? FB_CYCLE[cur] : (cur === "E" ? "X" : "E");
+            renderBgSteps();
+            fetchBestGuess();
+          });
+        });
+        host.querySelectorAll(".rm").forEach((el) => {
+          el.addEventListener("click", () => {
+            bgSteps.splice(Number(el.dataset.si), 1);
+            renderBgSteps();
             fetchBestGuess();
           });
         });
@@ -795,11 +892,11 @@
       async function fetchBestGuess() {
         const token = sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
         if (!token) return;
-        const guess = $("bg-talent").value;
+        const steps = bgSteps.map((s) => `${s.id}:${s.pattern.join("")}`).join(",");
         const seq = ++bgFetchSeq;
         $("bg-meta").textContent = "Computing…";
         try {
-          const r = await fetch(`/api/admin/best-guess?guess=${encodeURIComponent(guess)}&pattern=${bgState.join("")}`, {
+          const r = await fetch(`/api/admin/best-guess?steps=${encodeURIComponent(steps)}`, {
             headers: { "x-admin-token": token },
           });
           if (seq !== bgFetchSeq) return; // a newer request superseded this one
@@ -813,8 +910,9 @@
       function renderBestGuess(d) {
         const n = d.candidates.length;
         const tbody = $("bg-table").querySelector("tbody");
+        const canAppend = bgSteps.length < BG_MAX_STEPS;
         if (n === 0) {
-          $("bg-meta").textContent = "No active talent is consistent with that feedback — recheck the pattern.";
+          $("bg-meta").textContent = "No active talent is consistent with that feedback — recheck the patterns above.";
           $("bg-chips").innerHTML = "";
           tbody.innerHTML = `<tr><td colspan="5" class="empty">Nothing to suggest.</td></tr>`;
           return;
@@ -824,11 +922,11 @@
           .map((id) => {
             const t = talentMap[id];
             const img = t && t.avatarUrl ? `<img src="${esc(t.avatarUrl)}" alt="" loading="lazy" />` : "";
-            return `<span class="chip">${img}${esc(t ? t.name : id)}</span>`;
+            return `<span class="chip${canAppend ? " clickable" : ""}" data-id="${esc(id)}" title="Play this as the next guess">${img}${esc(t ? t.name : id)}</span>`;
           })
           .join("");
         tbody.innerHTML = d.suggestions
-          .map((s, i) => `<tr>
+          .map((s, i) => `<tr class="${canAppend ? "clickable" : ""}" data-id="${esc(s.talentId)}" title="Play this as the next guess">
             <td class="rank">${i + 1}</td>
             <td>${talentCell(s.talentId, s.isCandidate ? `<span class="bg-pill">Answer?</span>` : "")}</td>
             <td class="num">${num(s.expectedRemaining)}</td>
@@ -836,6 +934,14 @@
             <td class="num">${s.partitions}</td>
           </tr>`)
           .join("");
+        if (canAppend) {
+          $("bg-chips").querySelectorAll(".chip[data-id]").forEach((el) => {
+            el.addEventListener("click", () => appendBgStep(el.dataset.id));
+          });
+          tbody.querySelectorAll("tr[data-id]").forEach((el) => {
+            el.addEventListener("click", () => appendBgStep(el.dataset.id));
+          });
+        }
       }
 
       // Sortable answer-difficulty headers
