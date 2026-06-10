@@ -159,6 +159,27 @@
       .fblist .talent { position: relative; z-index: 1; padding: 4px 6px; }
       .fblist .cnt { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 
+      /* Best Guess Explorer */
+      .bg-controls { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+      .bg-controls select {
+        background: var(--bg); color: var(--ink); border: 1px solid var(--line);
+        border-radius: 9px; padding: 9px 11px; font-size: 13px; min-width: 240px;
+      }
+      .bg-meta { color: var(--muted); font-size: 12px; margin-top: 14px; }
+      .bg-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+      .bg-chips .chip {
+        display: inline-flex; align-items: center; gap: 6px;
+        background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px;
+        padding: 2px 9px 2px 3px; font-size: 12px;
+      }
+      .bg-chips .chip img { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; }
+      .bg-table th.rank, .bg-table td.rank { width: 34px; color: var(--muted); }
+      .bg-pill {
+        display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px;
+        font-size: 10px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase;
+        background: rgba(63, 208, 122, 0.16); color: var(--ok); border: 1px solid rgba(63, 208, 122, 0.35);
+      }
+
       .hidden { display: none !important; }
       .note { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
     </style>
@@ -221,6 +242,12 @@
           </div>
           <p class="note">Share of cell states per attribute across all guesses — high "miss" means a hard-to-read clue.</p>
         </div>
+      </section>
+
+      <section>
+        <h2>Attribute Usefulness</h2>
+        <div class="panel"><div id="usefulness"></div></div>
+        <p class="note">Average information (bits) each column's feedback gives per guess, computed from the current roster — higher = narrows the remaining candidates more. Contrast with Attribute Difficulty above, which measures how often players' guesses actually match.</p>
       </section>
 
       <section class="grid-2">
@@ -309,6 +336,33 @@
           <div class="fblist" id="fblist"></div>
         </div>
         <p class="note">Click each cell to cycle 🟩→🟨→🟥, then see what players most often guessed <em>next</em> after a guess returned that exact feedback. (Today only Archetype ever turns yellow.)</p>
+      </section>
+
+      <section>
+        <h2>Best Guess Explorer</h2>
+        <div class="panel">
+          <div class="bg-controls">
+            <select id="bg-talent"></select>
+            <div class="fbcells" id="bg-cells"></div>
+          </div>
+          <div class="bg-meta" id="bg-meta"></div>
+          <div class="bg-chips" id="bg-chips"></div>
+          <div class="scroll" style="margin-top:14px">
+            <table class="bg-table" id="bg-table">
+              <thead>
+                <tr>
+                  <th class="rank">#</th>
+                  <th>Suggested guess</th>
+                  <th class="num">E[remaining]</th>
+                  <th class="num">Worst case</th>
+                  <th class="num">Partitions</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+        <p class="note">Optimal play, computed from the roster (uniform answer prior): pick the talent you guessed and the feedback it returned — the table ranks every possible next guess by how few candidates it leaves on average. "Start of game" ranks the best openers. <span class="bg-pill">Answer?</span> marks guesses that are themselves still possible answers.</p>
       </section>
     </div>
 
@@ -407,6 +461,8 @@
         renderFreqTable("picks", s.dailyPickFrequency, "Times answer");
         renderFreqTable("secondguess", s.secondGuessFrequency, "2nd guess");
         renderExplorer(s.nextGuessByFeedback);
+        renderUsefulness(s.attributeUsefulness);
+        initBestGuess();
       }
 
       function renderCards(s) {
@@ -659,6 +715,108 @@
             const w = Math.round((r.count / max) * 100);
             return `<div class="row"><div class="barwrap"><div class="barfill" style="width:${w}%"></div>${talentCell(r.talentId)}</div><div class="cnt">${r.count.toLocaleString()}</div></div>`;
           })
+          .join("");
+      }
+
+      // Attribute usefulness: bars scaled to the highest-bits attribute.
+      function renderUsefulness(u) {
+        const keys = ["branch", "group", "penlightColor", "archetype", "height", "birthMonth"];
+        const vals = keys.map((k) => (u && u[k]) || 0);
+        const max = Math.max(0.001, ...vals);
+        $("usefulness").innerHTML = keys
+          .map((k, i) => {
+            const bits = vals[i];
+            const w = (bits / max) * 100;
+            return `<div class="attr-row">
+              <div class="name">${esc(ATTR_LABELS[k] || k)}</div>
+              <div class="track"><div class="seg" style="width:${w}%;background:var(--accent)" title="${bits.toFixed(3)} bits"></div></div>
+              <div class="pct">${bits.toFixed(2)} b</div>
+            </div>`;
+          })
+          .join("");
+      }
+
+      // ── Best Guess Explorer ──────────────────────────────────────────
+      // Same FB_ORDER/key contract as the Next Guess Explorer. Only the
+      // archetype cell can be partial, so the other five cycle 🟩↔🟥.
+      let bgState = ["X", "X", "X", "X", "X", "X"];
+      let bgInited = false;
+      let bgFetchSeq = 0;
+
+      function initBestGuess() {
+        if (bgInited) return;
+        bgInited = true;
+        const sel = $("bg-talent");
+        const opts = Object.entries(talentMap)
+          .map(([id, t]) => ({ id, name: t.name }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        sel.innerHTML = `<option value="start">— Start of game (best openers) —</option>` +
+          opts.map((o) => `<option value="${esc(o.id)}">${esc(o.name)}</option>`).join("");
+        sel.addEventListener("change", () => { renderBgCells(); fetchBestGuess(); });
+        renderBgCells();
+        fetchBestGuess();
+      }
+
+      function renderBgCells() {
+        const host = $("bg-cells");
+        if ($("bg-talent").value === "start") { host.innerHTML = ""; return; }
+        host.innerHTML = FB_ORDER.map((attr, i) =>
+          `<div class="fbcell" data-i="${i}" title="Click to cycle"><div class="swatch ${bgState[i]}"></div><div class="fblabel">${esc(ATTR_LABELS[attr] || attr)}</div></div>`,
+        ).join("");
+        host.querySelectorAll(".fbcell").forEach((el) => {
+          el.addEventListener("click", () => {
+            const i = Number(el.dataset.i);
+            // Only archetype (index 3) has a real partial state.
+            bgState[i] = i === 3 ? FB_CYCLE[bgState[i]] : (bgState[i] === "E" ? "X" : "E");
+            renderBgCells();
+            fetchBestGuess();
+          });
+        });
+      }
+
+      async function fetchBestGuess() {
+        const token = sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
+        if (!token) return;
+        const guess = $("bg-talent").value;
+        const seq = ++bgFetchSeq;
+        $("bg-meta").textContent = "Computing…";
+        try {
+          const r = await fetch(`/api/admin/best-guess?guess=${encodeURIComponent(guess)}&pattern=${bgState.join("")}`, {
+            headers: { "x-admin-token": token },
+          });
+          if (seq !== bgFetchSeq) return; // a newer request superseded this one
+          if (!r.ok) { $("bg-meta").textContent = `Failed to compute (${r.status}).`; return; }
+          renderBestGuess(await r.json());
+        } catch (e) {
+          if (seq === bgFetchSeq) $("bg-meta").textContent = "Network error: " + (e && e.message ? e.message : String(e));
+        }
+      }
+
+      function renderBestGuess(d) {
+        const n = d.candidates.length;
+        const tbody = $("bg-table").querySelector("tbody");
+        if (n === 0) {
+          $("bg-meta").textContent = "No active talent is consistent with that feedback — recheck the pattern.";
+          $("bg-chips").innerHTML = "";
+          tbody.innerHTML = `<tr><td colspan="5" class="empty">Nothing to suggest.</td></tr>`;
+          return;
+        }
+        $("bg-meta").textContent = `${n} possible answer${n === 1 ? "" : "s"} remain${n === 1 ? "s" : ""}:`;
+        $("bg-chips").innerHTML = d.candidates
+          .map((id) => {
+            const t = talentMap[id];
+            const img = t && t.avatarUrl ? `<img src="${esc(t.avatarUrl)}" alt="" loading="lazy" />` : "";
+            return `<span class="chip">${img}${esc(t ? t.name : id)}</span>`;
+          })
+          .join("");
+        tbody.innerHTML = d.suggestions
+          .map((s, i) => `<tr>
+            <td class="rank">${i + 1}</td>
+            <td>${talentCell(s.talentId, s.isCandidate ? `<span class="bg-pill">Answer?</span>` : "")}</td>
+            <td class="num">${num(s.expectedRemaining)}</td>
+            <td class="num">${s.worstCase}</td>
+            <td class="num">${s.partitions}</td>
+          </tr>`)
           .join("");
       }
 

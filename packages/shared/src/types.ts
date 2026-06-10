@@ -180,6 +180,10 @@ export interface AdminStats {
   }>;
   // Per-attribute cell-state tally across all guesses.
   attributeBreakdown: Record<string, { equal: number; partial: number; wrong: number }>;
+  // Average information (bits) each attribute's feedback provides per guess,
+  // computed from the current roster (not from play data). Higher = the
+  // column narrows the candidate field more on a typical guess.
+  attributeUsefulness: Record<string, number>;
   // "Given this feedback pattern, what did players guess next?" Keyed by an
   // E/P/X six-char pattern (attribute order: branch, group, penlightColor,
   // archetype, height, birthMonth); value is the top next-guesses for that
@@ -192,6 +196,20 @@ export interface AdminStats {
     soloGames: number;
     channelGames: number;
   };
+}
+
+// Response of the admin-only GET /api/admin/best-guess endpoint: the active
+// talents consistent with a (guess, feedback-pattern) pair, plus the
+// optimal next guesses ranked by expected remaining candidates.
+export interface AdminBestGuess {
+  candidates: string[]; // talent ids still in contention
+  suggestions: Array<{
+    talentId: string;
+    expectedRemaining: number; // avg candidates left after this guess
+    worstCase: number; // largest feedback bucket
+    partitions: number; // distinct feedback patterns this guess can produce
+    isCandidate: boolean; // guess is itself a possible answer
+  }>;
 }
 
 // A single guess row reduced to its 5 cell-state colors (one per
